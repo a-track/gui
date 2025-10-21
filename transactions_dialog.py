@@ -134,7 +134,7 @@ class TransactionsDialog(QDialog):
             self.table.setItem(row, 1, date_item)
             
             # Type
-            type_item = QTableWidgetItem(trans.type)
+            type_item = QTableWidgetItem(str.title(trans.type))
             self.table.setItem(row, 2, type_item)
             
             # Amount
@@ -224,9 +224,10 @@ class TransactionsDialog(QDialog):
         accounts = self.budget_app.get_all_accounts()
         for account in accounts:
             if account.id == account_id:
-                return account.account
+                return f'{account.account} {account.currency}'
         return ""
     
+
     def color_row_by_type(self, row, trans_type):
         """Set row background color based on transaction type."""
         color_map = {

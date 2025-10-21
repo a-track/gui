@@ -33,7 +33,7 @@ class CategoriesDialog(QDialog):
         
         # Parent category selection
         parent_layout = QHBoxLayout()
-        parent_layout.addWidget(QLabel('Parent Category:'))
+        parent_layout.addWidget(QLabel('Category:'))
         self.parent_category_combo = QComboBox()
         self.parent_category_combo.setEditable(True)
         self.parent_category_combo.setInsertPolicy(QComboBox.InsertPolicy.InsertAtTop)
@@ -63,7 +63,7 @@ class CategoriesDialog(QDialog):
         # Table
         self.table = QTableWidget()
         self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(['Parent Category', 'Sub Category', 'Actions'])
+        self.table.setHorizontalHeaderLabels(['Category', 'Sub Category', 'Actions'])
         
         # Style the table to match transactions dialog
         self.table.setAlternatingRowColors(True)
@@ -227,7 +227,7 @@ class CategoriesDialog(QDialog):
         sub_category = self.sub_category_input.text().strip()
         
         if not parent_category or not sub_category:
-            self.show_status('Please enter both parent category and sub category', error=True)
+            self.show_status('Please enter both category and sub category', error=True)
             return
         
         success = self.budget_app.add_category(sub_category, parent_category)

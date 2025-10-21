@@ -129,7 +129,7 @@ class BudgetTrackerWindow(QMainWindow):
         
         # Parent Category (for income/expense)
         self.parent_category_layout = QHBoxLayout()
-        self.parent_category_layout.addWidget(QLabel('Parent Category:'))
+        self.parent_category_layout.addWidget(QLabel('Category:'))
         self.parent_category_combo = QComboBox()
         self.parent_category_combo.setMinimumWidth(200)
         self.parent_category_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
@@ -235,7 +235,7 @@ class BudgetTrackerWindow(QMainWindow):
         # Sort accounts by ID
         accounts_sorted = sorted(accounts, key=lambda x: x.id)
         for account in accounts_sorted:
-            display_text = f"{account.account} {account.currency} ({account.id})"
+            display_text = f"{account.account} {account.currency}"
             self.account_combo.addItem(display_text, account.id)
         # Adjust size after adding items
         self.account_combo.adjustSize()
@@ -246,7 +246,7 @@ class BudgetTrackerWindow(QMainWindow):
         # Sort accounts by ID
         accounts_sorted = sorted(accounts, key=lambda x: x.id)
         for account in accounts_sorted:
-            display_text = f"{account.account} {account.currency} ({account.id})"
+            display_text = f"{account.account} {account.currency}"
             self.to_account_combo.addItem(display_text, account.id)
         # Adjust size after adding items
         self.to_account_combo.adjustSize()
@@ -375,8 +375,8 @@ class BudgetTrackerWindow(QMainWindow):
         # All accounts (Cash, Bank, and Credit)
         total_by_currency = {currency: 0.0 for currency in all_currencies}
         for account_id, data in sorted(all_accounts, key=lambda x: x[0]):
-            account_name = f"{data['account_name']} ({account_id})"
             account_currency = self.get_currency_for_account(account_id)
+            account_name = f"{data['account_name']} {account_currency}"
             balance = data['balance']
             
             line = f"{account_name:{account_col_width}}"
