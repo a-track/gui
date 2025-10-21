@@ -1,6 +1,6 @@
 """
 Account Perspective - Show transaction history and running balance for a specific account.
-UPDATED: For new database schema.
+SIMPLIFIED: Read-only view with delete and confirm functionality.
 """
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
@@ -66,12 +66,15 @@ class AccountPerspectiveDialog(QDialog):
         
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(9)  # Removed Amount column
+        self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels([
             'Date', 'Type', 'Category', 'Payee', 
             'Other Account', 'Transaction Amount', 'Running Balance',
-            'Confirmed', 'Actions'  # New columns
+            'Confirmed', 'Actions'
         ])
+        
+        # Make table read-only (no editing)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         
         # Style the table
         self.table.setAlternatingRowColors(True)
@@ -212,7 +215,6 @@ class AccountPerspectiveDialog(QDialog):
         if index >= 0:
             # Get the account ID from the combo box data
             self.selected_account_id = self.account_combo.currentData()
-            print(f"Selected account ID: {self.selected_account_id} (type: {type(self.selected_account_id)})")
             self.load_account_data()
     
     def load_account_data(self):
@@ -224,14 +226,8 @@ class AccountPerspectiveDialog(QDialog):
             # Get account ID
             account_id = self.selected_account_id
             
-            # Debug: Print selected account ID
-            print(f"Loading data for account ID: {account_id}")
-            
             # Get all transactions
             all_transactions = self.budget_app.get_all_transactions()
-            
-            # Debug: Print total transactions
-            print(f"Total transactions: {len(all_transactions)}")
             
             # Filter transactions for this account
             account_transactions = []
@@ -241,10 +237,6 @@ class AccountPerspectiveDialog(QDialog):
                     trans.from_account_id == account_id or 
                     trans.to_account_id == account_id):
                     account_transactions.append(trans)
-                    print(f"Found matching transaction: {trans.id} (type: {trans.type})")
-            
-            # Debug: Print filtered transactions
-            print(f"Filtered transactions for account {account_id}: {len(account_transactions)}")
             
             # Sort by date (oldest first for running balance calculation)
             account_transactions.sort(key=lambda x: (x.date, x.id))
@@ -263,18 +255,17 @@ class AccountPerspectiveDialog(QDialog):
                     other_account = trans.payee or "Income"
                     
                 elif trans.type == 'expense' and trans.account_id == account_id:
-                    # Expense from this account - FIXED: Use positive amount for calculation
+                    # Expense from this account
                     transaction_amount = float(trans.amount or 0)
-                    running_balance -= transaction_amount  # Subtract from balance
+                    running_balance -= transaction_amount
                     effect = "-"
                     other_account = trans.payee or "Expense"
-                    # Keep transaction_amount positive for display, effect shows it's negative
                     
                 elif trans.type == 'transfer':
                     if trans.from_account_id == account_id:
                         # Transfer out of this account
                         transaction_amount = float(trans.from_amount or 0)
-                        running_balance -= transaction_amount  # Subtract from balance
+                        running_balance -= transaction_amount
                         effect = "-"
                         other_account = self.get_account_name_by_id(trans.to_account_id)
                     elif trans.to_account_id == account_id:
@@ -290,7 +281,7 @@ class AccountPerspectiveDialog(QDialog):
                 
                 transaction_history.append({
                     'transaction': trans,
-                    'transaction_amount': transaction_amount,  # This is now always positive
+                    'transaction_amount': transaction_amount,
                     'effect': effect,
                     'running_balance': running_balance,
                     'other_account': other_account
@@ -328,7 +319,7 @@ class AccountPerspectiveDialog(QDialog):
         
         for row, data in enumerate(transaction_history):
             trans = data['transaction']
-            transaction_amount = data['transaction_amount']  # This is now always positive
+            transaction_amount = data['transaction_amount']
             effect = data['effect']
             running_balance = data['running_balance']
             other_account = data['other_account']
@@ -341,19 +332,19 @@ class AccountPerspectiveDialog(QDialog):
             type_item = QTableWidgetItem(trans.type.capitalize())
             self.table.setItem(row, 1, type_item)
             
-            # Category (moved to column 2 since we removed Amount column)
+            # Category
             category_item = QTableWidgetItem(trans.sub_category or "")
             self.table.setItem(row, 2, category_item)
             
-            # Payee (moved to column 3)
+            # Payee
             payee_item = QTableWidgetItem(trans.payee or "")
             self.table.setItem(row, 3, payee_item)
             
-            # Other Account (moved to column 4)
+            # Other Account
             other_acc_item = QTableWidgetItem(other_account)
             self.table.setItem(row, 4, other_acc_item)
             
-            # Transaction Amount (effect on this account) - moved to column 5
+            # Transaction Amount (effect on this account)
             formatted_amount = self.format_swiss_number(transaction_amount)
             trans_amount_text = f"{effect}{formatted_amount}"
             trans_effect_item = QTableWidgetItem(trans_amount_text)
@@ -364,7 +355,7 @@ class AccountPerspectiveDialog(QDialog):
             trans_effect_item.setFont(QFont("", weight=QFont.Weight.Bold))
             self.table.setItem(row, 5, trans_effect_item)
             
-            # Running Balance - moved to column 6
+            # Running Balance
             formatted_balance = self.format_swiss_number(running_balance)
             balance_item = QTableWidgetItem(formatted_balance)
             if running_balance >= 0:
@@ -374,7 +365,7 @@ class AccountPerspectiveDialog(QDialog):
             balance_item.setFont(QFont("", weight=QFont.Weight.Bold))
             self.table.setItem(row, 6, balance_item)
             
-            # Confirmed checkbox - moved to column 7
+            # Confirmed checkbox
             checkbox_widget = QWidget()
             checkbox_layout = QHBoxLayout()
             checkbox_layout.setContentsMargins(0, 0, 0, 0)
@@ -389,14 +380,14 @@ class AccountPerspectiveDialog(QDialog):
             checkbox_widget.setLayout(checkbox_layout)
             self.table.setCellWidget(row, 7, checkbox_widget)
             
-            # Action buttons - Modern X button - moved to column 8
+            # Action buttons - Modern X button
             action_widget = QWidget()
             action_layout = QHBoxLayout()
-            action_layout.setContentsMargins(1, 1, 1, 1)  # Minimal margins
+            action_layout.setContentsMargins(1, 1, 1, 1)
             action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
-            delete_btn = QPushButton('✕')  # Modern X symbol
-            delete_btn.setFixedSize(22, 22)  # Small size to fit nicely
+            delete_btn = QPushButton('✕')
+            delete_btn.setFixedSize(22, 22)
             delete_btn.setStyleSheet('''
                 QPushButton {
                     background-color: #ff4444;
@@ -451,8 +442,7 @@ class AccountPerspectiveDialog(QDialog):
                 self.parent_window.update_balance_display()
         except Exception as e:
             print(f"Error in on_checkbox_changed: {e}")
-            import traceback
-            traceback.print_exc()
+            self.show_status('Error updating confirmation!', error=True)
     
     def on_delete_clicked(self):
         """Handle delete button clicks."""
@@ -477,8 +467,7 @@ class AccountPerspectiveDialog(QDialog):
                     self.parent_window.update_balance_display()
         except Exception as e:
             print(f"Error in on_delete_clicked: {e}")
-            import traceback
-            traceback.print_exc()
+            self.show_status('Error deleting transaction!', error=True)
     
     def refresh_data(self):
         """Refresh the account data."""
