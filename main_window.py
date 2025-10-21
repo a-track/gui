@@ -235,7 +235,7 @@ class BudgetTrackerWindow(QMainWindow):
         # Sort accounts by ID
         accounts_sorted = sorted(accounts, key=lambda x: x.id)
         for account in accounts_sorted:
-            display_text = f"{account.account} ({account.id})"
+            display_text = f"{account.account} {account.currency} ({account.id})"
             self.account_combo.addItem(display_text, account.id)
         # Adjust size after adding items
         self.account_combo.adjustSize()
@@ -246,7 +246,7 @@ class BudgetTrackerWindow(QMainWindow):
         # Sort accounts by ID
         accounts_sorted = sorted(accounts, key=lambda x: x.id)
         for account in accounts_sorted:
-            display_text = f"{account.account} ({account.id})"
+            display_text = f"{account.account} {account.currency} ({account.id})"
             self.to_account_combo.addItem(display_text, account.id)
         # Adjust size after adding items
         self.to_account_combo.adjustSize()

@@ -198,7 +198,7 @@ class TransactionsDialog(QDialog):
         accounts = self.budget_app.get_all_accounts()
         for account in accounts:
             if account.id == account_id:
-                return f"{account.account} ({account.id})"
+                return f"{account.account} {account.currency} ({account.id})"
         return ""
 
     def get_account_id_by_name(self, account_name):

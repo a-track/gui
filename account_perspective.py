@@ -44,8 +44,8 @@ class AccountPerspectiveDialog(QDialog):
         # Sort accounts by ID
         accounts_sorted = sorted(accounts, key=lambda x: x.id)
         for account in accounts_sorted:
-            # Display as "Account Name (Account ID)"
-            display_text = f"{account.account} ({account.id})"
+            # Display as "Account Name Currency (Account ID)"
+            display_text = f"{account.account} {account.currency} ({account.id})"
             self.account_combo.addItem(display_text, account.id)  # Store account ID as data
         self.account_combo.currentIndexChanged.connect(self.on_account_changed)
         account_layout.addWidget(self.account_combo)
