@@ -68,6 +68,11 @@ class AccountsDialog(QDialog):
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(['ID', 'Account Name', 'Type', 'Company', 'Currency', 'Actions'])
         
+        # Make table read-only
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        
         # Style the table to match transactions dialog
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
@@ -154,18 +159,22 @@ class AccountsDialog(QDialog):
                 
                 # Account Name
                 name_item = QTableWidgetItem(account.account)
+                name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
                 self.table.setItem(row, 1, name_item)
                 
                 # Type
                 type_item = QTableWidgetItem(account.type)
+                type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
                 self.table.setItem(row, 2, type_item)
                 
                 # Company
                 company_item = QTableWidgetItem(account.company or '')
+                company_item.setFlags(company_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
                 self.table.setItem(row, 3, company_item)
                 
                 # Currency
                 currency_item = QTableWidgetItem(account.currency)
+                currency_item.setFlags(currency_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
                 self.table.setItem(row, 4, currency_item)
                 
                 # Actions - Modern X button
