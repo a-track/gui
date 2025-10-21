@@ -270,4 +270,4 @@ class CategoriesDialog(QDialog):
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
         
-        QTimer.singleShot(3000, lambda: self.status_label.setText(''))
+        QTimer.singleShot(5000, lambda: self.status_label.setText(''))

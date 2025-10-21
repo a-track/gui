@@ -564,9 +564,9 @@ class TransactionsDialog(QDialog):
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
         
-        # Clear after 3 seconds
+        # Clear after 5 seconds
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(3000, lambda: self.status_label.setText(''))
+        QTimer.singleShot(5000, lambda: self.status_label.setText(''))
 
 class BudgetTrackerWindow(QMainWindow):
     def __init__(self):
@@ -787,9 +787,9 @@ class BudgetTrackerWindow(QMainWindow):
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px; font-weight: bold;')
         
-        # Clear after 3 seconds
+        # Clear after 5 seconds
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(3000, lambda: self.status_label.setText(''))
+        QTimer.singleShot(5000, lambda: self.status_label.setText(''))
 
     def view_transactions(self):
         """Open the transactions dialog as a non-modal window"""
