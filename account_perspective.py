@@ -234,7 +234,6 @@ class AccountPerspectiveDialog(QDialog):
             for trans in all_transactions:
                 # Check if this transaction involves the selected account
                 if (trans.account_id == account_id or 
-                    trans.from_account_id == account_id or 
                     trans.to_account_id == account_id):
                     account_transactions.append(trans)
             
@@ -262,18 +261,18 @@ class AccountPerspectiveDialog(QDialog):
                     other_account = trans.payee or "Expense"
                     
                 elif trans.type == 'transfer':
-                    if trans.from_account_id == account_id:
+                    if trans.account_id == account_id:  # This account is the source
                         # Transfer out of this account
-                        transaction_amount = float(trans.from_amount or 0)
+                        transaction_amount = float(trans.amount or 0)
                         running_balance -= transaction_amount
                         effect = "-"
                         other_account = self.get_account_name_by_id(trans.to_account_id)
-                    elif trans.to_account_id == account_id:
+                    elif trans.to_account_id == account_id:  # This account is the destination
                         # Transfer into this account
                         transaction_amount = float(trans.to_amount or 0)
                         running_balance += transaction_amount
                         effect = "+"
-                        other_account = self.get_account_name_by_id(trans.from_account_id)
+                        other_account = self.get_account_name_by_id(trans.account_id)
                     else:
                         continue
                 else:

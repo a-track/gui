@@ -9,36 +9,23 @@ from datetime import datetime
 
 class Transaction:
     def __init__(self, trans_id: int, date: str, type: str, 
-                 amount: float = None, account_id: int = None,
-                 payee: str = None, notes: str = None,
-                 sub_category: str = None, invest_account_id: int = None,
-                 from_account_id: int = None, to_account_id: int = None,
-                 from_amount: float = None, to_amount: float = None,
-                 qty: float = None, confirmed: bool = False):
+                sub_category: str = None, amount: float = None, 
+                account_id: int = None, payee: str = None, 
+                notes: str = None, invest_account_id: int = None,
+                qty: float = None, to_account_id: int = None, 
+                to_amount: float = None, confirmed: bool = False):
         self.id = trans_id
         self.date = date
         self.type = type
-        
-        # Common fields
+        self.sub_category = sub_category
         self.amount = amount
         self.account_id = account_id
         self.payee = payee
         self.notes = notes
-        
-        # Income specific
-        self.sub_category = sub_category
         self.invest_account_id = invest_account_id
-        
-        # Expense specific (uses sub_category from above)
-        
-        # Transfer specific
-        self.from_account_id = from_account_id
-        self.to_account_id = to_account_id
-        self.from_amount = from_amount
-        self.to_amount = to_amount
         self.qty = qty
-        
-        # System fields
+        self.to_account_id = to_account_id
+        self.to_amount = to_amount
         self.confirmed = confirmed
 
 
@@ -101,43 +88,31 @@ class BudgetApp:
                 )
             """)
             
-            # Create transactions table with new structure
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS transactions (
                     id INTEGER PRIMARY KEY,
                     date DATE NOT NULL,
                     type VARCHAR NOT NULL, -- 'income', 'expense', 'transfer'
-                    
-                    -- Common fields
+                    sub_category VARCHAR,
                     amount DECIMAL(10, 2),
                     account_id INTEGER,
                     payee VARCHAR,
                     notes TEXT,
-                    
-                    -- Income specific fields
-                    sub_category VARCHAR,
                     invest_account_id INTEGER,
-                    
-                    -- Expense specific fields (uses sub_category from above)
-                    
-                    -- Transfer specific fields
-                    from_account_id INTEGER,
-                    to_account_id INTEGER,
-                    from_amount DECIMAL(10, 2),
-                    to_amount DECIMAL(10, 2),
                     qty DECIMAL(10, 4),
-                    
-                    -- System fields
+                    to_account_id INTEGER,
+                    to_amount DECIMAL(10, 2),
                     confirmed BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     
                     FOREIGN KEY (account_id) REFERENCES accounts(id),
-                    FOREIGN KEY (from_account_id) REFERENCES accounts(id),
                     FOREIGN KEY (to_account_id) REFERENCES accounts(id),
                     FOREIGN KEY (invest_account_id) REFERENCES accounts(id),
                     FOREIGN KEY (sub_category) REFERENCES categories(sub_category)
                 )
             """)
+
             
             # Insert default data
             self._insert_default_data(conn)
@@ -319,8 +294,8 @@ class BudgetApp:
             # Check if account is used in transactions
             result = conn.execute("""
                 SELECT COUNT(*) FROM transactions 
-                WHERE account_id = ? OR from_account_id = ? OR to_account_id = ? OR invest_account_id = ?
-            """, [account_id, account_id, account_id, account_id]).fetchone()
+                WHERE account_id = ? OR to_account_id = ? OR invest_account_id = ?
+            """, [account_id, account_id, account_id]).fetchone()
             
             if result[0] > 0:
                 return False, "Account is used in transactions and cannot be deleted"
@@ -371,7 +346,7 @@ class BudgetApp:
             # Check if category is used in transactions
             result = conn.execute("""
                 SELECT COUNT(*) FROM transactions WHERE sub_category = ?
-            """).fetchone()
+            """, [sub_category]).fetchone()
             
             if result[0] > 0:
                 return False, "Category is used in transactions and cannot be deleted"
@@ -384,6 +359,7 @@ class BudgetApp:
             return False, str(e)
         finally:
             conn.close()
+
 
     # Transaction methods
     def add_income(self, date: str, amount: float, account_id: int, 
@@ -426,8 +402,8 @@ class BudgetApp:
             conn.close()
 
     def add_transfer(self, date: str, from_account_id: int, to_account_id: int,
-                     from_amount: float, to_amount: float = None,
-                     qty: float = None, notes: str = ""):
+                    from_amount: float, to_amount: float = None,
+                    qty: float = None, notes: str = ""):
         """Add a transfer transaction"""
         if to_amount is None:
             to_amount = from_amount
@@ -437,7 +413,7 @@ class BudgetApp:
         try:
             conn.execute("""
                 INSERT INTO transactions 
-                (id, date, type, from_account_id, to_account_id, from_amount, to_amount, qty, notes)
+                (id, date, type, account_id, to_account_id, amount, to_amount, qty, notes)
                 VALUES (?, ?, 'transfer', ?, ?, ?, ?, ?, ?)
             """, [trans_id, date, from_account_id, to_account_id, from_amount, to_amount, qty, notes])
             conn.commit()
@@ -452,9 +428,9 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT id, date, type, amount, account_id, payee, notes,
-                       sub_category, invest_account_id, from_account_id, 
-                       to_account_id, from_amount, to_amount, qty, confirmed
+                SELECT id, date, type, sub_category, amount, account_id, 
+                    payee, notes, invest_account_id, qty, to_account_id, 
+                    to_amount, confirmed
                 FROM transactions 
                 ORDER BY date DESC, id DESC
             """).fetchall()
@@ -463,11 +439,10 @@ class BudgetApp:
             for row in result:
                 trans = Transaction(
                     trans_id=row[0], date=row[1], type=row[2],
-                    amount=row[3], account_id=row[4], payee=row[5], notes=row[6],
-                    sub_category=row[7], invest_account_id=row[8],
-                    from_account_id=row[9], to_account_id=row[10],
-                    from_amount=row[11], to_amount=row[12], qty=row[13],
-                    confirmed=row[14]
+                    sub_category=row[3], amount=row[4], account_id=row[5],
+                    payee=row[6], notes=row[7], invest_account_id=row[8],
+                    qty=row[9], to_account_id=row[10], to_amount=row[11],
+                    confirmed=row[12]
                 )
                 transactions.append(trans)
             
@@ -544,8 +519,8 @@ class BudgetApp:
                 elif trans.type == 'expense' and trans.account_id:
                     balances[trans.account_id]['balance'] -= float(trans.amount or 0)
                 elif trans.type == 'transfer':
-                    if trans.from_account_id:
-                        balances[trans.from_account_id]['balance'] -= float(trans.from_amount or 0)
+                    if trans.account_id:  # from_account_id
+                        balances[trans.account_id]['balance'] -= float(trans.amount or 0)
                     if trans.to_account_id:
                         balances[trans.to_account_id]['balance'] += float(trans.to_amount or 0)
             

@@ -64,7 +64,12 @@ class CategoriesDialog(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(3)
         self.table.setHorizontalHeaderLabels(['Category', 'Sub Category', 'Actions'])
-        
+
+        # Make table read-only (like account management)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
         # Style the table to match transactions dialog
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
@@ -89,25 +94,24 @@ class CategoriesDialog(QDialog):
                 font-size: 11px;
             }
         """)
-        
+
         # Hide row numbers
         self.table.verticalHeader().hide()
-        
+
         # Set initial column widths
         header = self.table.horizontalHeader()
         self.table.setColumnWidth(2, 70)   # Actions - fixed small width
-        
+
         # Make content-based columns resize to contents
         content_based_columns = [0, 1]
         for col in content_based_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
-        
+
         # Actions column stays interactive
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        
+
         # Set row height
         self.table.verticalHeader().setDefaultSectionSize(35)
-        
         layout.addWidget(self.table)
         
         # Status label
@@ -162,12 +166,14 @@ class CategoriesDialog(QDialog):
             self.table.setRowCount(len(categories))
             
             for row, category in enumerate(categories):
-                # Parent Category
+                # Parent Category (read-only)
                 parent_item = QTableWidgetItem(category.category)
+                parent_item.setFlags(parent_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
                 self.table.setItem(row, 0, parent_item)
                 
-                # Sub Category
+                # Sub Category (read-only)
                 sub_item = QTableWidgetItem(category.sub_category)
+                sub_item.setFlags(sub_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
                 self.table.setItem(row, 1, sub_item)
                 
                 # Actions - Modern X button

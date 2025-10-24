@@ -139,7 +139,7 @@ class TransactionsDialog(QDialog):
             
             # Amount
             if trans.type == 'transfer':
-                amount_value = trans.from_amount if trans.from_amount else ""
+                amount_value = trans.amount if trans.amount else ""  # Use amount instead of from_amount
             else:
                 amount_value = trans.amount if trans.amount else ""
             
@@ -150,7 +150,7 @@ class TransactionsDialog(QDialog):
             
             # Account
             if trans.type == 'transfer':
-                account_name = self.get_account_name_by_id(trans.from_account_id)
+                account_name = self.get_account_name_by_id(trans.account_id)  # Use account_id instead of from_account_id
             else:
                 account_name = self.get_account_name_by_id(trans.account_id)
             account_item = QTableWidgetItem(account_name or "")
