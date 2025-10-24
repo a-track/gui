@@ -14,7 +14,7 @@ from transactions_dialog import TransactionsDialog
 from account_perspective import AccountPerspectiveDialog
 from accounts_dialog import AccountsDialog
 from categories_dialog import CategoriesDialog
-
+from excel_handler import ExcelHandler
 
 class BudgetTrackerWindow(QMainWindow):
     def __init__(self):
@@ -22,6 +22,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.budget_app = BudgetApp()
         self.init_ui()
         self.update_balance_display()
+        self.excel_handler = ExcelHandler(self.budget_app)
 
     def init_ui(self):
         self.setWindowTitle('Budget Tracker')
@@ -212,7 +213,24 @@ class BudgetTrackerWindow(QMainWindow):
         button_layout.addWidget(account_view_btn)
         
         main_layout.addLayout(button_layout)
-        
+    
+
+                # Excel buttons
+        excel_layout = QHBoxLayout()
+
+        export_btn = QPushButton('Export to Excel')
+        export_btn.clicked.connect(self.export_to_excel)
+        export_btn.setStyleSheet('background-color: #009688; color: white; padding: 10px; font-size: 14px;')
+        excel_layout.addWidget(export_btn)
+
+        import_btn = QPushButton('Import from Excel')
+        import_btn.clicked.connect(self.import_from_excel)
+        import_btn.setStyleSheet('background-color: #607D8B; color: white; padding: 10px; font-size: 14px;')
+        excel_layout.addWidget(import_btn)
+
+        main_layout.addLayout(excel_layout)
+
+
         # Management buttons
         management_layout = QHBoxLayout()
         
@@ -404,6 +422,35 @@ class BudgetTrackerWindow(QMainWindow):
             if account.id == account_id:
                 return account.currency
         return 'CHF'  # Default
+
+    def export_to_excel(self):
+        """Export transactions to Excel."""
+        success, message = self.excel_handler.export_to_excel(self)
+        if success:
+            self.show_status(message)
+        else:
+            QMessageBox.warning(self, "Export Failed", message)
+
+    def import_from_excel(self):
+        """Import transactions from Excel."""
+        reply = QMessageBox.question(
+            self,
+            "Confirm Import",
+            "This will import transactions from Excel. Existing transactions will not be affected.\n\nContinue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            success, message = self.excel_handler.import_from_excel(self)
+            if success:
+                self.show_status(message)
+                # Refresh displays
+                self.update_balance_display()
+            else:
+                QMessageBox.warning(self, "Import Failed", message)
+
+
+
 
     def add_transaction(self):
         # Validate amount

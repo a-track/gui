@@ -255,7 +255,13 @@ class BudgetApp:
             conn.close()
 
     def add_account(self, account: str, type: str, company: str = None, 
-                   currency: str = 'CHF', is_investment: bool = False):
+                currency: str = 'CHF', is_investment: bool = False):
+        # Check if account with same name and currency already exists
+        existing_account = self.get_account_by_name_currency(account, currency)
+        if existing_account:
+            print(f"Account {account} {currency} already exists with ID {existing_account.id}")
+            return False  # Prevent duplicate accounts
+        
         account_id = self._get_next_id('accounts')
         conn = self._get_connection()
         try:
@@ -537,5 +543,22 @@ class BudgetApp:
                 SELECT currency FROM accounts WHERE id = ?
             """, [account_id]).fetchone()
             return result[0] if result else 'USD'
+        finally:
+            conn.close()
+
+
+    def get_account_by_name_currency(self, account_name: str, currency: str):
+        """Get account by name and currency to ensure uniqueness."""
+        conn = self._get_connection()
+        try:
+            result = conn.execute("""
+                SELECT id, account, type, company, currency, is_investment
+                FROM accounts 
+                WHERE account = ? AND currency = ?
+            """, [account_name, currency]).fetchone()
+            
+            if result:
+                return Account(*result)
+            return None
         finally:
             conn.close()
