@@ -43,7 +43,7 @@ class BudgetTrackerWindow(QMainWindow):
     def init_ui(self):
         self.setWindowTitle('Budget Tracker')
         self.setMinimumSize(1000, 800)
-        self.resize(1200, 900)
+        self.resize(1200, 800)
         
         # Central widget
         central_widget = QWidget()
@@ -53,32 +53,15 @@ class BudgetTrackerWindow(QMainWindow):
         main_layout = QVBoxLayout()
         central_widget.setLayout(main_layout)
         
-        # Title
-        title = QLabel('Budget Tracker')
-        title_font = QFont()
-        title_font.setPointSize(24)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        title.setStyleSheet('color: #2196F3;')
-        main_layout.addWidget(title)
-        
-        main_layout.addSpacing(20)
-        
         # Balance summary section
         balance_label = QLabel('Account Balances')
         balance_label.setStyleSheet('font-weight: bold; font-size: 14px;')
         main_layout.addWidget(balance_label)
         
-        # Progress bar for initial loading
-        self.loading_progress = QProgressBar()
-        self.loading_progress.setVisible(False)
-        self.loading_progress.setRange(0, 0)  # Indeterminate progress
-        main_layout.addWidget(self.loading_progress)
-        
         # Create scroll area for balance display
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setMaximumHeight(400)
+        scroll_area.setMaximumHeight(2000)
         scroll_area.setStyleSheet('border: 1px solid #cccccc; border-radius: 5px;')
         
         # Balance display widget
@@ -233,23 +216,21 @@ class BudgetTrackerWindow(QMainWindow):
 
         # Management buttons
         management_layout = QHBoxLayout()
-        
+
         accounts_btn = QPushButton('Manage Accounts')
         accounts_btn.clicked.connect(self.manage_accounts)
         accounts_btn.setStyleSheet('background-color: #FF9800; color: white; padding: 10px; font-size: 14px;')
         management_layout.addWidget(accounts_btn)
-        
+
         categories_btn = QPushButton('Manage Categories')
         categories_btn.clicked.connect(self.manage_categories)
         categories_btn.setStyleSheet('background-color: #795548; color: white; padding: 10px; font-size: 14px;')
         management_layout.addWidget(categories_btn)
-        
+
         main_layout.addLayout(management_layout)
-        main_layout.addStretch()
 
     def load_balances_async(self):
         """Load balances in background thread to keep UI responsive"""
-        self.loading_progress.setVisible(True)
         self.balance_display.setText('Loading balances...')
         
         self.balance_loader = BalanceLoaderThread(self.budget_app)
@@ -259,12 +240,10 @@ class BudgetTrackerWindow(QMainWindow):
 
     def on_balances_loaded(self, balances):
         """Handle completed balance loading"""
-        self.loading_progress.setVisible(False)
         self.update_balance_display_with_data(balances)
 
     def on_balances_error(self, error_message):
         """Handle balance loading error"""
-        self.loading_progress.setVisible(False)
         self.balance_display.setText(f'Error loading balances: {error_message}')
 
     def update_balance_display_with_data(self, balances):

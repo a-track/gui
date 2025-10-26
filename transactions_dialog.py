@@ -39,7 +39,7 @@ class TransactionsDialog(QDialog):
         self.filtered_transactions = []
         
         self.setWindowFlags(Qt.WindowType.Window)
-        self.setWindowTitle('All Transactions')
+        self.setWindowTitle('View All Transactions')
         self.setMinimumSize(1000, 600)
         
         layout = QVBoxLayout()
@@ -135,24 +135,7 @@ class TransactionsDialog(QDialog):
         self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
         layout.addWidget(self.status_label)
         
-        # Button layout
-        button_layout = QHBoxLayout()
-        
-        # Refresh button
-        refresh_btn = QPushButton('Refresh')
-        refresh_btn.clicked.connect(self.load_transactions)
-        refresh_btn.setStyleSheet('background-color: #FF9800; color: white; padding: 8px;')
-        button_layout.addWidget(refresh_btn)
-        
-        button_layout.addStretch()
-        
-        # Close button
-        close_btn = QPushButton('Close')
-        close_btn.clicked.connect(self.close)
-        close_btn.setStyleSheet('background-color: #2196F3; color: white; padding: 8px;')
-        button_layout.addWidget(close_btn)
-        
-        layout.addLayout(button_layout)
+        # Removed the button layout entirely (no Refresh and Close buttons)
         
         self.setLayout(layout)
         

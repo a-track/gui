@@ -25,19 +25,10 @@ class AccountPerspectiveDialog(QDialog):
         self.filtered_transactions = []
         self.running_balance_history = {}  # Store running balance for each transaction
         
-        self.setWindowTitle('Account Transactions & Balance History')
+        self.setWindowTitle('Account Perspective')
         self.setMinimumSize(1200, 600)
         
         layout = QVBoxLayout()
-        
-        # Title
-        title = QLabel('Account Transactions & Balance History')
-        title_font = QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        title.setStyleSheet('color: #2196F3; padding: 10px;')
-        layout.addWidget(title)
         
         # Account selection
         account_layout = QHBoxLayout()
@@ -156,25 +147,6 @@ class AccountPerspectiveDialog(QDialog):
         self.status_label = QLabel('Select an account to view transactions')
         self.status_label.setStyleSheet('color: #666; padding: 5px;')
         layout.addWidget(self.status_label)
-        
-        # Button layout
-        button_layout = QHBoxLayout()
-        
-        # Refresh button
-        refresh_btn = QPushButton('Refresh')
-        refresh_btn.clicked.connect(self.refresh_data)
-        refresh_btn.setStyleSheet('background-color: #FF9800; color: white; padding: 8px;')
-        button_layout.addWidget(refresh_btn)
-        
-        button_layout.addStretch()
-        
-        # Close button
-        close_btn = QPushButton('Close')
-        close_btn.clicked.connect(self.close)
-        close_btn.setStyleSheet('background-color: #2196F3; color: white; padding: 8px;')
-        button_layout.addWidget(close_btn)
-        
-        layout.addLayout(button_layout)
         
         self.setLayout(layout)
         

@@ -19,15 +19,6 @@ class CategoriesDialog(QDialog):
         
         layout = QVBoxLayout()
         
-        # Title
-        title = QLabel('Category Management')
-        title_font = QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        title.setStyleSheet('color: #2196F3; padding: 10px;')
-        layout.addWidget(title)
-        
         # Add new category section with parent-child selection
         new_category_layout = QVBoxLayout()
         
@@ -119,21 +110,6 @@ class CategoriesDialog(QDialog):
         self.status_label.setStyleSheet('color: #666; padding: 5px;')
         layout.addWidget(self.status_label)
         
-        # Buttons
-        button_layout = QHBoxLayout()
-        refresh_btn = QPushButton('Refresh')
-        refresh_btn.clicked.connect(self.load_categories)
-        refresh_btn.setStyleSheet('background-color: #FF9800; color: white; padding: 8px;')
-        button_layout.addWidget(refresh_btn)
-        
-        button_layout.addStretch()
-        
-        close_btn = QPushButton('Close')
-        close_btn.clicked.connect(self.close)
-        close_btn.setStyleSheet('background-color: #2196F3; color: white; padding: 8px;')
-        button_layout.addWidget(close_btn)
-        
-        layout.addLayout(button_layout)
         self.setLayout(layout)
         
         self.load_categories()
