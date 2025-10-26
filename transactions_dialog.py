@@ -207,17 +207,23 @@ class TransactionsDialog(QDialog):
             type_item = QTableWidgetItem(str.title(trans.type))
             self.table.setItem(row, 2, type_item)
             
+            # FIX: Handle amount for all transaction types
             if trans.type == 'transfer':
                 amount_value = trans.amount if trans.amount else ""
+            else:
+                amount_value = trans.amount  # For income and expense transactions
             
             amount_item = QTableWidgetItem(f"{amount_value:.2f}" if amount_value != "" else "")
             if amount_value:
                 amount_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table.setItem(row, 3, amount_item)
             
+            # FIX: Handle account name for all transaction types
             if trans.type == 'transfer':
                 account_name = self.get_account_name_by_id(trans.account_id)
-                
+            else:
+                account_name = self.get_account_name_by_id(trans.account_id)
+            
             account_item = QTableWidgetItem(account_name or "")
             self.table.setItem(row, 4, account_item)
             
