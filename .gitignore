@@ -1,3 +1,2 @@
-hamster.ico
-budget.duckdb
-*.pyc
+!*.py
+!*.spec

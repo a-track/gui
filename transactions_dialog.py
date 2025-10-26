@@ -1,34 +1,62 @@
 """
-Dialog window for viewing all transactions.
-SIMPLIFIED: Only shows transactions with confirmation and delete functionality.
+Optimized dialog for viewing transactions with pagination.
 """
-
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTableWidget, QTableWidgetItem,
-                             QCheckBox, QHeaderView, QWidget, QMessageBox)
-from PyQt6.QtCore import Qt, QTimer
+                             QCheckBox, QHeaderView, QWidget, QMessageBox,
+                             QProgressBar, QSpinBox)
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
 
+class TransactionLoaderThread(QThread):
+    """Thread for loading transactions in background"""
+    finished = pyqtSignal(list)
+    progress = pyqtSignal(int)
+    
+    def __init__(self, budget_app, limit=1000, offset=0):
+        super().__init__()
+        self.budget_app = budget_app
+        self.limit = limit
+        self.offset = offset
+    
+    def run(self):
+        try:
+            # Get limited transactions for performance
+            all_transactions = self.budget_app.get_all_transactions()
+            # Apply pagination
+            transactions = all_transactions[self.offset:self.offset + self.limit]
+            self.finished.emit(transactions)
+        except Exception as e:
+            print(f"Error loading transactions: {e}")
+            self.finished.emit([])
 
 class TransactionsDialog(QDialog):
-    """Simplified dialog for viewing transactions with confirmation and delete."""
+    """Optimized dialog for viewing transactions with pagination."""
     
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
         
         self.budget_app = budget_app
         self.parent_window = parent
+        self.current_page = 0
+        self.page_size = 500  # Show 500 transactions per page
+        self.all_transactions = []
         
         self.setWindowFlags(Qt.WindowType.Window)
-        self.setWindowTitle('All Transactions')
-        self.setMinimumSize(1000, 500)
+        self.setWindowTitle('All Transactions (Paginated)')
+        self.setMinimumSize(1000, 600)
         
         layout = QVBoxLayout()
         
-        # Info label
-        info_label = QLabel('Click checkbox to confirm/unconfirm transaction.')
-        info_label.setStyleSheet('color: #666; font-style: italic; padding: 5px;')
-        layout.addWidget(info_label)
+        # Info label with pagination info
+        self.info_label = QLabel('Loading transactions...')
+        self.info_label.setStyleSheet('color: #666; font-style: italic; padding: 5px;')
+        layout.addWidget(self.info_label)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
         
         # Table
         self.table = QTableWidget()
@@ -69,10 +97,6 @@ class TransactionsDialog(QDialog):
             }
         """)
         
-        # Get transactions and populate
-        self.transactions = self.budget_app.get_all_transactions()
-        self.populate_table()
-        
         # Set column sizes
         self.table.setColumnWidth(0, 50)   # ID
         self.table.setColumnWidth(2, 80)   # Type
@@ -91,6 +115,32 @@ class TransactionsDialog(QDialog):
         
         layout.addWidget(self.table)
         
+        # Pagination controls
+        pagination_layout = QHBoxLayout()
+        pagination_layout.addWidget(QLabel('Page:'))
+        
+        self.page_spinbox = QSpinBox()
+        self.page_spinbox.setMinimum(1)
+        self.page_spinbox.setMaximum(1)
+        self.page_spinbox.valueChanged.connect(self.on_page_changed)
+        pagination_layout.addWidget(self.page_spinbox)
+        
+        pagination_layout.addWidget(QLabel('of 1'))
+        self.total_pages_label = QLabel('of 1')
+        pagination_layout.addWidget(self.total_pages_label)
+        
+        pagination_layout.addStretch()
+        
+        prev_btn = QPushButton('Previous')
+        prev_btn.clicked.connect(self.previous_page)
+        pagination_layout.addWidget(prev_btn)
+        
+        next_btn = QPushButton('Next')
+        next_btn.clicked.connect(self.next_page)
+        pagination_layout.addWidget(next_btn)
+        
+        layout.addLayout(pagination_layout)
+        
         # Status label
         self.status_label = QLabel('')
         self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
@@ -101,7 +151,7 @@ class TransactionsDialog(QDialog):
         
         # Refresh button
         refresh_btn = QPushButton('Refresh')
-        refresh_btn.clicked.connect(self.refresh_table)
+        refresh_btn.clicked.connect(self.load_transactions)
         refresh_btn.setStyleSheet('background-color: #FF9800; color: white; padding: 8px;')
         button_layout.addWidget(refresh_btn)
         
@@ -116,12 +166,48 @@ class TransactionsDialog(QDialog):
         layout.addLayout(button_layout)
         
         self.setLayout(layout)
+        
+        # Load transactions
+        self.load_transactions()
+    
+    def load_transactions(self):
+        """Load transactions with pagination"""
+        self.progress_bar.setVisible(True)
+        self.info_label.setText('Loading transactions...')
+        
+        # Load in background thread
+        self.loader_thread = TransactionLoaderThread(
+            self.budget_app, 
+            limit=self.page_size, 
+            offset=self.current_page * self.page_size
+        )
+        self.loader_thread.finished.connect(self.on_transactions_loaded)
+        self.loader_thread.start()
+    
+    def on_transactions_loaded(self, transactions):
+        """Handle loaded transactions"""
+        self.progress_bar.setVisible(False)
+        self.all_transactions = transactions
+        
+        # Update pagination info
+        total_transactions = len(self.budget_app.get_all_transactions())
+        total_pages = max(1, (total_transactions + self.page_size - 1) // self.page_size)
+        
+        self.page_spinbox.setMaximum(total_pages)
+        self.page_spinbox.setValue(self.current_page + 1)
+        self.total_pages_label.setText(f'of {total_pages}')
+        
+        self.info_label.setText(
+            f'Showing {len(transactions)} transactions (page {self.current_page + 1} of {total_pages})'
+        )
+        
+        self.populate_table()
     
     def populate_table(self):
-        """Populate the table with transaction data."""
-        self.table.setRowCount(len(self.transactions))
+        """Populate table with current page of transactions"""
+        self.table.setRowCount(len(self.all_transactions))
         
-        for row, trans in enumerate(self.transactions):
+        for row, trans in enumerate(self.all_transactions):
             # ID
             id_item = QTableWidgetItem(str(trans.id))
             id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -139,7 +225,7 @@ class TransactionsDialog(QDialog):
             
             # Amount
             if trans.type == 'transfer':
-                amount_value = trans.amount if trans.amount else ""  # Use amount instead of from_amount
+                amount_value = trans.amount if trans.amount else ""
             else:
                 amount_value = trans.amount if trans.amount else ""
             
@@ -150,7 +236,7 @@ class TransactionsDialog(QDialog):
             
             # Account
             if trans.type == 'transfer':
-                account_name = self.get_account_name_by_id(trans.account_id)  # Use account_id instead of from_account_id
+                account_name = self.get_account_name_by_id(trans.account_id)
             else:
                 account_name = self.get_account_name_by_id(trans.account_id)
             account_item = QTableWidgetItem(account_name or "")
@@ -179,7 +265,7 @@ class TransactionsDialog(QDialog):
             checkbox_widget.setLayout(checkbox_layout)
             self.table.setCellWidget(row, 7, checkbox_widget)
             
-            # Action buttons - Modern X button (same as account perspective)
+            # Action buttons - Modern X button
             action_widget = QWidget()
             action_layout = QHBoxLayout()
             action_layout.setContentsMargins(1, 1, 1, 1)
@@ -227,7 +313,6 @@ class TransactionsDialog(QDialog):
                 return f'{account.account} {account.currency}'
         return ""
     
-
     def color_row_by_type(self, row, trans_type):
         """Set row background color based on transaction type."""
         color_map = {
@@ -241,6 +326,26 @@ class TransactionsDialog(QDialog):
                 item = self.table.item(row, col)
                 if item:
                     item.setBackground(color_map[trans_type])
+    
+    def on_page_changed(self, page):
+        """Handle page change"""
+        self.current_page = page - 1
+        self.load_transactions()
+    
+    def previous_page(self):
+        """Go to previous page"""
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.page_spinbox.setValue(self.current_page + 1)
+    
+    def next_page(self):
+        """Go to next page"""
+        total_transactions = len(self.budget_app.get_all_transactions())
+        total_pages = max(1, (total_transactions + self.page_size - 1) // self.page_size)
+        
+        if self.current_page < total_pages - 1:
+            self.current_page += 1
+            self.page_spinbox.setValue(self.current_page + 1)
     
     def on_checkbox_changed(self, state):
         """Handle checkbox state changes."""

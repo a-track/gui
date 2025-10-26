@@ -1,12 +1,13 @@
 """
 Main window for the Budget Tracker application.
+Optimized for performance with large datasets.
 """
 import sys
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QPushButton, QLineEdit, 
                              QComboBox, QRadioButton, QButtonGroup, QMessageBox,
-                             QDateEdit, QGroupBox, QScrollArea)
-from PyQt6.QtCore import Qt, QTimer, QDate
+                             QDateEdit, QGroupBox, QScrollArea, QProgressBar)
+from PyQt6.QtCore import Qt, QTimer, QDate, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
 
 from models import BudgetApp
@@ -14,21 +15,35 @@ from transactions_dialog import TransactionsDialog
 from account_perspective import AccountPerspectiveDialog
 from accounts_dialog import AccountsDialog
 from categories_dialog import CategoriesDialog
-from excel_handler import ExcelHandler
+
+class BalanceLoaderThread(QThread):
+    """Thread for loading balance data in background"""
+    finished = pyqtSignal(dict)
+    error = pyqtSignal(str)
+    
+    def __init__(self, budget_app):
+        super().__init__()
+        self.budget_app = budget_app
+    
+    def run(self):
+        try:
+            balances = self.budget_app.get_balance_summary()
+            self.finished.emit(balances)
+        except Exception as e:
+            self.error.emit(str(e))
 
 class BudgetTrackerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.budget_app = BudgetApp()
+        self.balance_loader = None
         self.init_ui()
-        self.update_balance_display()
-        self.excel_handler = ExcelHandler(self.budget_app)
+        self.load_balances_async()
 
     def init_ui(self):
         self.setWindowTitle('Budget Tracker')
-        # Set a larger initial size and make it resizable
-        self.setMinimumSize(1000, 800)  # Increased minimum size
-        self.resize(1200, 900)  # Set initial size larger
+        self.setMinimumSize(1000, 800)
+        self.resize(1200, 900)
         
         # Central widget
         central_widget = QWidget()
@@ -54,19 +69,25 @@ class BudgetTrackerWindow(QMainWindow):
         balance_label.setStyleSheet('font-weight: bold; font-size: 14px;')
         main_layout.addWidget(balance_label)
         
+        # Progress bar for initial loading
+        self.loading_progress = QProgressBar()
+        self.loading_progress.setVisible(False)
+        self.loading_progress.setRange(0, 0)  # Indeterminate progress
+        main_layout.addWidget(self.loading_progress)
+        
         # Create scroll area for balance display
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setMaximumHeight(400)  # Limit height to keep totals visible
+        scroll_area.setMaximumHeight(400)
         scroll_area.setStyleSheet('border: 1px solid #cccccc; border-radius: 5px;')
         
         # Balance display widget
         balance_widget = QWidget()
         self.balance_layout = QVBoxLayout(balance_widget)
         
-        self.balance_display = QLabel()
+        self.balance_display = QLabel('Loading balances...')
         self.balance_display.setStyleSheet('background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-family: "Courier New", monospace; font-size: 12px;')
-        self.balance_display.setWordWrap(False)  # Important: no word wrap for fixed formatting
+        self.balance_display.setWordWrap(False)
         self.balance_layout.addWidget(self.balance_display)
         
         scroll_area.setWidget(balance_widget)
@@ -122,7 +143,6 @@ class BudgetTrackerWindow(QMainWindow):
         account_layout.addWidget(QLabel('Account:'))
         self.account_combo = QComboBox()
         self.account_combo.setMinimumWidth(200)
-        self.account_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.update_account_combo()
         account_layout.addWidget(self.account_combo)
         account_layout.addStretch()
@@ -133,7 +153,6 @@ class BudgetTrackerWindow(QMainWindow):
         self.parent_category_layout.addWidget(QLabel('Category:'))
         self.parent_category_combo = QComboBox()
         self.parent_category_combo.setMinimumWidth(200)
-        self.parent_category_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.parent_category_combo.currentTextChanged.connect(self.on_parent_category_changed)
         self.parent_category_layout.addWidget(self.parent_category_combo)
         self.parent_category_layout.addStretch()
@@ -144,7 +163,6 @@ class BudgetTrackerWindow(QMainWindow):
         self.sub_category_layout.addWidget(QLabel('Sub Category:'))
         self.sub_category_combo = QComboBox()
         self.sub_category_combo.setMinimumWidth(200)
-        self.sub_category_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.sub_category_layout.addWidget(self.sub_category_combo)
         self.sub_category_layout.addStretch()
         form_layout.addLayout(self.sub_category_layout)
@@ -154,7 +172,6 @@ class BudgetTrackerWindow(QMainWindow):
         self.to_account_layout.addWidget(QLabel('To Account:'))
         self.to_account_combo = QComboBox()
         self.to_account_combo.setMinimumWidth(200)
-        self.to_account_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.update_to_account_combo()
         self.to_account_layout.addWidget(self.to_account_combo)
         self.to_account_layout.addStretch()
@@ -213,23 +230,6 @@ class BudgetTrackerWindow(QMainWindow):
         button_layout.addWidget(account_view_btn)
         
         main_layout.addLayout(button_layout)
-    
-
-                # Excel buttons
-        excel_layout = QHBoxLayout()
-
-        export_btn = QPushButton('Export to Excel')
-        export_btn.clicked.connect(self.export_to_excel)
-        export_btn.setStyleSheet('background-color: #009688; color: white; padding: 10px; font-size: 14px;')
-        excel_layout.addWidget(export_btn)
-
-        import_btn = QPushButton('Import from Excel')
-        import_btn.clicked.connect(self.import_from_excel)
-        import_btn.setStyleSheet('background-color: #607D8B; color: white; padding: 10px; font-size: 14px;')
-        excel_layout.addWidget(import_btn)
-
-        main_layout.addLayout(excel_layout)
-
 
         # Management buttons
         management_layout = QHBoxLayout()
@@ -246,6 +246,91 @@ class BudgetTrackerWindow(QMainWindow):
         
         main_layout.addLayout(management_layout)
         main_layout.addStretch()
+
+    def load_balances_async(self):
+        """Load balances in background thread to keep UI responsive"""
+        self.loading_progress.setVisible(True)
+        self.balance_display.setText('Loading balances...')
+        
+        self.balance_loader = BalanceLoaderThread(self.budget_app)
+        self.balance_loader.finished.connect(self.on_balances_loaded)
+        self.balance_loader.error.connect(self.on_balances_error)
+        self.balance_loader.start()
+
+    def on_balances_loaded(self, balances):
+        """Handle completed balance loading"""
+        self.loading_progress.setVisible(False)
+        self.update_balance_display_with_data(balances)
+
+    def on_balances_error(self, error_message):
+        """Handle balance loading error"""
+        self.loading_progress.setVisible(False)
+        self.balance_display.setText(f'Error loading balances: {error_message}')
+
+    def update_balance_display_with_data(self, balances):
+        """Update balance display with pre-loaded data"""
+        # Combine all accounts (Cash, Bank, and Credit) and filter out zero balances
+        all_accounts = []
+        for account_id, data in balances.items():
+            # Skip accounts with zero balance
+            if data['balance'] == 0:
+                continue
+                
+            account_type = data['type']
+            if account_type in ['Cash', 'Bank', 'Credit']:
+                all_accounts.append((account_id, data))
+        
+        # Get all unique currencies from the filtered accounts and calculate totals
+        currency_totals = {}
+        for account_id, data in all_accounts:
+            currency = self.get_currency_for_account(account_id)
+            balance = data['balance']
+            if currency in currency_totals:
+                currency_totals[currency] += abs(balance)
+            else:
+                currency_totals[currency] = abs(balance)
+        
+        # Sort currencies by total amount in descending order
+        all_currencies = sorted(currency_totals.keys(), key=lambda x: currency_totals[x], reverse=True)
+        
+        # Calculate column widths
+        account_col_width = 35
+        currency_col_width = 15
+        
+        # Build the display text
+        balance_text = ""
+        
+        # Header
+        header = f"{'Account':{account_col_width}}"
+        for currency in all_currencies:
+            header += f"{currency:>{currency_col_width}}"
+        balance_text += header + "\n"
+        balance_text += "-" * (account_col_width + len(all_currencies) * currency_col_width) + "\n"
+        
+        # All accounts (Cash, Bank, and Credit)
+        total_by_currency = {currency: 0.0 for currency in all_currencies}
+        for account_id, data in sorted(all_accounts, key=lambda x: x[0]):
+            account_currency = self.get_currency_for_account(account_id)
+            account_name = f"{data['account_name']} {account_currency}"
+            balance = data['balance']
+            
+            line = f"{account_name:{account_col_width}}"
+            for currency in all_currencies:
+                if currency == account_currency:
+                    line += f"{balance:>{currency_col_width}.2f}"
+                    total_by_currency[currency] += balance
+                else:
+                    line += f"{'':>{currency_col_width}}"
+            balance_text += line + "\n"
+        
+        # Totals
+        balance_text += "-" * (account_col_width + len(all_currencies) * currency_col_width) + "\n"
+        total_line = f"{'Total':{account_col_width}}"
+        for currency in all_currencies:
+            total_line += f"{total_by_currency[currency]:>{currency_col_width}.2f}"
+        balance_text += total_line
+        
+        self.balance_display.setText(balance_text)
 
     def update_account_combo(self):
         self.account_combo.clear()
@@ -348,73 +433,6 @@ class BudgetTrackerWindow(QMainWindow):
         if self.sub_category_combo.count() > 0:
             self.sub_category_combo.setCurrentIndex(0)
 
-    def update_balance_display(self):
-        """Update the balance display with Cash, Bank, and Credit accounts combined"""
-        balances = self.budget_app.get_balance_summary()
-        
-        # Combine all accounts (Cash, Bank, and Credit) and filter out zero balances
-        all_accounts = []
-        for account_id, data in balances.items():
-            # Skip accounts with zero balance
-            if data['balance'] == 0:
-                continue
-                
-            account_type = data['type']
-            if account_type in ['Cash', 'Bank', 'Credit']:  # Include all three types
-                all_accounts.append((account_id, data))
-        
-        # Get all unique currencies from the filtered accounts and calculate totals
-        currency_totals = {}
-        for account_id, data in all_accounts:
-            currency = self.get_currency_for_account(account_id)
-            balance = data['balance']
-            if currency in currency_totals:
-                currency_totals[currency] += abs(balance)  # Use absolute value for sorting
-            else:
-                currency_totals[currency] = abs(balance)
-        
-        # Sort currencies by total amount in descending order
-        all_currencies = sorted(currency_totals.keys(), key=lambda x: currency_totals[x], reverse=True)
-        
-        # Calculate column widths
-        account_col_width = 35
-        currency_col_width = 15
-        
-        # Build the display text
-        balance_text = ""
-        
-        # Header
-        header = f"{'Account':{account_col_width}}"
-        for currency in all_currencies:
-            header += f"{currency:>{currency_col_width}}"
-        balance_text += header + "\n"
-        balance_text += "-" * (account_col_width + len(all_currencies) * currency_col_width) + "\n"
-        
-        # All accounts (Cash, Bank, and Credit)
-        total_by_currency = {currency: 0.0 for currency in all_currencies}
-        for account_id, data in sorted(all_accounts, key=lambda x: x[0]):
-            account_currency = self.get_currency_for_account(account_id)
-            account_name = f"{data['account_name']} {account_currency}"
-            balance = data['balance']
-            
-            line = f"{account_name:{account_col_width}}"
-            for currency in all_currencies:
-                if currency == account_currency:
-                    line += f"{balance:>{currency_col_width}.2f}"
-                    total_by_currency[currency] += balance
-                else:
-                    line += f"{'':>{currency_col_width}}"
-            balance_text += line + "\n"
-        
-        # Totals
-        balance_text += "-" * (account_col_width + len(all_currencies) * currency_col_width) + "\n"
-        total_line = f"{'Total':{account_col_width}}"
-        for currency in all_currencies:
-            total_line += f"{total_by_currency[currency]:>{currency_col_width}.2f}"
-        balance_text += total_line
-        
-        self.balance_display.setText(balance_text)
-
     def get_currency_for_account(self, account_id):
         """Get currency for a specific account ID"""
         accounts = self.budget_app.get_all_accounts()
@@ -422,35 +440,6 @@ class BudgetTrackerWindow(QMainWindow):
             if account.id == account_id:
                 return account.currency
         return 'CHF'  # Default
-
-    def export_to_excel(self):
-        """Export transactions to Excel."""
-        success, message = self.excel_handler.export_to_excel(self)
-        if success:
-            self.show_status(message)
-        else:
-            QMessageBox.warning(self, "Export Failed", message)
-
-    def import_from_excel(self):
-        """Import transactions from Excel."""
-        reply = QMessageBox.question(
-            self,
-            "Confirm Import",
-            "This will import transactions from Excel. Existing transactions will not be affected.\n\nContinue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            success, message = self.excel_handler.import_from_excel(self)
-            if success:
-                self.show_status(message)
-                # Refresh displays
-                self.update_balance_display()
-            else:
-                QMessageBox.warning(self, "Import Failed", message)
-
-
-
 
     def add_transaction(self):
         # Validate amount
@@ -599,3 +588,7 @@ class BudgetTrackerWindow(QMainWindow):
         dialog.exec()
         # Refresh category combo after dialog closes
         self.update_ui_for_type()
+
+    def update_balance_display(self):
+        """Public method to update balance display (triggers async loading)"""
+        self.load_balances_async()

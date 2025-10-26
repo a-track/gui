@@ -562,3 +562,43 @@ class BudgetApp:
             return None
         finally:
             conn.close()
+
+    def get_transactions_paginated(self, limit=1000, offset=0):
+        """Get transactions with pagination for better performance"""
+        conn = self._get_connection()
+        try:
+            result = conn.execute("""
+                SELECT id, date, type, sub_category, amount, account_id, 
+                    payee, notes, invest_account_id, qty, to_account_id, 
+                    to_amount, confirmed
+                FROM transactions 
+                ORDER BY date DESC, id DESC
+                LIMIT ? OFFSET ?
+            """, [limit, offset]).fetchall()
+            
+            transactions = []
+            for row in result:
+                trans = Transaction(
+                    trans_id=row[0], date=row[1], type=row[2],
+                    sub_category=row[3], amount=row[4], account_id=row[5],
+                    payee=row[6], notes=row[7], invest_account_id=row[8],
+                    qty=row[9], to_account_id=row[10], to_amount=row[11],
+                    confirmed=row[12]
+                )
+                transactions.append(trans)
+            
+            return transactions
+        except Exception as e:
+            print(f"Error getting paginated transactions: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def get_transaction_count(self):
+        """Get total number of transactions"""
+        conn = self._get_connection()
+        try:
+            result = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()
+            return result[0] if result else 0
+        finally:
+            conn.close()
