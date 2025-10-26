@@ -45,9 +45,20 @@ class BudgetTrackerWindow(QMainWindow):
         main_layout = QVBoxLayout()
         central_widget.setLayout(main_layout)
         
+        balance_header_layout = QHBoxLayout()
         balance_label = QLabel('Account Balances')
         balance_label.setStyleSheet('font-weight: bold; font-size: 14px;')
-        main_layout.addWidget(balance_label)
+        
+        refresh_btn = QPushButton('Refresh Balances')
+        refresh_btn.clicked.connect(self.load_balances_async)
+        refresh_btn.setStyleSheet('background-color: #607D8B; color: white; padding: 5px; font-size: 12px;')
+        refresh_btn.setMaximumWidth(120)
+        
+        balance_header_layout.addWidget(balance_label)
+        balance_header_layout.addStretch()
+        balance_header_layout.addWidget(refresh_btn)
+        
+        main_layout.addLayout(balance_header_layout)
         
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -457,8 +468,6 @@ class BudgetTrackerWindow(QMainWindow):
             self.notes_input.clear()
             self.account_combo.setCurrentIndex(0)
             self.to_account_combo.setCurrentIndex(0)
-            
-            self.update_balance_display()
         else:
             self.show_status('Error adding transaction', error=True)
 
@@ -524,7 +533,6 @@ class BudgetTrackerWindow(QMainWindow):
         dialog.exec()
         self.update_account_combo()
         self.update_to_account_combo()
-        self.update_balance_display()
 
     def manage_categories(self):
         dialog = CategoriesDialog(self.budget_app, self)
@@ -532,4 +540,5 @@ class BudgetTrackerWindow(QMainWindow):
         self.update_ui_for_type()
 
     def update_balance_display(self):
+        """Public method that can be called externally if needed"""
         self.load_balances_async()

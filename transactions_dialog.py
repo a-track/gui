@@ -312,8 +312,6 @@ class TransactionsDialog(QDialog):
             self.budget_app.toggle_confirmation(trans_id)
             self.show_status(f'Transaction #{trans_id} confirmation toggled!')
             
-            if hasattr(self.parent_window, 'update_balance_display'):
-                self.parent_window.update_balance_display()
         except Exception as e:
             print(f"Error in on_checkbox_changed: {e}")
             self.show_status('Error updating confirmation!', error=True)
@@ -335,8 +333,6 @@ class TransactionsDialog(QDialog):
                 self.show_status(f'Transaction #{trans_id} deleted!')
                 self.refresh_table()
                 
-                if hasattr(self.parent_window, 'update_balance_display'):
-                    self.parent_window.update_balance_display()
         except Exception as e:
             print(f"Error in on_delete_clicked: {e}")
             self.show_status('Error deleting transaction!', error=True)
