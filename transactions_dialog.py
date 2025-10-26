@@ -61,11 +61,6 @@ class TransactionsDialog(QDialog):
         
         filter_layout.addStretch()
         
-        # Show all checkbox
-        self.show_all_checkbox = QCheckBox('Show All Transactions')
-        self.show_all_checkbox.stateChanged.connect(self.apply_filters)
-        filter_layout.addWidget(self.show_all_checkbox)
-        
         layout.addLayout(filter_layout)
         
         # Info label
@@ -220,35 +215,30 @@ class TransactionsDialog(QDialog):
         if not self.all_transactions:
             return
         
-        if self.show_all_checkbox.isChecked():
-            # Show all transactions
-            self.filtered_transactions = self.all_transactions
-            self.info_label.setText(f'Showing all {len(self.filtered_transactions)} transactions')
-        else:
-            # Filter by selected year and month
-            selected_year = int(self.year_combo.currentText())
-            selected_month = self.month_combo.currentIndex() + 1  # 1-12
-            
-            self.filtered_transactions = []
-            for trans in self.all_transactions:
-                try:
-                    # Parse transaction date
-                    if hasattr(trans, 'date') and trans.date:
-                        trans_date = trans.date
-                        if isinstance(trans_date, str):
-                            # If date is string, parse it
-                            trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
-                        
-                        if trans_date.year == selected_year and trans_date.month == selected_month:
-                            self.filtered_transactions.append(trans)
-                except (ValueError, AttributeError) as e:
-                    print(f"Error parsing date for transaction {trans.id}: {e}")
-                    continue
-            
-            month_name = self.month_combo.currentText()
-            self.info_label.setText(
-                f'Showing {len(self.filtered_transactions)} transactions for {month_name} {selected_year}'
-            )
+        # Filter by selected year and month
+        selected_year = int(self.year_combo.currentText())
+        selected_month = self.month_combo.currentIndex() + 1  # 1-12
+        
+        self.filtered_transactions = []
+        for trans in self.all_transactions:
+            try:
+                # Parse transaction date
+                if hasattr(trans, 'date') and trans.date:
+                    trans_date = trans.date
+                    if isinstance(trans_date, str):
+                        # If date is string, parse it
+                        trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
+                    
+                    if trans_date.year == selected_year and trans_date.month == selected_month:
+                        self.filtered_transactions.append(trans)
+            except (ValueError, AttributeError) as e:
+                print(f"Error parsing date for transaction {trans.id}: {e}")
+                continue
+        
+        month_name = self.month_combo.currentText()
+        self.info_label.setText(
+            f'Showing {len(self.filtered_transactions)} transactions for {month_name} {selected_year}'
+        )
         
         self.populate_table()
     
