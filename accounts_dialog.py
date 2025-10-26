@@ -279,20 +279,6 @@ class AccountsDialog(QDialog):
         
         self.show_status(f'Displaying {len(self.filtered_accounts)} accounts')
     
-    def toggle_show_in_balance(self, account_id, state):
-        try:
-            show_in_balance = (state == Qt.CheckState.Checked.value)
-            success = self.budget_app.set_account_show_in_balance(account_id, show_in_balance)
-            if success:
-                self.show_status('Setting updated successfully!')
-                if hasattr(self.parent_window, 'update_balance_display'):
-                    self.parent_window.update_balance_display()
-            else:
-                self.show_status('Error updating setting', error=True)
-        except Exception as e:
-            print(f"Error updating show_in_balance: {e}")
-            self.show_status('Error updating setting', error=True)
-    
     def add_account(self):
         account_name = self.account_name_input.text().strip()
         if not account_name:

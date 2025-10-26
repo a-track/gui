@@ -209,8 +209,6 @@ class TransactionsDialog(QDialog):
             
             if trans.type == 'transfer':
                 amount_value = trans.amount if trans.amount else ""
-            else:
-                amount_value = trans.amount if trans.amount else ""
             
             amount_item = QTableWidgetItem(f"{amount_value:.2f}" if amount_value != "" else "")
             if amount_value:
@@ -219,8 +217,7 @@ class TransactionsDialog(QDialog):
             
             if trans.type == 'transfer':
                 account_name = self.get_account_name_by_id(trans.account_id)
-            else:
-                account_name = self.get_account_name_by_id(trans.account_id)
+                
             account_item = QTableWidgetItem(account_name or "")
             self.table.setItem(row, 4, account_item)
             

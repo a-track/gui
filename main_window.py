@@ -4,7 +4,6 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QComboBox, QRadioButton, QButtonGroup, QMessageBox,
                              QDateEdit, QGroupBox, QScrollArea, QProgressBar)
 from PyQt6.QtCore import Qt, QTimer, QDate, QThread, pyqtSignal
-from PyQt6.QtGui import QFont
 
 from models import BudgetApp
 from transactions_dialog import TransactionsDialog
