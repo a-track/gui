@@ -107,10 +107,6 @@ class CategoriesDialog(QDialog):
         for category in categories:
             parent_categories.add(category.category)
         
-        common_parents = ['Activities', 'Food', 'Health', 'Income', 'Insurance', 'Investment', 'Living', 'Pei Pei', 'Tax', 'Transport']
-        for parent in common_parents:
-            parent_categories.add(parent)
-        
         self.parent_category_combo.clear()
         self.parent_category_combo.addItems(sorted(list(parent_categories)))
     

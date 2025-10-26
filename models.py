@@ -103,8 +103,6 @@ class BudgetApp:
                     FOREIGN KEY (sub_category) REFERENCES categories(sub_category)
                 )
             """)
-            
-            self._insert_default_data(conn)
             conn.commit()
             
         except Exception as e:
@@ -113,109 +111,6 @@ class BudgetApp:
             traceback.print_exc()
         finally:
             conn.close()
-    
-    def _insert_default_data(self, conn):
-        default_accounts = [
-            (100, 'Cash', 'Cash', 'Cash', 'CHF', False),
-            (110, 'Cash', 'Cash', 'Cash', 'EUR', False),
-            (120, 'Cash', 'Cash', 'Cash', 'USD', False),
-            (130, 'Cash', 'Cash', 'Cash', 'SGD', False),
-            (140, 'Cash', 'Cash', 'Cash', 'MYR', False),
-            (200, 'Post', 'Bank', 'Post', 'CHF', False),
-            (201, 'Payment Account', 'Bank', 'Post', 'CHF', False),
-            (202, 'Post Saving', 'Bank', 'Post', 'CHF', False),
-            (203, 'WIR', 'Bank', 'Wir', 'CHF', False),
-            (204, 'Zak', 'Bank', 'Cler', 'CHF', False),
-            (205, 'E-Trading', 'Bank', 'Post', 'CHF', False),
-            (206, 'Valiant', 'Bank', 'Valiant', 'CHF', False),
-            (207, 'WIR Saving', 'Bank', 'Wir', 'CHF', False),
-            (210, 'Post', 'Bank', 'Post', 'EUR', False),
-            (215, 'E-Trading', 'Bank', 'Post', 'EUR', False),
-            (220, 'Post', 'Bank', 'Post', 'USD', False),
-            (225, 'E-Trading', 'Bank', 'Post', 'USD', False),
-            (300, 'Yuh', 'Bank', 'Yuh', 'CHF', False),
-            (310, 'Yuh', 'Bank', 'Yuh', 'EUR', False),
-            (320, 'Yuh', 'Bank', 'Yuh', 'USD', False),
-            (400, 'Certo', 'Credit', 'Cembra', 'CHF', False),
-            (401, 'Reka', 'Bank', 'Reka', 'CHF', False),
-            (402, 'BR Bauhandel', 'Credit', 'BR Bauhandel', 'CHF', False),
-            (403, 'Wyne', 'Credit', 'Cash', 'CHF', False),
-            (404, 'Cumulus', 'Bank', 'Cash', 'CHF', False),
-            (500, 'NESN.SW', 'Share', 'Post', 'CHF', True),
-            (501, 'CALN.SW', 'Share', 'Post', 'CHF', True),
-            (502, 'UHRN.SW', 'Share', 'Post', 'CHF', True),
-            (503, 'LOGN.SW', 'Share', 'Yuh', 'CHF', True),
-            (504, 'ABBN.SW', 'Share', 'Yuh', 'CHF', True),
-            (505, 'PGHN.SW', 'Share', 'Yuh', 'CHF', True),
-            (506, 'STMN.SW', 'Share', 'Post', 'CHF', True),
-            (511, 'PHIA.AS', 'Share', 'Yuh', 'EUR', True),
-            (520, 'PM', 'Share', 'Yuh', 'USD', True),
-            (521, 'MCD', 'Share', 'Yuh', 'USD', True),
-            (522, 'SBUX', 'Share', 'Yuh', 'USD', True),
-            (600, 'VWRL.SW', 'ETF', 'Post', 'CHF', True),
-            (601, 'CHSPI.SW', 'ETF', 'Post', 'CHF', True),
-            (602, 'Viac', 'Fonds', 'Viac', 'CHF', True),
-            (610, 'CSSX5E.SW', 'ETF', 'Post', 'EUR', True),
-            (611, 'ALAT.SW', 'ETF', 'Post', 'EUR', True),
-            (620, 'EIMI.SW', 'ETF', 'Post', 'USD', True),
-            (621, 'ICOM.L', 'ETF', 'Post', 'USD', True),
-            (700, 'Viac 2', '3a', 'Viac', 'CHF', True),
-            (701, 'Viac 1', '3a', 'Viac', 'CHF', True),
-            (702, 'Viac 3', '3a', 'Viac', 'CHF', True),
-            (703, 'Viac 4', '3a', 'Viac', 'CHF', True),
-            (800, 'Mietkaution', 'Bank', 'Valiant', 'CHF', False),
-            (830, 'POSB', 'Bank', 'POSB', 'SGD', False),
-            (900, 'StartingBalance', 'Other', 'Other', 'CHF', False)
-        ]
-        
-        for account in default_accounts:
-            conn.execute("""
-                INSERT OR IGNORE INTO accounts (id, account, type, company, currency, is_investment)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, account)
-        
-        default_categories = [
-            ('Activities', 'Activities'),
-            ('Beauty', 'Health'),
-            ('Broker Fees', 'Investment'),
-            ('Bycicle', 'Transport'),
-            ('Car', 'Transport'),
-            ('Clothing', 'Living'),
-            ('Dentist', 'Health'),
-            ('Dining Out', 'Food'),
-            ('Doctor', 'Health'),
-            ('Education', 'Pei Pei'),
-            ('Fees', 'Tax'),
-            ('Flights', 'Transport'),
-            ('Furnishing', 'Living'),
-            ('Groceries', 'Food'),
-            ('Health Insurance', 'Insurance'),
-            ('Hygiene', 'Health'),
-            ('Optician', 'Health'),
-            ('Other Insurance', 'Insurance'),
-            ('Pet', 'Activities'),
-            ('Pharmacy', 'Health'),
-            ('Pocket Money', 'Pei Pei'),
-            ('Public Transport', 'Transport'),
-            ('Rent', 'Living'),
-            ('Tax', 'Tax'),
-            ('Utilities', 'Living'),
-            ('HDB', 'Living'),
-            ('Massage', 'Health'),
-            ('Dividend', 'Investment'),
-            ('Salary', 'Income'),
-            ('Tutti', 'Income'),
-            ('Cash Back', 'Income'),
-            ('Investment Return', 'Investment'),
-            ('Interest', 'Income'),
-            ('Gifts', 'Activities')
-        ]
-        
-        for category in default_categories:
-            conn.execute("""
-                INSERT OR IGNORE INTO categories (sub_category, category)
-                VALUES (?, ?)
-            """, category)
 
     def _get_next_id(self, table_name: str) -> int:
         conn = self._get_connection()
