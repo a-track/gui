@@ -1,6 +1,3 @@
-"""
-Category Management Dialog
-"""
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QMessageBox, QHeaderView, QLineEdit, QComboBox, QWidget)
@@ -19,10 +16,8 @@ class CategoriesDialog(QDialog):
         
         layout = QVBoxLayout()
         
-        # Add new category section with parent-child selection
         new_category_layout = QVBoxLayout()
         
-        # Parent category selection
         parent_layout = QHBoxLayout()
         parent_layout.addWidget(QLabel('Category:'))
         self.parent_category_combo = QComboBox()
@@ -34,7 +29,6 @@ class CategoriesDialog(QDialog):
         parent_layout.addStretch()
         new_category_layout.addLayout(parent_layout)
         
-        # Sub category input
         sub_category_layout = QHBoxLayout()
         sub_category_layout.addWidget(QLabel('Sub Category:'))
         self.sub_category_input = QLineEdit()
@@ -51,17 +45,14 @@ class CategoriesDialog(QDialog):
         new_category_layout.addLayout(sub_category_layout)
         layout.addLayout(new_category_layout)
         
-        # Table
         self.table = QTableWidget()
         self.table.setColumnCount(3)
         self.table.setHorizontalHeaderLabels(['Category', 'Sub Category', 'Actions'])
 
-        # Make table read-only (like account management)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
-        # Style the table to match transactions dialog
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
             QTableWidget {
@@ -86,26 +77,20 @@ class CategoriesDialog(QDialog):
             }
         """)
 
-        # Hide row numbers
         self.table.verticalHeader().hide()
 
-        # Set initial column widths
         header = self.table.horizontalHeader()
-        self.table.setColumnWidth(2, 70)   # Actions - fixed small width
+        self.table.setColumnWidth(2, 70)
 
-        # Make content-based columns resize to contents
         content_based_columns = [0, 1]
         for col in content_based_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
 
-        # Actions column stays interactive
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
 
-        # Set row height
         self.table.verticalHeader().setDefaultSectionSize(35)
         layout.addWidget(self.table)
         
-        # Status label
         self.status_label = QLabel('')
         self.status_label.setStyleSheet('color: #666; padding: 5px;')
         layout.addWidget(self.status_label)
@@ -116,14 +101,12 @@ class CategoriesDialog(QDialog):
         self.load_parent_categories()
     
     def load_parent_categories(self):
-        """Load unique parent categories into the combo box"""
         categories = self.budget_app.get_all_categories()
         parent_categories = set()
         
         for category in categories:
             parent_categories.add(category.category)
         
-        # Add common parent categories if they don't exist
         common_parents = ['Activities', 'Food', 'Health', 'Income', 'Insurance', 'Investment', 'Living', 'Pei Pei', 'Tax', 'Transport']
         for parent in common_parents:
             parent_categories.add(parent)
@@ -132,8 +115,6 @@ class CategoriesDialog(QDialog):
         self.parent_category_combo.addItems(sorted(list(parent_categories)))
     
     def on_parent_category_changed(self, parent_category):
-        """Handle parent category selection change"""
-        # You can add logic here to filter sub-categories if needed
         pass
     
     def load_categories(self):
@@ -142,24 +123,21 @@ class CategoriesDialog(QDialog):
             self.table.setRowCount(len(categories))
             
             for row, category in enumerate(categories):
-                # Parent Category (read-only)
                 parent_item = QTableWidgetItem(category.category)
-                parent_item.setFlags(parent_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+                parent_item.setFlags(parent_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 0, parent_item)
                 
-                # Sub Category (read-only)
                 sub_item = QTableWidgetItem(category.sub_category)
-                sub_item.setFlags(sub_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+                sub_item.setFlags(sub_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 1, sub_item)
                 
-                # Actions - Modern X button
                 action_widget = QWidget()
                 action_layout = QHBoxLayout()
-                action_layout.setContentsMargins(1, 1, 1, 1)  # Minimal margins
+                action_layout.setContentsMargins(1, 1, 1, 1)
                 action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 
-                delete_btn = QPushButton('✕')  # Modern X symbol
-                delete_btn.setFixedSize(22, 22)  # Small size to fit nicely
+                delete_btn = QPushButton('✕')
+                delete_btn.setFixedSize(22, 22)
                 delete_btn.setStyleSheet('''
                     QPushButton {
                         background-color: #ff4444;
@@ -187,17 +165,14 @@ class CategoriesDialog(QDialog):
                 
                 self.table.setCellWidget(row, 2, action_widget)
             
-            # Auto-resize columns to content after population
             self.table.resizeColumnsToContents()
             
-            # Set minimum widths for certain columns to prevent them from being too small
-            self.table.setColumnWidth(0, max(120, self.table.columnWidth(0)))  # Parent Category
-            self.table.setColumnWidth(1, max(120, self.table.columnWidth(1)))  # Sub Category
-            self.table.setColumnWidth(2, max(70, self.table.columnWidth(2)))   # Actions
+            self.table.setColumnWidth(0, max(120, self.table.columnWidth(0)))
+            self.table.setColumnWidth(1, max(120, self.table.columnWidth(1)))
+            self.table.setColumnWidth(2, max(70, self.table.columnWidth(2)))
             
             self.show_status(f'Loaded {len(categories)} categories')
             
-            # Reload parent categories to include any new ones
             self.load_parent_categories()
             
         except Exception as e:

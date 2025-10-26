@@ -38,13 +38,11 @@ class BudgetApp:
     def init_database(self):
         conn = self._get_connection()
         try:
-            # Check if table exists using DuckDB syntax
             result = conn.execute("""
                 SELECT table_name FROM information_schema.tables 
                 WHERE table_name='transactions'
             """).fetchone()
             
-            # Only create if it doesn't exist
             if not result:
                 conn.execute("""
                     CREATE TABLE transactions (
@@ -61,7 +59,6 @@ class BudgetApp:
                 """)
                 conn.commit()
             else:
-                # Check if to_account and confirmed columns exist, add if they don't
                 columns = conn.execute("""
                     SELECT column_name FROM information_schema.columns 
                     WHERE table_name='transactions'
@@ -164,7 +161,6 @@ class BudgetApp:
             conn.close()
 
     def get_balance_summary(self):
-        """Get balance summary for all accounts"""
         conn = self._get_connection()
         try:
             balances = {}
@@ -173,7 +169,6 @@ class BudgetApp:
             
             transactions = self.get_all_transactions()
             for trans in transactions:
-                # Convert amount to float to avoid Decimal type issues
                 amount = float(trans.amount)
                 
                 if trans.type == 'income':
@@ -222,7 +217,6 @@ class TransactionsDialog(QDialog):
             self.budget_app = budget_app
             self.parent_window = parent
             
-            # Simple window flags - removed WindowStaysOnTopHint for better compatibility
             self.setWindowFlags(Qt.WindowType.Window)
             
             self.setWindowTitle('All Transactions')
@@ -231,12 +225,10 @@ class TransactionsDialog(QDialog):
             print("  Creating layout...")
             layout = QVBoxLayout()
             
-            # Info label
             info_label = QLabel('Tip: Double-click any cell to edit. Click checkbox to confirm transaction.')
             info_label.setStyleSheet('color: #666; font-style: italic; padding: 5px;')
             layout.addWidget(info_label)
             
-            # Table
             print("  Creating table...")
             self.table = QTableWidget()
             self.table.setColumnCount(10)
@@ -244,10 +236,8 @@ class TransactionsDialog(QDialog):
                                                    'From Account', 'To Account', 'Description', 
                                                    'Confirmed', 'Actions'])
             
-            # Make columns editable
             self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
             
-            # Set up delegates for dropdown columns
             print("  Setting up delegates...")
             self.type_delegate = ComboBoxDelegate(['Income', 'Expense', 'Transfer'], self)
             self.table.setItemDelegateForColumn(2, self.type_delegate)
@@ -256,12 +246,10 @@ class TransactionsDialog(QDialog):
             self.table.setItemDelegateForColumn(5, self.account_delegate)
             self.table.setItemDelegateForColumn(6, self.account_delegate)
             
-            # Get transactions and populate
             print("  Getting transactions...")
             self.transactions = self.budget_app.get_all_transactions()
             print(f"  Got {len(self.transactions)} transactions")
             
-            # Connect cell changed signal
             print("  Connecting signals...")
             self.table.cellChanged.connect(self.on_cell_changed)
             
@@ -269,26 +257,22 @@ class TransactionsDialog(QDialog):
             self.populate_table()
             print("  Table populated")
             
-            # Resize columns
             print("  Resizing columns...")
             header = self.table.horizontalHeader()
             for i in range(self.table.columnCount()):
                 header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)  # Description column
+            header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)
             
             layout.addWidget(self.table)
             
-            # Status bar
             print("  Creating status label...")
             self.status_label = QLabel('')
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
             layout.addWidget(self.status_label)
             
-            # Button layout
             print("  Creating buttons...")
             button_layout = QHBoxLayout()
             
-            # Refresh button
             refresh_btn = QPushButton('Refresh')
             refresh_btn.clicked.connect(self.refresh_table)
             refresh_btn.setStyleSheet('background-color: #FF9800; color: white; padding: 8px;')
@@ -296,7 +280,6 @@ class TransactionsDialog(QDialog):
             
             button_layout.addStretch()
             
-            # Close button
             close_btn = QPushButton('Close')
             close_btn.clicked.connect(self.close_and_update)
             close_btn.setStyleSheet('background-color: #2196F3; color: white; padding: 8px;')
@@ -323,7 +306,6 @@ class TransactionsDialog(QDialog):
             print(f"    populate_table: Setting row count to {len(self.transactions)}")
             self.table.setRowCount(len(self.transactions))
             
-            # Temporarily disconnect signal to avoid triggering during population
             print("    populate_table: Disconnecting cellChanged signal")
             try:
                 self.table.cellChanged.disconnect()
@@ -334,49 +316,39 @@ class TransactionsDialog(QDialog):
             for row, trans in enumerate(self.transactions):
                 print(f"    populate_table: Processing row {row}, transaction ID {trans.id}")
                 
-                # ID (read-only)
                 id_item = QTableWidgetItem(str(trans.id))
                 id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 id_item.setBackground(QColor(240, 240, 240))
                 self.table.setItem(row, 0, id_item)
                 
-                # Date (read-only for now)
                 date_item = QTableWidgetItem(str(trans.date))
                 date_item.setFlags(date_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 date_item.setBackground(QColor(240, 240, 240))
                 self.table.setItem(row, 1, date_item)
                 
-                # Type
                 type_item = QTableWidgetItem(trans.type.capitalize())
                 self.table.setItem(row, 2, type_item)
                 
-                # Amount
                 amount_item = QTableWidgetItem(f"{trans.amount:.2f}")
                 self.table.setItem(row, 3, amount_item)
                 
-                # Category
                 category_item = QTableWidgetItem(trans.category)
                 self.table.setItem(row, 4, category_item)
                 
-                # From Account
                 account_item = QTableWidgetItem(trans.account)
                 self.table.setItem(row, 5, account_item)
                 
-                # To Account - make read-only for non-transfer transactions
                 to_account_item = QTableWidgetItem(trans.to_account or "")
                 if trans.type.lower() != 'transfer':
-                    # Make read-only with gray background for income/expense
                     to_account_item.setFlags(to_account_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     to_account_item.setBackground(QColor(240, 240, 240))
                     to_account_item.setForeground(QColor(150, 150, 150))
                 self.table.setItem(row, 6, to_account_item)
                 
-                # Description
                 desc_item = QTableWidgetItem(trans.description or "")
                 self.table.setItem(row, 7, desc_item)
                 
                 print(f"    populate_table: Creating checkbox for row {row}")
-                # Confirmed checkbox
                 checkbox_widget = QWidget()
                 checkbox_layout = QHBoxLayout()
                 checkbox_layout.setContentsMargins(0, 0, 0, 0)
@@ -392,7 +364,6 @@ class TransactionsDialog(QDialog):
                 self.table.setCellWidget(row, 8, checkbox_widget)
                 
                 print(f"    populate_table: Creating action buttons for row {row}")
-                # Action buttons widget
                 action_widget = QWidget()
                 action_layout = QHBoxLayout()
                 action_layout.setContentsMargins(4, 4, 4, 4)
@@ -409,7 +380,6 @@ class TransactionsDialog(QDialog):
                 self.table.setCellWidget(row, 9, action_widget)
                 print(f"    populate_table: Row {row} completed")
             
-            # Reconnect signal
             print("    populate_table: Reconnecting cellChanged signal")
             self.table.cellChanged.connect(self.on_cell_changed)
             print("    populate_table: COMPLETED SUCCESSFULLY")
@@ -425,20 +395,17 @@ class TransactionsDialog(QDialog):
             raise
     
     def close_and_update(self):
-        """Close dialog and update parent window balance"""
         if hasattr(self.parent_window, 'update_balance_display'):
             self.parent_window.update_balance_display()
         self.close()
     
     def on_checkbox_changed(self, state):
-        """Handle checkbox state changes"""
         try:
             checkbox = self.sender()
             trans_id = checkbox.property('trans_id')
             self.budget_app.toggle_confirmation(trans_id)
             self.show_status(f'Transaction #{trans_id} confirmation toggled!')
             
-            # Update parent window if it has a refresh method
             if hasattr(self.parent_window, 'update_balance_display'):
                 self.parent_window.update_balance_display()
         except Exception as e:
@@ -447,7 +414,6 @@ class TransactionsDialog(QDialog):
             traceback.print_exc()
     
     def on_delete_clicked(self):
-        """Handle delete button clicks"""
         try:
             button = self.sender()
             trans_id = button.property('trans_id')
@@ -464,7 +430,6 @@ class TransactionsDialog(QDialog):
                 self.show_status(f'Transaction #{trans_id} deleted!')
                 self.refresh_table()
                 
-                # Update parent window if it has a refresh method
                 if hasattr(self.parent_window, 'update_balance_display'):
                     self.parent_window.update_balance_display()
         except Exception as e:
@@ -473,22 +438,18 @@ class TransactionsDialog(QDialog):
             traceback.print_exc()
     
     def on_cell_changed(self, row, column):
-        # Get transaction ID
         trans_id = int(self.table.item(row, 0).text())
         
-        # Get transaction type
         trans_type = self.table.item(row, 2).text().lower()
         
-        # Validate account changes - ensure they're from the valid list
-        if column == 5:  # From Account column
+        if column == 5:
             account = self.table.item(row, 5).text()
             if account not in self.budget_app.accounts:
                 self.show_status(f'Invalid account! Must be one of: {", ".join(self.budget_app.accounts)}', error=True)
                 self.refresh_table()
                 return
         
-        if column == 6:  # To Account column
-            # Only allow editing To Account for transfers
+        if column == 6:
             if trans_type != 'transfer':
                 self.show_status('To Account can only be set for Transfer transactions!', error=True)
                 self.refresh_table()
@@ -500,7 +461,6 @@ class TransactionsDialog(QDialog):
                 self.refresh_table()
                 return
         
-        # Get all current values
         try:
             amount = float(self.table.item(row, 3).text())
         except ValueError:
@@ -517,7 +477,6 @@ class TransactionsDialog(QDialog):
         account = self.table.item(row, 5).text()
         to_account_text = self.table.item(row, 6).text()
         
-        # Only set to_account if it's a transfer and the field is not empty
         if trans_type == 'transfer':
             to_account = to_account_text if to_account_text else None
             if to_account and account == to_account:
@@ -529,12 +488,10 @@ class TransactionsDialog(QDialog):
         
         description = self.table.item(row, 7).text()
         
-        # Get confirmed status from checkbox
         checkbox_widget = self.table.cellWidget(row, 8)
         checkbox = checkbox_widget.findChild(QCheckBox)
         confirmed = checkbox.isChecked()
         
-        # Update in database
         success = self.budget_app.update_transaction(
             trans_id, trans_type, amount, category, account, description, to_account, confirmed
         )
@@ -542,11 +499,9 @@ class TransactionsDialog(QDialog):
         if success:
             self.show_status('Transaction updated successfully!')
             
-            # Refresh the row to apply read-only status if type changed
-            if column == 2:  # Type column changed
+            if column == 2:
                 self.refresh_table()
             
-            # Update parent window if it has a refresh method
             if hasattr(self.parent_window, 'update_balance_display'):
                 self.parent_window.update_balance_display()
         else:
@@ -564,7 +519,6 @@ class TransactionsDialog(QDialog):
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
         
-        # Clear after 5 seconds
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(5000, lambda: self.status_label.setText(''))
 
@@ -579,15 +533,12 @@ class BudgetTrackerWindow(QMainWindow):
         self.setWindowTitle('Budget Tracker')
         self.setMinimumSize(600, 700)
         
-        # Central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Main layout
         main_layout = QVBoxLayout()
         central_widget.setLayout(main_layout)
         
-        # Title
         title = QLabel('Budget Tracker')
         title_font = QFont()
         title_font.setPointSize(24)
@@ -604,7 +555,6 @@ class BudgetTrackerWindow(QMainWindow):
         
         main_layout.addSpacing(20)
         
-        # Balance summary section
         balance_label = QLabel('Account Balances:')
         balance_label.setStyleSheet('font-weight: bold; font-size: 14px;')
         main_layout.addWidget(balance_label)
@@ -615,7 +565,6 @@ class BudgetTrackerWindow(QMainWindow):
         
         main_layout.addSpacing(20)
         
-        # Transaction type
         type_label = QLabel('Transaction Type:')
         main_layout.addWidget(type_label)
         
@@ -636,41 +585,35 @@ class BudgetTrackerWindow(QMainWindow):
         type_layout.addStretch()
         main_layout.addLayout(type_layout)
         
-        # Amount
         amount_label = QLabel('Amount:')
         main_layout.addWidget(amount_label)
         self.amount_input = QLineEdit()
         self.amount_input.setPlaceholderText('Enter amount')
         main_layout.addWidget(self.amount_input)
         
-        # Category
         self.category_label = QLabel('Category:')
         main_layout.addWidget(self.category_label)
         self.category_combo = QComboBox()
         self.category_combo.addItems(self.budget_app.income_categories)
         main_layout.addWidget(self.category_combo)
         
-        # From Account
         from_account_label = QLabel('From Account:')
         main_layout.addWidget(from_account_label)
         self.account_combo = QComboBox()
         self.account_combo.addItems(self.budget_app.accounts)
         main_layout.addWidget(self.account_combo)
         
-        # To Account (for transfers)
         self.to_account_label = QLabel('To Account:')
         main_layout.addWidget(self.to_account_label)
         self.to_account_combo = QComboBox()
         self.to_account_combo.addItems(self.budget_app.accounts)
         main_layout.addWidget(self.to_account_combo)
         
-        # Update UI when transaction type changes
         self.income_radio.toggled.connect(self.update_ui_for_type)
         self.expense_radio.toggled.connect(self.update_ui_for_type)
         self.transfer_radio.toggled.connect(self.update_ui_for_type)
         self.update_ui_for_type()
         
-        # Description
         description_label = QLabel('Description (optional):')
         main_layout.addWidget(description_label)
         self.description_input = QLineEdit()
@@ -679,12 +622,10 @@ class BudgetTrackerWindow(QMainWindow):
         
         main_layout.addSpacing(20)
         
-        # Status label
         self.status_label = QLabel('')
         self.status_label.setStyleSheet('color: #4CAF50; padding: 5px; font-weight: bold;')
         main_layout.addWidget(self.status_label)
         
-        # Buttons
         button_layout = QHBoxLayout()
         
         add_btn = QPushButton('Add Transaction')
@@ -701,7 +642,6 @@ class BudgetTrackerWindow(QMainWindow):
         main_layout.addStretch()
 
     def update_balance_display(self):
-        """Update the balance display with current account balances"""
         balances = self.budget_app.get_balance_summary()
         
         balance_text = ""
@@ -718,15 +658,12 @@ class BudgetTrackerWindow(QMainWindow):
     def update_ui_for_type(self):
         is_transfer = self.transfer_radio.isChecked()
         
-        # Show/hide category for transfers
         self.category_label.setVisible(not is_transfer)
         self.category_combo.setVisible(not is_transfer)
         
-        # Show/hide to_account for transfers
         self.to_account_label.setVisible(is_transfer)
         self.to_account_combo.setVisible(is_transfer)
         
-        # Update categories
         if not is_transfer:
             self.category_combo.clear()
             if self.income_radio.isChecked():
@@ -735,7 +672,6 @@ class BudgetTrackerWindow(QMainWindow):
                 self.category_combo.addItems(self.budget_app.expense_categories)
 
     def add_transaction(self):
-        # Validate amount
         try:
             amount = float(self.amount_input.text())
             if amount <= 0:
@@ -745,7 +681,6 @@ class BudgetTrackerWindow(QMainWindow):
             self.show_status('Please enter a valid number', error=True)
             return
         
-        # Get values based on transaction type
         if self.transfer_radio.isChecked():
             trans_type = 'transfer'
             category = 'Transfer'
@@ -763,19 +698,16 @@ class BudgetTrackerWindow(QMainWindow):
         
         description = self.description_input.text()
         
-        # Add to database
         success = self.budget_app.add_transaction(trans_type, amount, category, account, description, to_account)
         
         if success:
             self.show_status('Transaction added successfully! ✓')
-            # Clear form
             self.amount_input.clear()
             self.description_input.clear()
             self.category_combo.setCurrentIndex(0)
             self.account_combo.setCurrentIndex(0)
             self.to_account_combo.setCurrentIndex(0)
             
-            # Update balance display
             self.update_balance_display()
         else:
             self.show_status('Error adding transaction', error=True)
@@ -787,14 +719,11 @@ class BudgetTrackerWindow(QMainWindow):
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px; font-weight: bold;')
         
-        # Clear after 5 seconds
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(5000, lambda: self.status_label.setText(''))
 
     def view_transactions(self):
-        """Open the transactions dialog as a non-modal window"""
         try:
-            # Check if dialog already exists and is visible
             if hasattr(self, 'transactions_dialog') and self.transactions_dialog is not None:
                 try:
                     if self.transactions_dialog.isVisible():
@@ -809,11 +738,9 @@ class BudgetTrackerWindow(QMainWindow):
             dialog = TransactionsDialog(self.budget_app, self)
             print("Dialog created successfully")
             
-            # Keep a reference to prevent garbage collection
             self.transactions_dialog = dialog
             
             print("Calling dialog.show()...")
-            # Use show() instead of exec() - non-modal approach
             dialog.show()
             dialog.raise_()
             dialog.activateWindow()
@@ -831,7 +758,6 @@ class BudgetTrackerWindow(QMainWindow):
             self.show_status('Error opening transactions view', error=True)
 
 def main():
-    # Catch any uncaught exceptions
     def exception_hook(exctype, value, tb):
         print("\n" + "="*60)
         print("UNCAUGHT EXCEPTION - APP CRASHED:")

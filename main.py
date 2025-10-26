@@ -1,14 +1,9 @@
-"""
-Budget Tracker Application - Main Entry Point
-"""
-
 import sys
 from PyQt6.QtWidgets import QApplication
 from main_window import BudgetTrackerWindow
 
 
 def main():
-    """Main entry point for the application."""
     # Catch any uncaught exceptions
     def exception_hook(exctype, value, tb):
         print("\n" + "="*60)

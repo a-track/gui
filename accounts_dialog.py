@@ -1,6 +1,3 @@
-"""
-Account Management Dialog
-"""
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QMessageBox, QHeaderView, QLineEdit, QComboBox,
@@ -22,7 +19,6 @@ class AccountsDialog(QDialog):
         
         layout = QVBoxLayout()
         
-        # Filter controls
         filter_layout = QHBoxLayout()
         
         filter_layout.addWidget(QLabel('Type:'))
@@ -43,7 +39,6 @@ class AccountsDialog(QDialog):
         
         filter_layout.addStretch()
         
-        # Clear filters button
         clear_filters_btn = QPushButton('Clear Filters')
         clear_filters_btn.clicked.connect(self.clear_filters)
         clear_filters_btn.setStyleSheet('background-color: #9E9E9E; color: white; padding: 3px 8px;')
@@ -51,7 +46,6 @@ class AccountsDialog(QDialog):
         
         layout.addLayout(filter_layout)
         
-        # Add new account section
         new_account_layout = QHBoxLayout()
         
         new_account_layout.addWidget(QLabel('Account Name:'))
@@ -85,22 +79,18 @@ class AccountsDialog(QDialog):
         
         layout.addLayout(new_account_layout)
         
-        # Info label
         self.info_label = QLabel('Loading accounts...')
         self.info_label.setStyleSheet('color: #666; font-style: italic; padding: 5px;')
         layout.addWidget(self.info_label)
         
-        # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(['ID', 'Account Name', 'Type', 'Company', 'Currency', 'Actions'])
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels(['ID', 'Account Name', 'Type', 'Company', 'Currency', 'Show in Balance', 'Actions'])
         
-        # Make table read-only
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         
-        # Style the table to match transactions dialog
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
             QTableWidget {
@@ -125,27 +115,21 @@ class AccountsDialog(QDialog):
             }
         """)
         
-        # Hide row numbers
         self.table.verticalHeader().hide()
         
-        # Set initial column widths
         header = self.table.horizontalHeader()
-        self.table.setColumnWidth(5, 70)   # Actions - fixed small width
+        self.table.setColumnWidth(6, 70)
         
-        # Make content-based columns resize to contents
-        content_based_columns = [0, 1, 2, 3, 4]
+        content_based_columns = [0, 1, 2, 3, 4, 5]
         for col in content_based_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         
-        # Actions column stays interactive
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
         
-        # Set row height
         self.table.verticalHeader().setDefaultSectionSize(35)
         
         layout.addWidget(self.table)
         
-        # Status label
         self.status_label = QLabel('')
         self.status_label.setStyleSheet('color: #666; padding: 5px;')
         layout.addWidget(self.status_label)
@@ -157,10 +141,8 @@ class AccountsDialog(QDialog):
     def load_accounts(self):
         try:
             self.all_accounts = self.budget_app.get_all_accounts()
-            # Sort accounts by ID
             self.all_accounts = sorted(self.all_accounts, key=lambda x: x.id)
             
-            # Apply initial filters
             self.apply_filters()
             
         except Exception as e:
@@ -168,7 +150,6 @@ class AccountsDialog(QDialog):
             self.show_status('Error loading accounts', error=True)
     
     def apply_filters(self):
-        """Apply filters to accounts based on selected criteria"""
         if not self.all_accounts:
             return
         
@@ -179,26 +160,21 @@ class AccountsDialog(QDialog):
         self.filtered_accounts = []
         
         for account in self.all_accounts:
-            # Type filter
             if selected_type != 'All Types' and account.type != selected_type:
                 continue
             
-            # Currency filter
             if selected_currency != 'All Currencies':
                 if selected_currency == 'Other':
-                    # Show currencies that are not in the common list
                     if account.currency in ['CHF', 'EUR', 'USD', 'GBP']:
                         continue
                 elif account.currency != selected_currency:
                     continue
             
-            # Investment filter
             if investment_only and not account.is_investment:
                 continue
             
             self.filtered_accounts.append(account)
         
-        # Update info label
         filter_info = []
         if selected_type != 'All Types':
             filter_info.append(f"Type: {selected_type}")
@@ -216,51 +192,56 @@ class AccountsDialog(QDialog):
         self.populate_table()
     
     def clear_filters(self):
-        """Clear all filters"""
         self.type_filter_combo.setCurrentText('All Types')
         self.currency_filter_combo.setCurrentText('All Currencies')
         self.investment_filter_check.setChecked(False)
     
     def populate_table(self):
-        """Populate table with filtered accounts"""
         self.table.setRowCount(len(self.filtered_accounts))
         
         for row, account in enumerate(self.filtered_accounts):
-            # ID
             id_item = QTableWidgetItem(str(account.id))
             id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             id_item.setBackground(QColor(240, 240, 240))
             id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, 0, id_item)
             
-            # Account Name
             name_item = QTableWidgetItem(account.account)
-            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 1, name_item)
             
-            # Type
             type_item = QTableWidgetItem(account.type)
-            type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 2, type_item)
             
-            # Company
             company_item = QTableWidgetItem(account.company or '')
-            company_item.setFlags(company_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            company_item.setFlags(company_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 3, company_item)
             
-            # Currency
             currency_item = QTableWidgetItem(account.currency)
-            currency_item.setFlags(currency_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            currency_item.setFlags(currency_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 4, currency_item)
             
-            # Actions - Modern X button
+            show_widget = QWidget()
+            show_layout = QHBoxLayout()
+            show_layout.setContentsMargins(1, 1, 1, 1)
+            show_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            show_checkbox = QCheckBox()
+            show_checkbox.setChecked(getattr(account, 'show_in_balance', True))
+            show_checkbox.stateChanged.connect(lambda state, acc_id=account.id: self.toggle_show_in_balance(acc_id, state))
+            show_layout.addWidget(show_checkbox)
+            show_widget.setLayout(show_layout)
+            
+            self.table.setCellWidget(row, 5, show_widget)
+            
             action_widget = QWidget()
             action_layout = QHBoxLayout()
-            action_layout.setContentsMargins(1, 1, 1, 1)  # Minimal margins
+            action_layout.setContentsMargins(1, 1, 1, 1)
             action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
-            delete_btn = QPushButton('✕')  # Modern X symbol
-            delete_btn.setFixedSize(22, 22)  # Small size to fit nicely
+            delete_btn = QPushButton('✕')
+            delete_btn.setFixedSize(22, 22)
             delete_btn.setStyleSheet('''
                 QPushButton {
                     background-color: #ff4444;
@@ -286,18 +267,31 @@ class AccountsDialog(QDialog):
             action_layout.addWidget(delete_btn)
             action_widget.setLayout(action_layout)
             
-            self.table.setCellWidget(row, 5, action_widget)
+            self.table.setCellWidget(row, 6, action_widget)
         
-        # Auto-resize columns to content after population
         self.table.resizeColumnsToContents()
         
-        # Set minimum widths for certain columns to prevent them from being too small
-        self.table.setColumnWidth(0, max(50, self.table.columnWidth(0)))   # ID
-        self.table.setColumnWidth(2, max(80, self.table.columnWidth(2)))   # Type
-        self.table.setColumnWidth(4, max(80, self.table.columnWidth(4)))   # Currency
-        self.table.setColumnWidth(5, max(70, self.table.columnWidth(5)))   # Actions
+        self.table.setColumnWidth(0, max(50, self.table.columnWidth(0)))
+        self.table.setColumnWidth(2, max(80, self.table.columnWidth(2)))
+        self.table.setColumnWidth(4, max(80, self.table.columnWidth(4)))
+        self.table.setColumnWidth(5, max(120, self.table.columnWidth(5)))
+        self.table.setColumnWidth(6, max(70, self.table.columnWidth(6)))
         
         self.show_status(f'Displaying {len(self.filtered_accounts)} accounts')
+    
+    def toggle_show_in_balance(self, account_id, state):
+        try:
+            show_in_balance = (state == Qt.CheckState.Checked.value)
+            success = self.budget_app.set_account_show_in_balance(account_id, show_in_balance)
+            if success:
+                self.show_status('Setting updated successfully!')
+                if hasattr(self.parent_window, 'update_balance_display'):
+                    self.parent_window.update_balance_display()
+            else:
+                self.show_status('Error updating setting', error=True)
+        except Exception as e:
+            print(f"Error updating show_in_balance: {e}")
+            self.show_status('Error updating setting', error=True)
     
     def add_account(self):
         account_name = self.account_name_input.text().strip()
@@ -320,7 +314,6 @@ class AccountsDialog(QDialog):
             self.is_investment_check.setChecked(False)
             self.load_accounts()
             
-            # Update parent window if needed
             if hasattr(self.parent_window, 'update_balance_display'):
                 self.parent_window.update_balance_display()
         else:
@@ -344,7 +337,6 @@ class AccountsDialog(QDialog):
                     self.show_status('Account deleted successfully!')
                     self.load_accounts()
                     
-                    # Update parent window if needed
                     if hasattr(self.parent_window, 'update_balance_display'):
                         self.parent_window.update_balance_display()
                 else:

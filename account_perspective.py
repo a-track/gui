@@ -1,8 +1,3 @@
-"""
-Account Perspective - Show transaction history and running balance for a specific account.
-SIMPLIFIED: Read-only view with delete and confirm functionality.
-"""
-
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTableWidget, QTableWidgetItem, 
                              QComboBox, QHeaderView, QWidget, QCheckBox,
@@ -13,7 +8,6 @@ import datetime
 
 
 class AccountPerspectiveDialog(QDialog):
-    """Dialog for viewing transaction history and running balance for a specific account."""
     
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
@@ -23,38 +17,33 @@ class AccountPerspectiveDialog(QDialog):
         self.selected_account_id = None
         self.all_transactions_for_account = []
         self.filtered_transactions = []
-        self.running_balance_history = {}  # Store running balance for each transaction
+        self.running_balance_history = {}
         
         self.setWindowTitle('Account Perspective')
         self.setMinimumSize(1200, 600)
         
         layout = QVBoxLayout()
         
-        # Account selection
         account_layout = QHBoxLayout()
         account_layout.addWidget(QLabel('Select Account:'))
         
         self.account_combo = QComboBox()
         accounts = self.budget_app.get_all_accounts()
-        # Sort accounts by ID
         accounts_sorted = sorted(accounts, key=lambda x: x.id)
         for account in accounts_sorted:
-            # Display as "Account Name Currency (Account ID)"
             display_text = f"{account.account} {account.currency}"
-            self.account_combo.addItem(display_text, account.id)  # Store account ID as data
+            self.account_combo.addItem(display_text, account.id)
         self.account_combo.currentIndexChanged.connect(self.on_account_changed)
         account_layout.addWidget(self.account_combo)
         
         account_layout.addStretch()
         
-        # Current balance display
         self.current_balance_label = QLabel('Current Balance: 0.00')
         self.current_balance_label.setStyleSheet('font-weight: bold; font-size: 14px; color: #4CAF50;')
         account_layout.addWidget(self.current_balance_label)
         
         layout.addLayout(account_layout)
         
-        # Filter controls
         filter_layout = QHBoxLayout()
         
         filter_layout.addWidget(QLabel('Year:'))
@@ -71,19 +60,16 @@ class AccountPerspectiveDialog(QDialog):
         
         filter_layout.addStretch()
         
-        # Show all checkbox
         self.show_all_checkbox = QCheckBox('Show All Transactions')
         self.show_all_checkbox.stateChanged.connect(self.apply_filters)
         filter_layout.addWidget(self.show_all_checkbox)
         
         layout.addLayout(filter_layout)
         
-        # Info label
         info_label = QLabel('Showing all transactions where this account is involved. Click checkbox to confirm transaction.')
         info_label.setStyleSheet('color: #666; font-style: italic; padding: 5px; background-color: #f0f0f0;')
         layout.addWidget(info_label)
         
-        # Table
         self.table = QTableWidget()
         self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels([
@@ -92,10 +78,8 @@ class AccountPerspectiveDialog(QDialog):
             'Confirmed', 'Actions'
         ])
         
-        # Make table read-only (no editing)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         
-        # Style the table
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
             QTableWidget {
@@ -120,52 +104,42 @@ class AccountPerspectiveDialog(QDialog):
             }
         """)
         
-        # Hide row numbers
         self.table.verticalHeader().hide()
         
-        # Set initial column widths
         header = self.table.horizontalHeader()
-        self.table.setColumnWidth(7, 80)   # Confirmed
-        self.table.setColumnWidth(8, 70)   # Actions
+        self.table.setColumnWidth(7, 80)
+        self.table.setColumnWidth(8, 70)
         
-        # Make columns resizable and set most to auto-size
         content_based_columns = [0, 1, 2, 3, 4, 5, 6]
         for col in content_based_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         
-        # Fixed columns
         fixed_columns = [7, 8]
         for col in fixed_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
         
-        # Set row height
         self.table.verticalHeader().setDefaultSectionSize(35)
         
         layout.addWidget(self.table)
         
-        # Status bar
         self.status_label = QLabel('Select an account to view transactions')
         self.status_label.setStyleSheet('color: #666; padding: 5px;')
         layout.addWidget(self.status_label)
         
         self.setLayout(layout)
         
-        # Set current month/year as default
         self.set_current_month_year()
         
-        # Auto-select first account and load data
         if accounts:
             self.account_combo.setCurrentIndex(0)
             self.on_account_changed(0)
     
     def populate_years(self):
-        """Populate years combo box with recent years"""
         current_year = datetime.datetime.now().year
         years = list(range(current_year - 5, current_year + 2))
         self.year_combo.addItems([str(year) for year in years])
     
     def populate_months(self):
-        """Populate months combo box"""
         months = [
             'January', 'February', 'March', 'April', 'May', 'June',
             'July', 'August', 'September', 'October', 'November', 'December'
@@ -173,42 +147,32 @@ class AccountPerspectiveDialog(QDialog):
         self.month_combo.addItems(months)
     
     def set_current_month_year(self):
-        """Set filters to current month and year"""
         now = datetime.datetime.now()
         current_year = str(now.year)
-        current_month = now.strftime('%B')  # Full month name
+        current_month = now.strftime('%B')
         
-        # Set year
         index = self.year_combo.findText(current_year)
         if index >= 0:
             self.year_combo.setCurrentIndex(index)
         
-        # Set month
         index = self.month_combo.findText(current_month)
         if index >= 0:
             self.month_combo.setCurrentIndex(index)
     
     def format_swiss_number(self, number):
-        """Format number in Swiss format: 2'005.50 instead of 2,005.50"""
         try:
-            # Handle negative numbers
             is_negative = number < 0
             abs_number = abs(number)
             
-            # Split into integer and decimal parts
             integer_part = int(abs_number)
             decimal_part = round(abs_number - integer_part, 2)
             
-            # Format integer part with apostrophes as thousand separators
             integer_str = f"{integer_part:,}".replace(",", "'")
             
-            # Format decimal part to always have 2 digits
             decimal_str = f"{decimal_part:.2f}".split('.')[1]
             
-            # Combine parts
             formatted = f"{integer_str}.{decimal_str}"
             
-            # Add negative sign if needed
             if is_negative:
                 formatted = f"-{formatted}"
                 
@@ -217,7 +181,6 @@ class AccountPerspectiveDialog(QDialog):
             return "0.00"
     
     def get_account_name_by_id(self, account_id):
-        """Get account name by account ID."""
         if account_id is None:
             return ""
         accounts = self.budget_app.get_all_accounts()
@@ -227,7 +190,6 @@ class AccountPerspectiveDialog(QDialog):
         return ""
     
     def get_account_currency_by_id(self, account_id):
-        """Get account currency by account ID."""
         if account_id is None:
             return ""
         accounts = self.budget_app.get_all_accounts()
@@ -237,81 +199,63 @@ class AccountPerspectiveDialog(QDialog):
         return ""
     
     def get_current_account_currency(self):
-        """Get currency for currently selected account."""
         account_id = self.selected_account_id
         if account_id:
             return self.get_account_currency_by_id(account_id)
         return ""
     
     def on_account_changed(self, index):
-        """Handle account selection change."""
         if index >= 0:
-            # Get the account ID from the combo box data
             self.selected_account_id = self.account_combo.currentData()
             self.load_account_data()
     
     def calculate_running_balance_history(self):
-        """Calculate running balance for ALL transactions (from beginning of time)"""
         if not self.selected_account_id or not self.all_transactions_for_account:
             return {}
         
-        # Sort all transactions by date (oldest first)
         sorted_transactions = sorted(self.all_transactions_for_account, key=lambda x: (x.date, x.id))
         
         running_balance = 0.0
         balance_history = {}
         
         for trans in sorted_transactions:
-            # Determine transaction effect on this account
             if trans.type == 'income' and trans.account_id == self.selected_account_id:
-                # Income into this account
                 transaction_amount = float(trans.amount or 0)
                 running_balance += transaction_amount
                 
             elif trans.type == 'expense' and trans.account_id == self.selected_account_id:
-                # Expense from this account
                 transaction_amount = float(trans.amount or 0)
                 running_balance -= transaction_amount
                 
             elif trans.type == 'transfer':
-                if trans.account_id == self.selected_account_id:  # This account is the source
-                    # Transfer out of this account
+                if trans.account_id == self.selected_account_id:
                     transaction_amount = float(trans.amount or 0)
                     running_balance -= transaction_amount
-                elif trans.to_account_id == self.selected_account_id:  # This account is the destination
-                    # Transfer into this account
+                elif trans.to_account_id == self.selected_account_id:
                     transaction_amount = float(trans.to_amount or 0)
                     running_balance += transaction_amount
             
-            # Store the running balance after this transaction
             balance_history[trans.id] = running_balance
         
         return balance_history
     
     def load_account_data(self):
-        """Load and display transactions for the selected account."""
         if not self.selected_account_id:
             return
             
         try:
-            # Get account ID
             account_id = self.selected_account_id
             
-            # Get all transactions
             all_transactions = self.budget_app.get_all_transactions()
             
-            # Filter transactions for this account
             self.all_transactions_for_account = []
             for trans in all_transactions:
-                # Check if this transaction involves the selected account
                 if (trans.account_id == account_id or 
                     trans.to_account_id == account_id):
                     self.all_transactions_for_account.append(trans)
             
-            # Calculate running balance history for ALL transactions
             self.running_balance_history = self.calculate_running_balance_history()
             
-            # Apply initial filters
             self.apply_filters()
             
         except Exception as e:
@@ -321,27 +265,22 @@ class AccountPerspectiveDialog(QDialog):
             self.show_status('Error loading account data', error=True)
     
     def apply_filters(self):
-        """Apply year/month filters to transactions"""
         if not self.selected_account_id or not self.all_transactions_for_account:
             return
         
         if self.show_all_checkbox.isChecked():
-            # Show all transactions for this account
             transactions_to_display = self.all_transactions_for_account
             filter_info = "all transactions"
         else:
-            # Filter by selected year and month
             selected_year = int(self.year_combo.currentText())
-            selected_month = self.month_combo.currentIndex() + 1  # 1-12
+            selected_month = self.month_combo.currentIndex() + 1
             
             transactions_to_display = []
             for trans in self.all_transactions_for_account:
                 try:
-                    # Parse transaction date
                     if hasattr(trans, 'date') and trans.date:
                         trans_date = trans.date
                         if isinstance(trans_date, str):
-                            # If date is string, parse it
                             trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
                         
                         if trans_date.year == selected_year and trans_date.month == selected_month:
@@ -353,37 +292,29 @@ class AccountPerspectiveDialog(QDialog):
             month_name = self.month_combo.currentText()
             filter_info = f"{month_name} {selected_year}"
         
-        # Sort by date (oldest first for display)
         transactions_to_display.sort(key=lambda x: (x.date, x.id))
         
-        # Prepare transaction history with running balance from pre-calculated history
         transaction_history = []
         
         for trans in transactions_to_display:
-            # Get the running balance from our pre-calculated history
             running_balance = self.running_balance_history.get(trans.id, 0.0)
             
-            # Determine transaction effect on this account and other account info
             if trans.type == 'income' and trans.account_id == self.selected_account_id:
-                # Income into this account
                 transaction_amount = float(trans.amount or 0)
                 effect = "+"
                 other_account = trans.payee or "Income"
                 
             elif trans.type == 'expense' and trans.account_id == self.selected_account_id:
-                # Expense from this account
                 transaction_amount = float(trans.amount or 0)
                 effect = "-"
                 other_account = trans.payee or "Expense"
                 
             elif trans.type == 'transfer':
-                if trans.account_id == self.selected_account_id:  # This account is the source
-                    # Transfer out of this account
+                if trans.account_id == self.selected_account_id:
                     transaction_amount = float(trans.amount or 0)
                     effect = "-"
                     other_account = self.get_account_name_by_id(trans.to_account_id)
-                elif trans.to_account_id == self.selected_account_id:  # This account is the destination
-                    # Transfer into this account
+                elif trans.to_account_id == self.selected_account_id:
                     transaction_amount = float(trans.to_amount or 0)
                     effect = "+"
                     other_account = self.get_account_name_by_id(trans.account_id)
@@ -400,14 +331,10 @@ class AccountPerspectiveDialog(QDialog):
                 'other_account': other_account
             })
         
-        # Populate table
         self.populate_table(transaction_history)
         
-        # Update current balance display with currency
-        # Current balance is the last running balance from all transactions
         current_balance = 0.0
         if self.running_balance_history:
-            # Get the last transaction's running balance
             last_transaction_id = list(self.running_balance_history.keys())[-1]
             current_balance = self.running_balance_history[last_transaction_id]
         
@@ -422,12 +349,10 @@ class AccountPerspectiveDialog(QDialog):
         self.current_balance_label.setText(balance_text)
         self.current_balance_label.setStyleSheet(f'font-weight: bold; font-size: 14px; color: {balance_color};')
         
-        # Update status
         account_name = self.account_combo.currentText()
         self.show_status(f'Showing {len(transaction_history)} transactions for {account_name} ({filter_info})')
         
     def populate_table(self, transaction_history):
-        """Populate the table with transaction history and running balance."""
         self.table.setRowCount(len(transaction_history))
         
         for row, data in enumerate(transaction_history):
@@ -437,48 +362,40 @@ class AccountPerspectiveDialog(QDialog):
             running_balance = data['running_balance']
             other_account = data['other_account']
             
-            # Date
             date_item = QTableWidgetItem(str(trans.date))
             self.table.setItem(row, 0, date_item)
             
-            # Type
             type_item = QTableWidgetItem(trans.type.capitalize())
             self.table.setItem(row, 1, type_item)
             
-            # Category
             category_item = QTableWidgetItem(trans.sub_category or "")
             self.table.setItem(row, 2, category_item)
             
-            # Payee
             payee_item = QTableWidgetItem(trans.payee or "")
             self.table.setItem(row, 3, payee_item)
             
-            # Other Account
             other_acc_item = QTableWidgetItem(other_account)
             self.table.setItem(row, 4, other_acc_item)
             
-            # Transaction Amount (effect on this account)
             formatted_amount = self.format_swiss_number(transaction_amount)
             trans_amount_text = f"{effect}{formatted_amount}"
             trans_effect_item = QTableWidgetItem(trans_amount_text)
             if effect == "+":
-                trans_effect_item.setForeground(QColor(0, 128, 0))  # Green for positive
+                trans_effect_item.setForeground(QColor(0, 128, 0))
             else:
-                trans_effect_item.setForeground(QColor(255, 0, 0))  # Red for negative
+                trans_effect_item.setForeground(QColor(255, 0, 0))
             trans_effect_item.setFont(QFont("", weight=QFont.Weight.Bold))
             self.table.setItem(row, 5, trans_effect_item)
             
-            # Running Balance (from pre-calculated history)
             formatted_balance = self.format_swiss_number(running_balance)
             balance_item = QTableWidgetItem(formatted_balance)
             if running_balance >= 0:
-                balance_item.setForeground(QColor(0, 128, 0))  # Green for positive
+                balance_item.setForeground(QColor(0, 128, 0))
             else:
-                balance_item.setForeground(QColor(255, 0, 0))  # Red for negative
+                balance_item.setForeground(QColor(255, 0, 0))
             balance_item.setFont(QFont("", weight=QFont.Weight.Bold))
             self.table.setItem(row, 6, balance_item)
             
-            # Confirmed checkbox
             checkbox_widget = QWidget()
             checkbox_layout = QHBoxLayout()
             checkbox_layout.setContentsMargins(0, 0, 0, 0)
@@ -493,7 +410,6 @@ class AccountPerspectiveDialog(QDialog):
             checkbox_widget.setLayout(checkbox_layout)
             self.table.setCellWidget(row, 7, checkbox_widget)
             
-            # Action buttons - Modern X button
             action_widget = QWidget()
             action_layout = QHBoxLayout()
             action_layout.setContentsMargins(1, 1, 1, 1)
@@ -528,29 +444,24 @@ class AccountPerspectiveDialog(QDialog):
             
             self.table.setCellWidget(row, 8, action_widget)
         
-        # Auto-resize columns to content after population
         self.table.resizeColumnsToContents()
         
-        # Set minimum widths for certain columns to prevent them from being too small
-        self.table.setColumnWidth(1, max(80, self.table.columnWidth(1)))   # Type
-        self.table.setColumnWidth(5, max(130, self.table.columnWidth(5)))  # Transaction Amount
-        self.table.setColumnWidth(6, max(130, self.table.columnWidth(6)))  # Running Balance
-        self.table.setColumnWidth(7, max(80, self.table.columnWidth(7)))   # Confirmed
-        self.table.setColumnWidth(8, max(70, self.table.columnWidth(8)))   # Actions
+        self.table.setColumnWidth(1, max(80, self.table.columnWidth(1)))
+        self.table.setColumnWidth(5, max(130, self.table.columnWidth(5)))
+        self.table.setColumnWidth(6, max(130, self.table.columnWidth(6)))
+        self.table.setColumnWidth(7, max(80, self.table.columnWidth(7)))
+        self.table.setColumnWidth(8, max(70, self.table.columnWidth(8)))
         
-        # Scroll to bottom to see most recent transactions
         if transaction_history:
             self.table.scrollToBottom()
     
     def on_checkbox_changed(self, state):
-        """Handle checkbox state changes."""
         try:
             checkbox = self.sender()
             trans_id = checkbox.property('trans_id')
             self.budget_app.toggle_confirmation(trans_id)
             self.show_status(f'Transaction #{trans_id} confirmation toggled!')
             
-            # Update parent window if it has a refresh method
             if hasattr(self.parent_window, 'update_balance_display'):
                 self.parent_window.update_balance_display()
         except Exception as e:
@@ -558,7 +469,6 @@ class AccountPerspectiveDialog(QDialog):
             self.show_status('Error updating confirmation!', error=True)
     
     def on_delete_clicked(self):
-        """Handle delete button clicks."""
         try:
             button = self.sender()
             trans_id = button.property('trans_id')
@@ -575,7 +485,6 @@ class AccountPerspectiveDialog(QDialog):
                 self.show_status(f'Transaction #{trans_id} deleted!')
                 self.refresh_data()
                 
-                # Update parent window if it has a refresh method
                 if hasattr(self.parent_window, 'update_balance_display'):
                     self.parent_window.update_balance_display()
         except Exception as e:
@@ -583,7 +492,6 @@ class AccountPerspectiveDialog(QDialog):
             self.show_status('Error deleting transaction!', error=True)
     
     def refresh_data(self):
-        """Refresh the account data."""
         if self.selected_account_id:
             self.load_account_data()
             self.show_status('Data refreshed')
@@ -591,12 +499,10 @@ class AccountPerspectiveDialog(QDialog):
             self.show_status('Please select an account first')
     
     def show_status(self, message, error=False):
-        """Display a status message."""
         self.status_label.setText(message)
         if error:
             self.status_label.setStyleSheet('color: #f44336; padding: 5px; font-weight: bold;')
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
         
-        # Clear after 5 seconds
         QTimer.singleShot(5000, lambda: self.status_label.setText(''))

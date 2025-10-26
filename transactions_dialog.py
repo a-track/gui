@@ -1,6 +1,3 @@
-"""
-Optimized dialog for viewing transactions with month/year filtering.
-"""
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QCheckBox, QHeaderView, QWidget, QMessageBox,
@@ -10,7 +7,6 @@ from PyQt6.QtGui import QColor
 import datetime
 
 class TransactionLoaderThread(QThread):
-    """Thread for loading transactions in background"""
     finished = pyqtSignal(list)
     progress = pyqtSignal(int)
     
@@ -20,7 +16,6 @@ class TransactionLoaderThread(QThread):
     
     def run(self):
         try:
-            # Get all transactions
             all_transactions = self.budget_app.get_all_transactions()
             self.finished.emit(all_transactions)
         except Exception as e:
@@ -28,7 +23,6 @@ class TransactionLoaderThread(QThread):
             self.finished.emit([])
 
 class TransactionsDialog(QDialog):
-    """Optimized dialog for viewing transactions with month/year filtering."""
     
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
@@ -44,7 +38,6 @@ class TransactionsDialog(QDialog):
         
         layout = QVBoxLayout()
         
-        # Filter controls
         filter_layout = QHBoxLayout()
         
         filter_layout.addWidget(QLabel('Year:'))
@@ -63,31 +56,25 @@ class TransactionsDialog(QDialog):
         
         layout.addLayout(filter_layout)
         
-        # Info label
         self.info_label = QLabel('Loading transactions...')
         self.info_label.setStyleSheet('color: #666; font-style: italic; padding: 5px;')
         layout.addWidget(self.info_label)
         
-        # Progress bar
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
         
-        # Table
         self.table = QTableWidget()
         self.table.verticalHeader().hide()
         
-        # Columns with Actions for delete button
         self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels([
             'ID', 'Date', 'Type', 'Amount', 'Account', 'Payee', 
             'Category', 'Confirmed', 'Actions'
         ])
         
-        # Make table read-only (no editing)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         
-        # Improve table appearance
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
             QTableWidget {
@@ -112,47 +99,37 @@ class TransactionsDialog(QDialog):
             }
         """)
         
-        # Set column sizes
-        self.table.setColumnWidth(0, 50)   # ID
-        self.table.setColumnWidth(2, 80)   # Type
-        self.table.setColumnWidth(3, 90)   # Amount
-        self.table.setColumnWidth(7, 80)   # Confirmed
-        self.table.setColumnWidth(8, 70)   # Actions
+        self.table.setColumnWidth(0, 50)
+        self.table.setColumnWidth(2, 80)
+        self.table.setColumnWidth(3, 90)
+        self.table.setColumnWidth(7, 80)
+        self.table.setColumnWidth(8, 70)
         
-        # Make other columns resize to contents
         header = self.table.horizontalHeader()
         content_columns = [1, 4, 5, 6]
         for col in content_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         
-        # Set row height
         self.table.verticalHeader().setDefaultSectionSize(35)
         
         layout.addWidget(self.table)
         
-        # Status label
         self.status_label = QLabel('')
         self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
         layout.addWidget(self.status_label)
         
-        # Removed the button layout entirely (no Refresh and Close buttons)
-        
         self.setLayout(layout)
         
-        # Set current month/year as default
         self.set_current_month_year()
         
-        # Load transactions
         self.load_transactions()
     
     def populate_years(self):
-        """Populate years combo box with recent years"""
         current_year = datetime.datetime.now().year
         years = list(range(current_year - 5, current_year + 2))
         self.year_combo.addItems([str(year) for year in years])
     
     def populate_months(self):
-        """Populate months combo box"""
         months = [
             'January', 'February', 'March', 'April', 'May', 'June',
             'July', 'August', 'September', 'October', 'November', 'December'
@@ -160,56 +137,45 @@ class TransactionsDialog(QDialog):
         self.month_combo.addItems(months)
     
     def set_current_month_year(self):
-        """Set filters to current month and year"""
         now = datetime.datetime.now()
         current_year = str(now.year)
-        current_month = now.strftime('%B')  # Full month name
+        current_month = now.strftime('%B')
         
-        # Set year
         index = self.year_combo.findText(current_year)
         if index >= 0:
             self.year_combo.setCurrentIndex(index)
         
-        # Set month
         index = self.month_combo.findText(current_month)
         if index >= 0:
             self.month_combo.setCurrentIndex(index)
     
     def load_transactions(self):
-        """Load all transactions"""
         self.progress_bar.setVisible(True)
         self.info_label.setText('Loading transactions...')
         
-        # Load in background thread
         self.loader_thread = TransactionLoaderThread(self.budget_app)
         self.loader_thread.finished.connect(self.on_transactions_loaded)
         self.loader_thread.start()
     
     def on_transactions_loaded(self, transactions):
-        """Handle loaded transactions"""
         self.progress_bar.setVisible(False)
         self.all_transactions = transactions
         
-        # Apply initial filters
         self.apply_filters()
     
     def apply_filters(self):
-        """Apply year/month filters to transactions"""
         if not self.all_transactions:
             return
         
-        # Filter by selected year and month
         selected_year = int(self.year_combo.currentText())
-        selected_month = self.month_combo.currentIndex() + 1  # 1-12
+        selected_month = self.month_combo.currentIndex() + 1
         
         self.filtered_transactions = []
         for trans in self.all_transactions:
             try:
-                # Parse transaction date
                 if hasattr(trans, 'date') and trans.date:
                     trans_date = trans.date
                     if isinstance(trans_date, str):
-                        # If date is string, parse it
                         trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
                     
                     if trans_date.year == selected_year and trans_date.month == selected_month:
@@ -226,26 +192,21 @@ class TransactionsDialog(QDialog):
         self.populate_table()
     
     def populate_table(self):
-        """Populate table with filtered transactions"""
         self.table.setRowCount(len(self.filtered_transactions))
         
         for row, trans in enumerate(self.filtered_transactions):
-            # ID
             id_item = QTableWidgetItem(str(trans.id))
             id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             id_item.setBackground(QColor(240, 240, 240))
             id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, 0, id_item)
             
-            # Date
             date_item = QTableWidgetItem(str(trans.date))
             self.table.setItem(row, 1, date_item)
             
-            # Type
             type_item = QTableWidgetItem(str.title(trans.type))
             self.table.setItem(row, 2, type_item)
             
-            # Amount
             if trans.type == 'transfer':
                 amount_value = trans.amount if trans.amount else ""
             else:
@@ -256,7 +217,6 @@ class TransactionsDialog(QDialog):
                 amount_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table.setItem(row, 3, amount_item)
             
-            # Account
             if trans.type == 'transfer':
                 account_name = self.get_account_name_by_id(trans.account_id)
             else:
@@ -264,15 +224,12 @@ class TransactionsDialog(QDialog):
             account_item = QTableWidgetItem(account_name or "")
             self.table.setItem(row, 4, account_item)
             
-            # Payee
             payee_item = QTableWidgetItem(trans.payee or "")
             self.table.setItem(row, 5, payee_item)
             
-            # Category
             sub_category_item = QTableWidgetItem(trans.sub_category or "")
             self.table.setItem(row, 6, sub_category_item)
             
-            # Confirmed checkbox
             checkbox_widget = QWidget()
             checkbox_layout = QHBoxLayout()
             checkbox_layout.setContentsMargins(0, 0, 0, 0)
@@ -287,7 +244,6 @@ class TransactionsDialog(QDialog):
             checkbox_widget.setLayout(checkbox_layout)
             self.table.setCellWidget(row, 7, checkbox_widget)
             
-            # Action buttons - Modern X button
             action_widget = QWidget()
             action_layout = QHBoxLayout()
             action_layout.setContentsMargins(1, 1, 1, 1)
@@ -322,11 +278,9 @@ class TransactionsDialog(QDialog):
             
             self.table.setCellWidget(row, 8, action_widget)
             
-            # Set row background color based on type
             self.color_row_by_type(row, trans.type)
     
     def get_account_name_by_id(self, account_id):
-        """Get account name by account ID."""
         if account_id is None:
             return ""
         accounts = self.budget_app.get_all_accounts()
@@ -336,11 +290,10 @@ class TransactionsDialog(QDialog):
         return ""
     
     def color_row_by_type(self, row, trans_type):
-        """Set row background color based on transaction type."""
         color_map = {
-            'income': QColor(230, 255, 230),    # Light green
-            'expense': QColor(255, 230, 230),   # Light red
-            'transfer': QColor(230, 230, 255)   # Light blue
+            'income': QColor(230, 255, 230),
+            'expense': QColor(255, 230, 230),
+            'transfer': QColor(230, 230, 255)
         }
         
         if trans_type in color_map:
@@ -350,7 +303,6 @@ class TransactionsDialog(QDialog):
                     item.setBackground(color_map[trans_type])
     
     def on_checkbox_changed(self, state):
-        """Handle checkbox state changes."""
         try:
             checkbox = self.sender()
             trans_id = checkbox.property('trans_id')
@@ -364,7 +316,6 @@ class TransactionsDialog(QDialog):
             self.show_status('Error updating confirmation!', error=True)
     
     def on_delete_clicked(self):
-        """Handle delete button clicks."""
         try:
             button = self.sender()
             trans_id = button.property('trans_id')
@@ -388,17 +339,14 @@ class TransactionsDialog(QDialog):
             self.show_status('Error deleting transaction!', error=True)
     
     def refresh_table(self):
-        """Refresh the table data."""
         self.load_transactions()
         self.show_status('Table refreshed!')
     
     def show_status(self, message, error=False):
-        """Display a status message."""
         self.status_label.setText(message)
         if error:
             self.status_label.setStyleSheet('color: #f44336; padding: 5px; font-weight: bold;')
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
         
-        # Clear after 5 seconds
         QTimer.singleShot(5000, lambda: self.status_label.setText(''))

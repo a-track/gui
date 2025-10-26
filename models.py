@@ -1,6 +1,3 @@
-"""
-Data models and database operations for the Budget Tracker.
-"""
 import sys
 import os
 import duckdb
@@ -49,12 +46,9 @@ class Category:
 class BudgetApp:
     def __init__(self, db_path=None):
         if db_path is None:
-            # Get the directory where the exe is running
             if getattr(sys, 'frozen', False):
-                # Running as compiled exe
                 application_path = os.path.dirname(sys.executable)
             else:
-                # Running as script
                 application_path = os.path.dirname(os.path.abspath(__file__))
             
             db_path = os.path.join(application_path, 'budget.duckdb')
@@ -68,7 +62,6 @@ class BudgetApp:
     def init_database(self):
         conn = self._get_connection()
         try:
-            # Create accounts table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS accounts (
                     id INTEGER PRIMARY KEY,
@@ -80,7 +73,6 @@ class BudgetApp:
                 )
             """)
             
-            # Create categories table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS categories (
                     sub_category VARCHAR PRIMARY KEY,
@@ -88,12 +80,11 @@ class BudgetApp:
                 )
             """)
             
-
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS transactions (
                     id INTEGER PRIMARY KEY,
                     date DATE NOT NULL,
-                    type VARCHAR NOT NULL, -- 'income', 'expense', 'transfer'
+                    type VARCHAR NOT NULL,
                     sub_category VARCHAR,
                     amount DECIMAL(10, 2),
                     account_id INTEGER,
@@ -112,9 +103,7 @@ class BudgetApp:
                     FOREIGN KEY (sub_category) REFERENCES categories(sub_category)
                 )
             """)
-
             
-            # Insert default data
             self._insert_default_data(conn)
             conn.commit()
             
@@ -126,7 +115,6 @@ class BudgetApp:
             conn.close()
     
     def _insert_default_data(self, conn):
-        # Insert default accounts
         default_accounts = [
             (100, 'Cash', 'Cash', 'Cash', 'CHF', False),
             (110, 'Cash', 'Cash', 'Cash', 'EUR', False),
@@ -186,7 +174,6 @@ class BudgetApp:
                 VALUES (?, ?, ?, ?, ?, ?)
             """, account)
         
-        # Insert default categories
         default_categories = [
             ('Activities', 'Activities'),
             ('Beauty', 'Health'),
@@ -238,7 +225,6 @@ class BudgetApp:
         finally:
             conn.close()
 
-    # Account methods
     def get_all_accounts(self):
         conn = self._get_connection()
         try:
@@ -256,11 +242,10 @@ class BudgetApp:
 
     def add_account(self, account: str, type: str, company: str = None, 
                 currency: str = 'CHF', is_investment: bool = False):
-        # Check if account with same name and currency already exists
         existing_account = self.get_account_by_name_currency(account, currency)
         if existing_account:
             print(f"Account {account} {currency} already exists with ID {existing_account.id}")
-            return False  # Prevent duplicate accounts
+            return False
         
         account_id = self._get_next_id('accounts')
         conn = self._get_connection()
@@ -297,7 +282,6 @@ class BudgetApp:
     def delete_account(self, account_id: int):
         conn = self._get_connection()
         try:
-            # Check if account is used in transactions
             result = conn.execute("""
                 SELECT COUNT(*) FROM transactions 
                 WHERE account_id = ? OR to_account_id = ? OR invest_account_id = ?
@@ -315,7 +299,6 @@ class BudgetApp:
         finally:
             conn.close()
 
-    # Category methods
     def get_all_categories(self):
         conn = self._get_connection()
         try:
@@ -349,7 +332,6 @@ class BudgetApp:
     def delete_category(self, sub_category: str):
         conn = self._get_connection()
         try:
-            # Check if category is used in transactions
             result = conn.execute("""
                 SELECT COUNT(*) FROM transactions WHERE sub_category = ?
             """, [sub_category]).fetchone()
@@ -366,12 +348,9 @@ class BudgetApp:
         finally:
             conn.close()
 
-
-    # Transaction methods
     def add_income(self, date: str, amount: float, account_id: int, 
                    payee: str = "", sub_category: str = "", 
                    notes: str = "", invest_account_id: int = None):
-        """Add an income transaction"""
         trans_id = self._get_next_id('transactions')
         conn = self._get_connection()
         try:
@@ -390,7 +369,6 @@ class BudgetApp:
 
     def add_expense(self, date: str, amount: float, account_id: int,
                     sub_category: str, payee: str = "", notes: str = ""):
-        """Add an expense transaction"""
         trans_id = self._get_next_id('transactions')
         conn = self._get_connection()
         try:
@@ -410,7 +388,6 @@ class BudgetApp:
     def add_transfer(self, date: str, from_account_id: int, to_account_id: int,
                     from_amount: float, to_amount: float = None,
                     qty: float = None, notes: str = ""):
-        """Add a transfer transaction"""
         if to_amount is None:
             to_amount = from_amount
             
@@ -464,7 +441,6 @@ class BudgetApp:
     def update_transaction(self, trans_id: int, **kwargs):
         conn = self._get_connection()
         try:
-            # Build dynamic update query based on provided kwargs
             set_clause = []
             values = []
             
@@ -505,7 +481,6 @@ class BudgetApp:
             conn.close()
 
     def get_balance_summary(self):
-        """Get balance summary for all accounts"""
         conn = self._get_connection()
         try:
             balances = {}
@@ -525,7 +500,7 @@ class BudgetApp:
                 elif trans.type == 'expense' and trans.account_id:
                     balances[trans.account_id]['balance'] -= float(trans.amount or 0)
                 elif trans.type == 'transfer':
-                    if trans.account_id:  # from_account_id
+                    if trans.account_id:
                         balances[trans.account_id]['balance'] -= float(trans.amount or 0)
                     if trans.to_account_id:
                         balances[trans.to_account_id]['balance'] += float(trans.to_amount or 0)
@@ -534,9 +509,7 @@ class BudgetApp:
         finally:
             conn.close()
 
-
     def get_account_currency(self, account_id):
-        """Get the currency for a specific account"""
         conn = self._get_connection()
         try:
             result = conn.execute("""
@@ -546,9 +519,7 @@ class BudgetApp:
         finally:
             conn.close()
 
-
     def get_account_by_name_currency(self, account_name: str, currency: str):
-        """Get account by name and currency to ensure uniqueness."""
         conn = self._get_connection()
         try:
             result = conn.execute("""
@@ -564,7 +535,6 @@ class BudgetApp:
             conn.close()
 
     def get_transactions_paginated(self, limit=1000, offset=0):
-        """Get transactions with pagination for better performance"""
         conn = self._get_connection()
         try:
             result = conn.execute("""
@@ -595,7 +565,6 @@ class BudgetApp:
             conn.close()
 
     def get_transaction_count(self):
-        """Get total number of transactions"""
         conn = self._get_connection()
         try:
             result = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()
@@ -603,13 +572,9 @@ class BudgetApp:
         finally:
             conn.close()
     
-
     def count_transactions_for_account(self, account_id):
-        """Count the number of transactions for a specific account"""
         conn = self._get_connection()
         try:
-            # Count transactions where account appears as from_account (expenses, transfers out)
-            # or to_account (incomes, transfers in)
             result = conn.execute("""
                 SELECT COUNT(*) FROM transactions 
                 WHERE account_id = ? OR to_account_id = ?
