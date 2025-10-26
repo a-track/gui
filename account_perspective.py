@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QMessageBox)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QColor
+import datetime
 
 
 class AccountPerspectiveDialog(QDialog):
@@ -20,6 +21,9 @@ class AccountPerspectiveDialog(QDialog):
         self.budget_app = budget_app
         self.parent_window = parent
         self.selected_account_id = None
+        self.all_transactions_for_account = []
+        self.filtered_transactions = []
+        self.running_balance_history = {}  # Store running balance for each transaction
         
         self.setWindowTitle('Account Transactions & Balance History')
         self.setMinimumSize(1200, 600)
@@ -58,6 +62,30 @@ class AccountPerspectiveDialog(QDialog):
         account_layout.addWidget(self.current_balance_label)
         
         layout.addLayout(account_layout)
+        
+        # Filter controls
+        filter_layout = QHBoxLayout()
+        
+        filter_layout.addWidget(QLabel('Year:'))
+        self.year_combo = QComboBox()
+        self.populate_years()
+        self.year_combo.currentTextChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.year_combo)
+        
+        filter_layout.addWidget(QLabel('Month:'))
+        self.month_combo = QComboBox()
+        self.populate_months()
+        self.month_combo.currentTextChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.month_combo)
+        
+        filter_layout.addStretch()
+        
+        # Show all checkbox
+        self.show_all_checkbox = QCheckBox('Show All Transactions')
+        self.show_all_checkbox.stateChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.show_all_checkbox)
+        
+        layout.addLayout(filter_layout)
         
         # Info label
         info_label = QLabel('Showing all transactions where this account is involved. Click checkbox to confirm transaction.')
@@ -150,10 +178,43 @@ class AccountPerspectiveDialog(QDialog):
         
         self.setLayout(layout)
         
+        # Set current month/year as default
+        self.set_current_month_year()
+        
         # Auto-select first account and load data
         if accounts:
             self.account_combo.setCurrentIndex(0)
             self.on_account_changed(0)
+    
+    def populate_years(self):
+        """Populate years combo box with recent years"""
+        current_year = datetime.datetime.now().year
+        years = list(range(current_year - 5, current_year + 2))
+        self.year_combo.addItems([str(year) for year in years])
+    
+    def populate_months(self):
+        """Populate months combo box"""
+        months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ]
+        self.month_combo.addItems(months)
+    
+    def set_current_month_year(self):
+        """Set filters to current month and year"""
+        now = datetime.datetime.now()
+        current_year = str(now.year)
+        current_month = now.strftime('%B')  # Full month name
+        
+        # Set year
+        index = self.year_combo.findText(current_year)
+        if index >= 0:
+            self.year_combo.setCurrentIndex(index)
+        
+        # Set month
+        index = self.month_combo.findText(current_month)
+        if index >= 0:
+            self.month_combo.setCurrentIndex(index)
     
     def format_swiss_number(self, number):
         """Format number in Swiss format: 2'005.50 instead of 2,005.50"""
@@ -217,6 +278,44 @@ class AccountPerspectiveDialog(QDialog):
             self.selected_account_id = self.account_combo.currentData()
             self.load_account_data()
     
+    def calculate_running_balance_history(self):
+        """Calculate running balance for ALL transactions (from beginning of time)"""
+        if not self.selected_account_id or not self.all_transactions_for_account:
+            return {}
+        
+        # Sort all transactions by date (oldest first)
+        sorted_transactions = sorted(self.all_transactions_for_account, key=lambda x: (x.date, x.id))
+        
+        running_balance = 0.0
+        balance_history = {}
+        
+        for trans in sorted_transactions:
+            # Determine transaction effect on this account
+            if trans.type == 'income' and trans.account_id == self.selected_account_id:
+                # Income into this account
+                transaction_amount = float(trans.amount or 0)
+                running_balance += transaction_amount
+                
+            elif trans.type == 'expense' and trans.account_id == self.selected_account_id:
+                # Expense from this account
+                transaction_amount = float(trans.amount or 0)
+                running_balance -= transaction_amount
+                
+            elif trans.type == 'transfer':
+                if trans.account_id == self.selected_account_id:  # This account is the source
+                    # Transfer out of this account
+                    transaction_amount = float(trans.amount or 0)
+                    running_balance -= transaction_amount
+                elif trans.to_account_id == self.selected_account_id:  # This account is the destination
+                    # Transfer into this account
+                    transaction_amount = float(trans.to_amount or 0)
+                    running_balance += transaction_amount
+            
+            # Store the running balance after this transaction
+            balance_history[trans.id] = running_balance
+        
+        return balance_history
+    
     def load_account_data(self):
         """Load and display transactions for the selected account."""
         if not self.selected_account_id:
@@ -230,81 +329,18 @@ class AccountPerspectiveDialog(QDialog):
             all_transactions = self.budget_app.get_all_transactions()
             
             # Filter transactions for this account
-            account_transactions = []
+            self.all_transactions_for_account = []
             for trans in all_transactions:
                 # Check if this transaction involves the selected account
                 if (trans.account_id == account_id or 
                     trans.to_account_id == account_id):
-                    account_transactions.append(trans)
+                    self.all_transactions_for_account.append(trans)
             
-            # Sort by date (oldest first for running balance calculation)
-            account_transactions.sort(key=lambda x: (x.date, x.id))
+            # Calculate running balance history for ALL transactions
+            self.running_balance_history = self.calculate_running_balance_history()
             
-            # Calculate running balance
-            running_balance = 0.0
-            transaction_history = []
-            
-            for trans in account_transactions:
-                # Determine transaction effect on this account
-                if trans.type == 'income' and trans.account_id == account_id:
-                    # Income into this account
-                    transaction_amount = float(trans.amount or 0)
-                    running_balance += transaction_amount
-                    effect = "+"
-                    other_account = trans.payee or "Income"
-                    
-                elif trans.type == 'expense' and trans.account_id == account_id:
-                    # Expense from this account
-                    transaction_amount = float(trans.amount or 0)
-                    running_balance -= transaction_amount
-                    effect = "-"
-                    other_account = trans.payee or "Expense"
-                    
-                elif trans.type == 'transfer':
-                    if trans.account_id == account_id:  # This account is the source
-                        # Transfer out of this account
-                        transaction_amount = float(trans.amount or 0)
-                        running_balance -= transaction_amount
-                        effect = "-"
-                        other_account = self.get_account_name_by_id(trans.to_account_id)
-                    elif trans.to_account_id == account_id:  # This account is the destination
-                        # Transfer into this account
-                        transaction_amount = float(trans.to_amount or 0)
-                        running_balance += transaction_amount
-                        effect = "+"
-                        other_account = self.get_account_name_by_id(trans.account_id)
-                    else:
-                        continue
-                else:
-                    continue
-                
-                transaction_history.append({
-                    'transaction': trans,
-                    'transaction_amount': transaction_amount,
-                    'effect': effect,
-                    'running_balance': running_balance,
-                    'other_account': other_account
-                })
-            
-            # Populate table
-            self.populate_table(transaction_history)
-            
-            # Update current balance display with currency
-            current_balance = running_balance
-            currency = self.get_current_account_currency()
-            balance_color = '#4CAF50' if current_balance >= 0 else '#f44336'
-            
-            if currency:
-                balance_text = f'Current Balance: {currency} {self.format_swiss_number(current_balance)}'
-            else:
-                balance_text = f'Current Balance: {self.format_swiss_number(current_balance)}'
-                
-            self.current_balance_label.setText(balance_text)
-            self.current_balance_label.setStyleSheet(f'font-weight: bold; font-size: 14px; color: {balance_color};')
-            
-            # Update status
-            account_name = self.account_combo.currentText()
-            self.show_status(f'Showing {len(transaction_history)} transactions for {account_name}')
+            # Apply initial filters
+            self.apply_filters()
             
         except Exception as e:
             print(f"Error loading account data: {e}")
@@ -312,6 +348,112 @@ class AccountPerspectiveDialog(QDialog):
             traceback.print_exc()
             self.show_status('Error loading account data', error=True)
     
+    def apply_filters(self):
+        """Apply year/month filters to transactions"""
+        if not self.selected_account_id or not self.all_transactions_for_account:
+            return
+        
+        if self.show_all_checkbox.isChecked():
+            # Show all transactions for this account
+            transactions_to_display = self.all_transactions_for_account
+            filter_info = "all transactions"
+        else:
+            # Filter by selected year and month
+            selected_year = int(self.year_combo.currentText())
+            selected_month = self.month_combo.currentIndex() + 1  # 1-12
+            
+            transactions_to_display = []
+            for trans in self.all_transactions_for_account:
+                try:
+                    # Parse transaction date
+                    if hasattr(trans, 'date') and trans.date:
+                        trans_date = trans.date
+                        if isinstance(trans_date, str):
+                            # If date is string, parse it
+                            trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
+                        
+                        if trans_date.year == selected_year and trans_date.month == selected_month:
+                            transactions_to_display.append(trans)
+                except (ValueError, AttributeError) as e:
+                    print(f"Error parsing date for transaction {trans.id}: {e}")
+                    continue
+            
+            month_name = self.month_combo.currentText()
+            filter_info = f"{month_name} {selected_year}"
+        
+        # Sort by date (oldest first for display)
+        transactions_to_display.sort(key=lambda x: (x.date, x.id))
+        
+        # Prepare transaction history with running balance from pre-calculated history
+        transaction_history = []
+        
+        for trans in transactions_to_display:
+            # Get the running balance from our pre-calculated history
+            running_balance = self.running_balance_history.get(trans.id, 0.0)
+            
+            # Determine transaction effect on this account and other account info
+            if trans.type == 'income' and trans.account_id == self.selected_account_id:
+                # Income into this account
+                transaction_amount = float(trans.amount or 0)
+                effect = "+"
+                other_account = trans.payee or "Income"
+                
+            elif trans.type == 'expense' and trans.account_id == self.selected_account_id:
+                # Expense from this account
+                transaction_amount = float(trans.amount or 0)
+                effect = "-"
+                other_account = trans.payee or "Expense"
+                
+            elif trans.type == 'transfer':
+                if trans.account_id == self.selected_account_id:  # This account is the source
+                    # Transfer out of this account
+                    transaction_amount = float(trans.amount or 0)
+                    effect = "-"
+                    other_account = self.get_account_name_by_id(trans.to_account_id)
+                elif trans.to_account_id == self.selected_account_id:  # This account is the destination
+                    # Transfer into this account
+                    transaction_amount = float(trans.to_amount or 0)
+                    effect = "+"
+                    other_account = self.get_account_name_by_id(trans.account_id)
+                else:
+                    continue
+            else:
+                continue
+            
+            transaction_history.append({
+                'transaction': trans,
+                'transaction_amount': transaction_amount,
+                'effect': effect,
+                'running_balance': running_balance,
+                'other_account': other_account
+            })
+        
+        # Populate table
+        self.populate_table(transaction_history)
+        
+        # Update current balance display with currency
+        # Current balance is the last running balance from all transactions
+        current_balance = 0.0
+        if self.running_balance_history:
+            # Get the last transaction's running balance
+            last_transaction_id = list(self.running_balance_history.keys())[-1]
+            current_balance = self.running_balance_history[last_transaction_id]
+        
+        currency = self.get_current_account_currency()
+        balance_color = '#4CAF50' if current_balance >= 0 else '#f44336'
+        
+        if currency:
+            balance_text = f'Current Balance: {currency} {self.format_swiss_number(current_balance)}'
+        else:
+            balance_text = f'Current Balance: {self.format_swiss_number(current_balance)}'
+            
+        self.current_balance_label.setText(balance_text)
+        self.current_balance_label.setStyleSheet(f'font-weight: bold; font-size: 14px; color: {balance_color};')
+        
+        # Update status
+        account_name = self.account_combo.currentText()
+        self.show_status(f'Showing {len(transaction_history)} transactions for {account_name} ({filter_info})')
+        
     def populate_table(self, transaction_history):
         """Populate the table with transaction history and running balance."""
         self.table.setRowCount(len(transaction_history))
@@ -354,7 +496,7 @@ class AccountPerspectiveDialog(QDialog):
             trans_effect_item.setFont(QFont("", weight=QFont.Weight.Bold))
             self.table.setItem(row, 5, trans_effect_item)
             
-            # Running Balance
+            # Running Balance (from pre-calculated history)
             formatted_balance = self.format_swiss_number(running_balance)
             balance_item = QTableWidgetItem(formatted_balance)
             if running_balance >= 0:

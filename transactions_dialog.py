@@ -1,54 +1,74 @@
 """
-Optimized dialog for viewing transactions with pagination.
+Optimized dialog for viewing transactions with month/year filtering.
 """
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QCheckBox, QHeaderView, QWidget, QMessageBox,
-                             QProgressBar, QSpinBox)
+                             QProgressBar, QComboBox)
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
+import datetime
 
 class TransactionLoaderThread(QThread):
     """Thread for loading transactions in background"""
     finished = pyqtSignal(list)
     progress = pyqtSignal(int)
     
-    def __init__(self, budget_app, limit=1000, offset=0):
+    def __init__(self, budget_app):
         super().__init__()
         self.budget_app = budget_app
-        self.limit = limit
-        self.offset = offset
     
     def run(self):
         try:
-            # Get limited transactions for performance
+            # Get all transactions
             all_transactions = self.budget_app.get_all_transactions()
-            # Apply pagination
-            transactions = all_transactions[self.offset:self.offset + self.limit]
-            self.finished.emit(transactions)
+            self.finished.emit(all_transactions)
         except Exception as e:
             print(f"Error loading transactions: {e}")
             self.finished.emit([])
 
 class TransactionsDialog(QDialog):
-    """Optimized dialog for viewing transactions with pagination."""
+    """Optimized dialog for viewing transactions with month/year filtering."""
     
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
         
         self.budget_app = budget_app
         self.parent_window = parent
-        self.current_page = 0
-        self.page_size = 500  # Show 500 transactions per page
         self.all_transactions = []
+        self.filtered_transactions = []
         
         self.setWindowFlags(Qt.WindowType.Window)
-        self.setWindowTitle('All Transactions (Paginated)')
+        self.setWindowTitle('All Transactions')
         self.setMinimumSize(1000, 600)
         
         layout = QVBoxLayout()
         
-        # Info label with pagination info
+        # Filter controls
+        filter_layout = QHBoxLayout()
+        
+        filter_layout.addWidget(QLabel('Year:'))
+        self.year_combo = QComboBox()
+        self.populate_years()
+        self.year_combo.currentTextChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.year_combo)
+        
+        filter_layout.addWidget(QLabel('Month:'))
+        self.month_combo = QComboBox()
+        self.populate_months()
+        self.month_combo.currentTextChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.month_combo)
+        
+        filter_layout.addStretch()
+        
+        # Show all checkbox
+        self.show_all_checkbox = QCheckBox('Show All Transactions')
+        self.show_all_checkbox.stateChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.show_all_checkbox)
+        
+        layout.addLayout(filter_layout)
+        
+        # Info label
         self.info_label = QLabel('Loading transactions...')
         self.info_label.setStyleSheet('color: #666; font-style: italic; padding: 5px;')
         layout.addWidget(self.info_label)
@@ -115,32 +135,6 @@ class TransactionsDialog(QDialog):
         
         layout.addWidget(self.table)
         
-        # Pagination controls
-        pagination_layout = QHBoxLayout()
-        pagination_layout.addWidget(QLabel('Page:'))
-        
-        self.page_spinbox = QSpinBox()
-        self.page_spinbox.setMinimum(1)
-        self.page_spinbox.setMaximum(1)
-        self.page_spinbox.valueChanged.connect(self.on_page_changed)
-        pagination_layout.addWidget(self.page_spinbox)
-        
-        pagination_layout.addWidget(QLabel('of 1'))
-        self.total_pages_label = QLabel('of 1')
-        pagination_layout.addWidget(self.total_pages_label)
-        
-        pagination_layout.addStretch()
-        
-        prev_btn = QPushButton('Previous')
-        prev_btn.clicked.connect(self.previous_page)
-        pagination_layout.addWidget(prev_btn)
-        
-        next_btn = QPushButton('Next')
-        next_btn.clicked.connect(self.next_page)
-        pagination_layout.addWidget(next_btn)
-        
-        layout.addLayout(pagination_layout)
-        
         # Status label
         self.status_label = QLabel('')
         self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
@@ -167,20 +161,49 @@ class TransactionsDialog(QDialog):
         
         self.setLayout(layout)
         
+        # Set current month/year as default
+        self.set_current_month_year()
+        
         # Load transactions
         self.load_transactions()
     
+    def populate_years(self):
+        """Populate years combo box with recent years"""
+        current_year = datetime.datetime.now().year
+        years = list(range(current_year - 5, current_year + 2))
+        self.year_combo.addItems([str(year) for year in years])
+    
+    def populate_months(self):
+        """Populate months combo box"""
+        months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ]
+        self.month_combo.addItems(months)
+    
+    def set_current_month_year(self):
+        """Set filters to current month and year"""
+        now = datetime.datetime.now()
+        current_year = str(now.year)
+        current_month = now.strftime('%B')  # Full month name
+        
+        # Set year
+        index = self.year_combo.findText(current_year)
+        if index >= 0:
+            self.year_combo.setCurrentIndex(index)
+        
+        # Set month
+        index = self.month_combo.findText(current_month)
+        if index >= 0:
+            self.month_combo.setCurrentIndex(index)
+    
     def load_transactions(self):
-        """Load transactions with pagination"""
+        """Load all transactions"""
         self.progress_bar.setVisible(True)
         self.info_label.setText('Loading transactions...')
         
         # Load in background thread
-        self.loader_thread = TransactionLoaderThread(
-            self.budget_app, 
-            limit=self.page_size, 
-            offset=self.current_page * self.page_size
-        )
+        self.loader_thread = TransactionLoaderThread(self.budget_app)
         self.loader_thread.finished.connect(self.on_transactions_loaded)
         self.loader_thread.start()
     
@@ -189,25 +212,51 @@ class TransactionsDialog(QDialog):
         self.progress_bar.setVisible(False)
         self.all_transactions = transactions
         
-        # Update pagination info
-        total_transactions = len(self.budget_app.get_all_transactions())
-        total_pages = max(1, (total_transactions + self.page_size - 1) // self.page_size)
+        # Apply initial filters
+        self.apply_filters()
+    
+    def apply_filters(self):
+        """Apply year/month filters to transactions"""
+        if not self.all_transactions:
+            return
         
-        self.page_spinbox.setMaximum(total_pages)
-        self.page_spinbox.setValue(self.current_page + 1)
-        self.total_pages_label.setText(f'of {total_pages}')
-        
-        self.info_label.setText(
-            f'Showing {len(transactions)} transactions (page {self.current_page + 1} of {total_pages})'
-        )
+        if self.show_all_checkbox.isChecked():
+            # Show all transactions
+            self.filtered_transactions = self.all_transactions
+            self.info_label.setText(f'Showing all {len(self.filtered_transactions)} transactions')
+        else:
+            # Filter by selected year and month
+            selected_year = int(self.year_combo.currentText())
+            selected_month = self.month_combo.currentIndex() + 1  # 1-12
+            
+            self.filtered_transactions = []
+            for trans in self.all_transactions:
+                try:
+                    # Parse transaction date
+                    if hasattr(trans, 'date') and trans.date:
+                        trans_date = trans.date
+                        if isinstance(trans_date, str):
+                            # If date is string, parse it
+                            trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
+                        
+                        if trans_date.year == selected_year and trans_date.month == selected_month:
+                            self.filtered_transactions.append(trans)
+                except (ValueError, AttributeError) as e:
+                    print(f"Error parsing date for transaction {trans.id}: {e}")
+                    continue
+            
+            month_name = self.month_combo.currentText()
+            self.info_label.setText(
+                f'Showing {len(self.filtered_transactions)} transactions for {month_name} {selected_year}'
+            )
         
         self.populate_table()
     
     def populate_table(self):
-        """Populate table with current page of transactions"""
-        self.table.setRowCount(len(self.all_transactions))
+        """Populate table with filtered transactions"""
+        self.table.setRowCount(len(self.filtered_transactions))
         
-        for row, trans in enumerate(self.all_transactions):
+        for row, trans in enumerate(self.filtered_transactions):
             # ID
             id_item = QTableWidgetItem(str(trans.id))
             id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -327,26 +376,6 @@ class TransactionsDialog(QDialog):
                 if item:
                     item.setBackground(color_map[trans_type])
     
-    def on_page_changed(self, page):
-        """Handle page change"""
-        self.current_page = page - 1
-        self.load_transactions()
-    
-    def previous_page(self):
-        """Go to previous page"""
-        if self.current_page > 0:
-            self.current_page -= 1
-            self.page_spinbox.setValue(self.current_page + 1)
-    
-    def next_page(self):
-        """Go to next page"""
-        total_transactions = len(self.budget_app.get_all_transactions())
-        total_pages = max(1, (total_transactions + self.page_size - 1) // self.page_size)
-        
-        if self.current_page < total_pages - 1:
-            self.current_page += 1
-            self.page_spinbox.setValue(self.current_page + 1)
-    
     def on_checkbox_changed(self, state):
         """Handle checkbox state changes."""
         try:
@@ -387,8 +416,7 @@ class TransactionsDialog(QDialog):
     
     def refresh_table(self):
         """Refresh the table data."""
-        self.transactions = self.budget_app.get_all_transactions()
-        self.populate_table()
+        self.load_transactions()
         self.show_status('Table refreshed!')
     
     def show_status(self, message, error=False):

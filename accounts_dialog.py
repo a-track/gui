@@ -14,6 +14,8 @@ class AccountsDialog(QDialog):
         super().__init__(parent)
         self.budget_app = budget_app
         self.parent_window = parent
+        self.all_accounts = []
+        self.filtered_accounts = []
         
         self.setWindowTitle('Manage Accounts')
         self.setMinimumSize(1000, 500)
@@ -28,6 +30,35 @@ class AccountsDialog(QDialog):
         title.setFont(title_font)
         title.setStyleSheet('color: #2196F3; padding: 10px;')
         layout.addWidget(title)
+        
+        # Filter controls
+        filter_layout = QHBoxLayout()
+        
+        filter_layout.addWidget(QLabel('Type:'))
+        self.type_filter_combo = QComboBox()
+        self.type_filter_combo.addItems(['All Types', 'Cash', 'Bank', 'Credit', 'Share', 'ETF', 'Fonds', '3a', 'Other'])
+        self.type_filter_combo.currentTextChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.type_filter_combo)
+        
+        filter_layout.addWidget(QLabel('Currency:'))
+        self.currency_filter_combo = QComboBox()
+        self.currency_filter_combo.addItems(['All Currencies', 'CHF', 'EUR', 'USD', 'GBP', 'Other'])
+        self.currency_filter_combo.currentTextChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.currency_filter_combo)
+        
+        self.investment_filter_check = QCheckBox('Investment Accounts Only')
+        self.investment_filter_check.stateChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.investment_filter_check)
+        
+        filter_layout.addStretch()
+        
+        # Clear filters button
+        clear_filters_btn = QPushButton('Clear Filters')
+        clear_filters_btn.clicked.connect(self.clear_filters)
+        clear_filters_btn.setStyleSheet('background-color: #9E9E9E; color: white; padding: 3px 8px;')
+        filter_layout.addWidget(clear_filters_btn)
+        
+        layout.addLayout(filter_layout)
         
         # Add new account section
         new_account_layout = QHBoxLayout()
@@ -62,6 +93,11 @@ class AccountsDialog(QDialog):
         new_account_layout.addWidget(add_btn)
         
         layout.addLayout(new_account_layout)
+        
+        # Info label
+        self.info_label = QLabel('Loading accounts...')
+        self.info_label.setStyleSheet('color: #666; font-style: italic; padding: 5px;')
+        layout.addWidget(self.info_label)
         
         # Table
         self.table = QTableWidget()
@@ -144,88 +180,148 @@ class AccountsDialog(QDialog):
     
     def load_accounts(self):
         try:
-            accounts = self.budget_app.get_all_accounts()
+            self.all_accounts = self.budget_app.get_all_accounts()
             # Sort accounts by ID
-            accounts_sorted = sorted(accounts, key=lambda x: x.id)
-            self.table.setRowCount(len(accounts_sorted))
+            self.all_accounts = sorted(self.all_accounts, key=lambda x: x.id)
             
-            for row, account in enumerate(accounts_sorted):
-                # ID
-                id_item = QTableWidgetItem(str(account.id))
-                id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                id_item.setBackground(QColor(240, 240, 240))
-                id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.table.setItem(row, 0, id_item)
-                
-                # Account Name
-                name_item = QTableWidgetItem(account.account)
-                name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
-                self.table.setItem(row, 1, name_item)
-                
-                # Type
-                type_item = QTableWidgetItem(account.type)
-                type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
-                self.table.setItem(row, 2, type_item)
-                
-                # Company
-                company_item = QTableWidgetItem(account.company or '')
-                company_item.setFlags(company_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
-                self.table.setItem(row, 3, company_item)
-                
-                # Currency
-                currency_item = QTableWidgetItem(account.currency)
-                currency_item.setFlags(currency_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
-                self.table.setItem(row, 4, currency_item)
-                
-                # Actions - Modern X button
-                action_widget = QWidget()
-                action_layout = QHBoxLayout()
-                action_layout.setContentsMargins(1, 1, 1, 1)  # Minimal margins
-                action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                
-                delete_btn = QPushButton('✕')  # Modern X symbol
-                delete_btn.setFixedSize(22, 22)  # Small size to fit nicely
-                delete_btn.setStyleSheet('''
-                    QPushButton {
-                        background-color: #ff4444;
-                        color: white;
-                        border: none;
-                        border-radius: 11px;
-                        font-weight: bold;
-                        font-size: 9px;
-                        margin: 0px;
-                        padding: 0px;
-                    }
-                    QPushButton:hover {
-                        background-color: #cc0000;
-                    }
-                    QPushButton:pressed {
-                        background-color: #990000;
-                    }
-                ''')
-                delete_btn.setProperty('account_id', account.id)
-                delete_btn.clicked.connect(self.delete_account)
-                delete_btn.setToolTip('Delete account')
-                
-                action_layout.addWidget(delete_btn)
-                action_widget.setLayout(action_layout)
-                
-                self.table.setCellWidget(row, 5, action_widget)
-            
-            # Auto-resize columns to content after population
-            self.table.resizeColumnsToContents()
-            
-            # Set minimum widths for certain columns to prevent them from being too small
-            self.table.setColumnWidth(0, max(50, self.table.columnWidth(0)))   # ID
-            self.table.setColumnWidth(2, max(80, self.table.columnWidth(2)))   # Type
-            self.table.setColumnWidth(4, max(80, self.table.columnWidth(4)))   # Currency
-            self.table.setColumnWidth(5, max(70, self.table.columnWidth(5)))   # Actions
-            
-            self.show_status(f'Loaded {len(accounts)} accounts')
+            # Apply initial filters
+            self.apply_filters()
             
         except Exception as e:
             print(f"Error loading accounts: {e}")
             self.show_status('Error loading accounts', error=True)
+    
+    def apply_filters(self):
+        """Apply filters to accounts based on selected criteria"""
+        if not self.all_accounts:
+            return
+        
+        selected_type = self.type_filter_combo.currentText()
+        selected_currency = self.currency_filter_combo.currentText()
+        investment_only = self.investment_filter_check.isChecked()
+        
+        self.filtered_accounts = []
+        
+        for account in self.all_accounts:
+            # Type filter
+            if selected_type != 'All Types' and account.type != selected_type:
+                continue
+            
+            # Currency filter
+            if selected_currency != 'All Currencies':
+                if selected_currency == 'Other':
+                    # Show currencies that are not in the common list
+                    if account.currency in ['CHF', 'EUR', 'USD', 'GBP']:
+                        continue
+                elif account.currency != selected_currency:
+                    continue
+            
+            # Investment filter
+            if investment_only and not account.is_investment:
+                continue
+            
+            self.filtered_accounts.append(account)
+        
+        # Update info label
+        filter_info = []
+        if selected_type != 'All Types':
+            filter_info.append(f"Type: {selected_type}")
+        if selected_currency != 'All Currencies':
+            filter_info.append(f"Currency: {selected_currency}")
+        if investment_only:
+            filter_info.append("Investment Only")
+        
+        filter_text = " | ".join(filter_info)
+        if filter_text:
+            self.info_label.setText(f'Showing {len(self.filtered_accounts)} of {len(self.all_accounts)} accounts ({filter_text})')
+        else:
+            self.info_label.setText(f'Showing all {len(self.filtered_accounts)} accounts')
+        
+        self.populate_table()
+    
+    def clear_filters(self):
+        """Clear all filters"""
+        self.type_filter_combo.setCurrentText('All Types')
+        self.currency_filter_combo.setCurrentText('All Currencies')
+        self.investment_filter_check.setChecked(False)
+    
+    def populate_table(self):
+        """Populate table with filtered accounts"""
+        self.table.setRowCount(len(self.filtered_accounts))
+        
+        for row, account in enumerate(self.filtered_accounts):
+            # ID
+            id_item = QTableWidgetItem(str(account.id))
+            id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            id_item.setBackground(QColor(240, 240, 240))
+            id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(row, 0, id_item)
+            
+            # Account Name
+            name_item = QTableWidgetItem(account.account)
+            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            self.table.setItem(row, 1, name_item)
+            
+            # Type
+            type_item = QTableWidgetItem(account.type)
+            type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            self.table.setItem(row, 2, type_item)
+            
+            # Company
+            company_item = QTableWidgetItem(account.company or '')
+            company_item.setFlags(company_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            self.table.setItem(row, 3, company_item)
+            
+            # Currency
+            currency_item = QTableWidgetItem(account.currency)
+            currency_item.setFlags(currency_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            self.table.setItem(row, 4, currency_item)
+            
+            # Actions - Modern X button
+            action_widget = QWidget()
+            action_layout = QHBoxLayout()
+            action_layout.setContentsMargins(1, 1, 1, 1)  # Minimal margins
+            action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            delete_btn = QPushButton('✕')  # Modern X symbol
+            delete_btn.setFixedSize(22, 22)  # Small size to fit nicely
+            delete_btn.setStyleSheet('''
+                QPushButton {
+                    background-color: #ff4444;
+                    color: white;
+                    border: none;
+                    border-radius: 11px;
+                    font-weight: bold;
+                    font-size: 9px;
+                    margin: 0px;
+                    padding: 0px;
+                }
+                QPushButton:hover {
+                    background-color: #cc0000;
+                }
+                QPushButton:pressed {
+                    background-color: #990000;
+                }
+            ''')
+            delete_btn.setProperty('account_id', account.id)
+            delete_btn.clicked.connect(self.delete_account)
+            delete_btn.setToolTip('Delete account')
+            
+            action_layout.addWidget(delete_btn)
+            action_widget.setLayout(action_layout)
+            
+            self.table.setCellWidget(row, 5, action_widget)
+        
+        # Auto-resize columns to content after population
+        self.table.resizeColumnsToContents()
+        
+        # Set minimum widths for certain columns to prevent them from being too small
+        self.table.setColumnWidth(0, max(50, self.table.columnWidth(0)))   # ID
+        self.table.setColumnWidth(2, max(80, self.table.columnWidth(2)))   # Type
+        self.table.setColumnWidth(4, max(80, self.table.columnWidth(4)))   # Currency
+        self.table.setColumnWidth(5, max(70, self.table.columnWidth(5)))   # Actions
+        
+        self.show_status(f'Displaying {len(self.filtered_accounts)} accounts')
     
     def add_account(self):
         account_name = self.account_name_input.text().strip()
