@@ -65,7 +65,7 @@ class BudgetTrackerWindow(QMainWindow):
         main_layout.addSpacing(20)
         
         # Balance summary section
-        balance_label = QLabel('Account Balances:')
+        balance_label = QLabel('Account Balances')
         balance_label.setStyleSheet('font-weight: bold; font-size: 14px;')
         main_layout.addWidget(balance_label)
         
@@ -96,8 +96,8 @@ class BudgetTrackerWindow(QMainWindow):
         main_layout.addSpacing(20)
         
         # Transaction Form Group
-        form_group = QGroupBox('Add New Transaction')
-        form_group.setStyleSheet('QGroupBox { font-weight: bold; }')
+        form_group = QGroupBox('Add Transaction')
+        form_group.setStyleSheet('QGroupBox { font-weight: bold}')
         form_layout = QVBoxLayout()
         
         # Transaction type
