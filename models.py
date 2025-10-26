@@ -602,3 +602,23 @@ class BudgetApp:
             return result[0] if result else 0
         finally:
             conn.close()
+    
+
+    def count_transactions_for_account(self, account_id):
+        """Count the number of transactions for a specific account"""
+        conn = self._get_connection()
+        try:
+            # Count transactions where account appears as from_account (expenses, transfers out)
+            # or to_account (incomes, transfers in)
+            result = conn.execute("""
+                SELECT COUNT(*) FROM transactions 
+                WHERE account_id = ? OR to_account_id = ?
+            """, (account_id, account_id)).fetchone()
+            
+            return result[0] if result else 0
+            
+        except Exception as e:
+            print(f"Error counting transactions for account {account_id}: {e}")
+            return 0
+        finally:
+            conn.close()

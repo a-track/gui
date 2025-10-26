@@ -268,7 +268,15 @@ class BudgetTrackerWindow(QMainWindow):
         self.balance_display.setText(f'Error loading balances: {error_message}')
 
     def update_balance_display_with_data(self, balances):
-        """Update balance display with pre-loaded data"""
+        """Update balance display with pre-loaded data, sorted by transaction count"""
+        # Get transaction counts for all accounts
+        transaction_counts = {}
+        all_accounts = self.budget_app.get_all_accounts()
+        for account in all_accounts:
+            # Count transactions for this account
+            count = self.budget_app.count_transactions_for_account(account.id)
+            transaction_counts[account.id] = count
+        
         # Group accounts by name (ignoring currency suffix)
         account_groups = {}
         for account_id, data in balances.items():
@@ -284,12 +292,21 @@ class BudgetTrackerWindow(QMainWindow):
                 
                 if base_name not in account_groups:
                     account_groups[base_name] = []
-                account_groups[base_name].append((account_id, data))
+                
+                # Store account data along with transaction count
+                count = transaction_counts.get(account_id, 0)
+                account_groups[base_name].append((account_id, data, count))
+        
+        # Calculate total transaction count per account group
+        group_transaction_counts = {}
+        for base_name, accounts in account_groups.items():
+            total_count = sum(count for _, _, count in accounts)
+            group_transaction_counts[base_name] = total_count
         
         # Get all unique currencies from all accounts and calculate totals
         currency_totals = {}
         for base_name, accounts in account_groups.items():
-            for account_id, data in accounts:
+            for account_id, data, count in accounts:
                 currency = self.get_currency_for_account(account_id)
                 balance = data['balance']
                 if currency in currency_totals:
@@ -299,6 +316,11 @@ class BudgetTrackerWindow(QMainWindow):
         
         # Sort currencies by total amount in descending order
         all_currencies = sorted(currency_totals.keys(), key=lambda x: currency_totals[x], reverse=True)
+        
+        # Sort account groups by transaction count (descending)
+        sorted_account_groups = sorted(account_groups.items(), 
+                                    key=lambda x: group_transaction_counts[x[0]], 
+                                    reverse=True)
         
         # Calculate column widths
         account_col_width = 35
@@ -314,14 +336,12 @@ class BudgetTrackerWindow(QMainWindow):
         balance_text += header + "\n"
         balance_text += "-" * (account_col_width + len(all_currencies) * currency_col_width) + "\n"
         
-        # Display one line per account group
+        # Display one line per account group, sorted by transaction count
         total_by_currency = {currency: 0.0 for currency in all_currencies}
-        for base_name in sorted(account_groups.keys()):
-            accounts = account_groups[base_name]
-            
+        for base_name, accounts in sorted_account_groups:
             # Calculate balances per currency for this account group
             group_balances = {currency: 0.0 for currency in all_currencies}
-            for account_id, data in accounts:
+            for account_id, data, count in accounts:
                 currency = self.get_currency_for_account(account_id)
                 group_balances[currency] += data['balance']
             
