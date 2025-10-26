@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                             QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-                            QHeaderView, QMessageBox, QWidget)
+                            QHeaderView, QMessageBox, QWidget, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 
@@ -40,6 +40,10 @@ class AccountsDialog(QDialog):
         self.currency_input.setMaximumWidth(80)
         new_account_layout.addWidget(self.currency_input)
         
+        self.show_in_balance_checkbox = QCheckBox('Show in Balance')
+        self.show_in_balance_checkbox.setChecked(True)  # Default to True
+        new_account_layout.addWidget(self.show_in_balance_checkbox)
+        
         add_btn = QPushButton('Add Account')
         add_btn.clicked.connect(self.add_account)
         add_btn.setStyleSheet('background-color: #4CAF50; color: white; padding: 5px;')
@@ -48,8 +52,8 @@ class AccountsDialog(QDialog):
         layout.addLayout(new_account_layout)
         
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(['ID', 'Account Name', 'Type', 'Company', 'Currency', 'Actions'])
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels(['ID', 'Account Name', 'Type', 'Company', 'Currency', 'Show in Balance', 'Actions'])
         
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -82,13 +86,14 @@ class AccountsDialog(QDialog):
         self.table.verticalHeader().hide()
         
         header = self.table.horizontalHeader()
-        self.table.setColumnWidth(5, 70)
+        self.table.setColumnWidth(5, 100) 
+        self.table.setColumnWidth(6, 70)
         
         content_based_columns = [0, 1, 2, 3, 4]
         for col in content_based_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
         
         self.table.verticalHeader().setDefaultSectionSize(35)
         
@@ -136,6 +141,20 @@ class AccountsDialog(QDialog):
             currency_item.setFlags(currency_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 4, currency_item)
             
+            show_in_balance_widget = QWidget()
+            show_in_balance_layout = QHBoxLayout()
+            show_in_balance_layout.setContentsMargins(1, 1, 1, 1)
+            show_in_balance_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            show_checkbox = QCheckBox()
+            show_checkbox.setChecked(getattr(account, 'show_in_balance', True))
+            show_checkbox.setProperty('account_id', account.id)
+            show_checkbox.toggled.connect(self.toggle_show_in_balance)
+            show_in_balance_layout.addWidget(show_checkbox)
+            
+            show_in_balance_widget.setLayout(show_in_balance_layout)
+            self.table.setCellWidget(row, 5, show_in_balance_widget)
+            
             action_widget = QWidget()
             action_layout = QHBoxLayout()
             action_layout.setContentsMargins(1, 1, 1, 1)
@@ -168,16 +187,32 @@ class AccountsDialog(QDialog):
             action_layout.addWidget(delete_btn)
             action_widget.setLayout(action_layout)
             
-            self.table.setCellWidget(row, 5, action_widget)
+            self.table.setCellWidget(row, 6, action_widget)
         
         self.table.resizeColumnsToContents()
         
         self.table.setColumnWidth(0, max(50, self.table.columnWidth(0)))
         self.table.setColumnWidth(2, max(80, self.table.columnWidth(2)))
         self.table.setColumnWidth(4, max(80, self.table.columnWidth(4)))
-        self.table.setColumnWidth(5, max(70, self.table.columnWidth(5)))
+        self.table.setColumnWidth(5, max(100, self.table.columnWidth(5)))
+        self.table.setColumnWidth(6, max(70, self.table.columnWidth(6)))
         
         self.show_status(f'Loaded {len(accounts)} accounts')
+
+    def toggle_show_in_balance(self, checked):
+        checkbox = self.sender()
+        account_id = checkbox.property('account_id')
+        
+        try:
+            success = self.budget_app.update_account_show_in_balance(account_id, checked)
+            if success:
+                self.show_status(f'Balance display updated for account')
+            else:
+                self.show_status('Error updating balance display', error=True)
+                checkbox.setChecked(not checked)
+        except Exception as e:
+            self.show_status('Error updating balance display', error=True)
+            checkbox.setChecked(not checked)
 
     def add_account(self):
         account_name = self.account_name_input.text().strip()
@@ -197,7 +232,9 @@ class AccountsDialog(QDialog):
             self.show_status('Please enter a currency', error=True)
             return
         
-        success = self.budget_app.add_account(account_name, account_type, company, currency)
+        show_in_balance = self.show_in_balance_checkbox.isChecked()
+        
+        success = self.budget_app.add_account(account_name, account_type, company, currency, show_in_balance)
         
         if success:
             self.show_status('Account added successfully!')
@@ -205,6 +242,7 @@ class AccountsDialog(QDialog):
             self.type_input.clear()
             self.company_input.clear()
             self.currency_input.clear()
+            self.show_in_balance_checkbox.setChecked(True)
             self.load_accounts()
             
             if hasattr(self.parent_window, 'update_balance_display'):

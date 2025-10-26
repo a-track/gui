@@ -242,18 +242,22 @@ class BudgetTrackerWindow(QMainWindow):
                 continue
                 
             account_obj = self.get_account_by_id(account_id)
-            if account_obj and hasattr(account_obj, 'show_in_balance') and not account_obj.show_in_balance:
-                continue
+
+            if account_obj:
+
+                show_in_balance = getattr(account_obj, 'show_in_balance', True)
+                if not show_in_balance:
+                    continue
                 
-            account_type = data['type']
-            if account_type in ['Cash', 'Bank', 'Credit']:
-                account_name = data['account_name']
+            account_name = data['account_name']
+            
+            if account_name not in account_groups:
+                account_groups[account_name] = []
+            
+            count = transaction_counts.get(account_id, 0)
+            account_groups[account_name].append((account_id, data, count))
                 
-                if account_name not in account_groups:
-                    account_groups[account_name] = []
-                
-                count = transaction_counts.get(account_id, 0)
-                account_groups[account_name].append((account_id, data, count))
+          
         
         group_transaction_counts = {}
         for account_name, accounts in account_groups.items():

@@ -27,14 +27,13 @@ class Transaction:
 
 
 class Account:
-    def __init__(self, id: int, account: str, type: str, company: str = None, 
-                 currency: str = 'USD', is_investment: bool = False):
+    def __init__(self, id, account, type, company, currency, show_in_balance=True):
         self.id = id
         self.account = account
         self.type = type
         self.company = company
         self.currency = currency
-        self.is_investment = is_investment
+        self.show_in_balance = show_in_balance
 
 
 class Category:
@@ -55,6 +54,7 @@ class BudgetApp:
         
         self.db_path = db_path
         self.init_database()
+        self.update_database_schema()
 
     def _get_connection(self):
         return duckdb.connect(self.db_path)
@@ -112,6 +112,16 @@ class BudgetApp:
         finally:
             conn.close()
 
+    def update_database_schema(self):
+        conn = self._get_connection()
+        try:
+            conn.execute("ALTER TABLE accounts ADD COLUMN show_in_balance BOOLEAN DEFAULT TRUE")
+            conn.commit()
+        except:
+            pass
+        finally:
+            conn.close()
+
     def _get_next_id(self, table_name: str) -> int:
         conn = self._get_connection()
         try:
@@ -124,31 +134,30 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT id, account, type, company, currency, is_investment
+                SELECT id, account, type, company, currency, show_in_balance
                 FROM accounts 
-                ORDER BY type, account
+                ORDER BY id
             """).fetchall()
-            return [Account(*row) for row in result]
+            
+            accounts = []
+            for row in result:
+                account = Account(row[0], row[1], row[2], row[3], row[4])
+                account.show_in_balance = bool(row[5]) if row[5] is not None else True
+                accounts.append(account)
+            return accounts
         except Exception as e:
             print(f"Error getting accounts: {e}")
             return []
         finally:
             conn.close()
 
-    def add_account(self, account: str, type: str, company: str = None, 
-                currency: str = 'CHF', is_investment: bool = False):
-        existing_account = self.get_account_by_name_currency(account, currency)
-        if existing_account:
-            print(f"Account {account} {currency} already exists with ID {existing_account.id}")
-            return False
-        
-        account_id = self._get_next_id('accounts')
+    def add_account(self, account_name, account_type, company, currency, show_in_balance=True):
         conn = self._get_connection()
         try:
             conn.execute("""
-                INSERT INTO accounts (id, account, type, company, currency, is_investment)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, [account_id, account, type, company, currency, is_investment])
+                INSERT INTO accounts (account, type, company, currency, show_in_balance)
+                VALUES (?, ?, ?, ?, ?)
+            """, [account_name, account_type, company, currency, show_in_balance])
             conn.commit()
             return True
         except Exception as e:
@@ -170,6 +179,22 @@ class BudgetApp:
             return True
         except Exception as e:
             print(f"Error updating account: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def update_account_show_in_balance(self, account_id, show_in_balance):
+        conn = self._get_connection()
+        try:
+            conn.execute("""
+                UPDATE accounts 
+                SET show_in_balance = ? 
+                WHERE id = ?
+            """, [show_in_balance, account_id])
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error updating show_in_balance: {e}")
             return False
         finally:
             conn.close()
