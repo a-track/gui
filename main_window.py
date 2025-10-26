@@ -269,8 +269,8 @@ class BudgetTrackerWindow(QMainWindow):
 
     def update_balance_display_with_data(self, balances):
         """Update balance display with pre-loaded data"""
-        # Combine all accounts (Cash, Bank, and Credit) and filter out zero balances
-        all_accounts = []
+        # Group accounts by name (ignoring currency suffix)
+        account_groups = {}
         for account_id, data in balances.items():
             # Skip accounts with zero balance
             if data['balance'] == 0:
@@ -278,17 +278,24 @@ class BudgetTrackerWindow(QMainWindow):
                 
             account_type = data['type']
             if account_type in ['Cash', 'Bank', 'Credit']:
-                all_accounts.append((account_id, data))
+                # Extract base account name (remove currency suffix)
+                account_name = data['account_name']
+                base_name = account_name.rsplit(' ', 1)[0]  # Remove last word (currency)
+                
+                if base_name not in account_groups:
+                    account_groups[base_name] = []
+                account_groups[base_name].append((account_id, data))
         
-        # Get all unique currencies from the filtered accounts and calculate totals
+        # Get all unique currencies from all accounts and calculate totals
         currency_totals = {}
-        for account_id, data in all_accounts:
-            currency = self.get_currency_for_account(account_id)
-            balance = data['balance']
-            if currency in currency_totals:
-                currency_totals[currency] += abs(balance)
-            else:
-                currency_totals[currency] = abs(balance)
+        for base_name, accounts in account_groups.items():
+            for account_id, data in accounts:
+                currency = self.get_currency_for_account(account_id)
+                balance = data['balance']
+                if currency in currency_totals:
+                    currency_totals[currency] += abs(balance)
+                else:
+                    currency_totals[currency] = abs(balance)
         
         # Sort currencies by total amount in descending order
         all_currencies = sorted(currency_totals.keys(), key=lambda x: currency_totals[x], reverse=True)
@@ -307,16 +314,22 @@ class BudgetTrackerWindow(QMainWindow):
         balance_text += header + "\n"
         balance_text += "-" * (account_col_width + len(all_currencies) * currency_col_width) + "\n"
         
-        # All accounts (Cash, Bank, and Credit)
+        # Display one line per account group
         total_by_currency = {currency: 0.0 for currency in all_currencies}
-        for account_id, data in sorted(all_accounts, key=lambda x: x[0]):
-            account_currency = self.get_currency_for_account(account_id)
-            account_name = f"{data['account_name']} {account_currency}"
-            balance = data['balance']
+        for base_name in sorted(account_groups.keys()):
+            accounts = account_groups[base_name]
             
-            line = f"{account_name:{account_col_width}}"
+            # Calculate balances per currency for this account group
+            group_balances = {currency: 0.0 for currency in all_currencies}
+            for account_id, data in accounts:
+                currency = self.get_currency_for_account(account_id)
+                group_balances[currency] += data['balance']
+            
+            # Display one line for the account group
+            line = f"{base_name:{account_col_width}}"
             for currency in all_currencies:
-                if currency == account_currency:
+                balance = group_balances[currency]
+                if balance != 0:
                     line += f"{balance:>{currency_col_width}.2f}"
                     total_by_currency[currency] += balance
                 else:
