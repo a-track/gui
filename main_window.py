@@ -2,7 +2,7 @@ import sys
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QPushButton, QLineEdit, 
                              QComboBox, QRadioButton, QButtonGroup, QMessageBox,
-                             QDateEdit, QGroupBox, QScrollArea, QProgressBar)
+                             QDateEdit, QGroupBox, QScrollArea, QProgressBar, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, QDate, QThread, pyqtSignal
 
 from models import BudgetApp
@@ -97,8 +97,17 @@ class BudgetTrackerWindow(QMainWindow):
         type_layout.addWidget(self.income_radio)
         type_layout.addWidget(self.expense_radio)
         type_layout.addWidget(self.transfer_radio)
+        
         type_layout.addStretch()
         form_layout.addLayout(type_layout)
+        
+        # Starting balance checkbox - only visible for transfers
+        self.starting_balance_layout = QHBoxLayout()
+        self.starting_balance_checkbox = QCheckBox('This is a starting balance transaction')
+        self.starting_balance_checkbox.toggled.connect(self.update_ui_for_type)
+        self.starting_balance_layout.addWidget(self.starting_balance_checkbox)
+        self.starting_balance_layout.addStretch()
+        form_layout.addLayout(self.starting_balance_layout)
         
         date_layout = QHBoxLayout()
         date_layout.addWidget(QLabel('Date:'))
@@ -117,14 +126,15 @@ class BudgetTrackerWindow(QMainWindow):
         amount_layout.addStretch()
         form_layout.addLayout(amount_layout)
         
-        account_layout = QHBoxLayout()
-        account_layout.addWidget(QLabel('Account:'))
+        # Account layout
+        self.from_account_layout = QHBoxLayout()
+        self.from_account_layout.addWidget(QLabel('Account:'))
         self.account_combo = QComboBox()
         self.account_combo.setMinimumWidth(200)
         self.update_account_combo()
-        account_layout.addWidget(self.account_combo)
-        account_layout.addStretch()
-        form_layout.addLayout(account_layout)
+        self.from_account_layout.addWidget(self.account_combo)
+        self.from_account_layout.addStretch()
+        form_layout.addLayout(self.from_account_layout)
         
         self.parent_category_layout = QHBoxLayout()
         self.parent_category_layout.addWidget(QLabel('Category:'))
@@ -152,13 +162,28 @@ class BudgetTrackerWindow(QMainWindow):
         self.to_account_layout.addStretch()
         form_layout.addLayout(self.to_account_layout)
         
-        payee_layout = QHBoxLayout()
-        payee_layout.addWidget(QLabel('Payee:'))
+        # Add to_amount field for transfers with different currencies
+        self.to_amount_layout = QHBoxLayout()
+        self.to_amount_layout.addWidget(QLabel('To Amount:'))
+        self.to_amount_input = QLineEdit()
+        self.to_amount_input.setPlaceholderText('Receiving amount (if different currency)')
+        self.to_amount_layout.addWidget(self.to_amount_input)
+        
+        self.exchange_rate_label = QLabel('Exchange Rate: 1.0000')
+        self.exchange_rate_label.setStyleSheet('color: #666; font-style: italic;')
+        self.to_amount_layout.addWidget(self.exchange_rate_label)
+        
+        self.to_amount_layout.addStretch()
+        form_layout.addLayout(self.to_amount_layout)
+        
+        # Payee layout
+        self.payee_layout = QHBoxLayout()
+        self.payee_layout.addWidget(QLabel('Payee:'))
         self.payee_input = QLineEdit()
         self.payee_input.setPlaceholderText('Optional')
-        payee_layout.addWidget(self.payee_input)
-        payee_layout.addStretch()
-        form_layout.addLayout(payee_layout)
+        self.payee_layout.addWidget(self.payee_input)
+        self.payee_layout.addStretch()
+        form_layout.addLayout(self.payee_layout)
         
         notes_layout = QHBoxLayout()
         notes_layout.addWidget(QLabel('Notes:'))
@@ -244,7 +269,9 @@ class BudgetTrackerWindow(QMainWindow):
             account_obj = self.get_account_by_id(account_id)
 
             if account_obj:
-
+                # Skip starting balance account (ID 0)
+                if account_obj.id == 0:
+                    continue
                 show_in_balance = getattr(account_obj, 'show_in_balance', True)
                 if not show_in_balance:
                     continue
@@ -321,6 +348,9 @@ class BudgetTrackerWindow(QMainWindow):
         accounts = self.budget_app.get_all_accounts()
         accounts_sorted = sorted(accounts, key=lambda x: x.id)
         for account in accounts_sorted:
+            # Skip starting balance account (ID 0)
+            if account.id == 0:
+                continue
             display_text = f"{account.account} {account.currency}"
             self.account_combo.addItem(display_text, account.id)
         self.account_combo.adjustSize()
@@ -330,6 +360,9 @@ class BudgetTrackerWindow(QMainWindow):
         accounts = self.budget_app.get_all_accounts()
         accounts_sorted = sorted(accounts, key=lambda x: x.id)
         for account in accounts_sorted:
+            # Skip starting balance account (ID 0)
+            if account.id == 0:
+                continue
             display_text = f"{account.account} {account.currency}"
             self.to_account_combo.addItem(display_text, account.id)
         self.to_account_combo.adjustSize()
@@ -337,18 +370,94 @@ class BudgetTrackerWindow(QMainWindow):
     def update_ui_for_type(self):
         is_transfer = self.transfer_radio.isChecked()
         is_income = self.income_radio.isChecked()
+        is_starting_balance = self.starting_balance_checkbox.isChecked()
         
-        self.parent_category_layout.itemAt(0).widget().setVisible(not is_transfer)
-        self.parent_category_combo.setVisible(not is_transfer)
-        self.sub_category_layout.itemAt(0).widget().setVisible(not is_transfer)
-        self.sub_category_combo.setVisible(not is_transfer)
+        # Starting balance checkbox only visible for transfers
+        self.starting_balance_layout.itemAt(0).widget().setVisible(is_transfer)
         
-        self.to_account_layout.itemAt(0).widget().setVisible(is_transfer)
-        self.to_account_combo.setVisible(is_transfer)
+        # Show/hide elements based on transaction type
+        self.parent_category_layout.itemAt(0).widget().setVisible(not is_transfer and not is_starting_balance)
+        self.parent_category_combo.setVisible(not is_transfer and not is_starting_balance)
+        self.sub_category_layout.itemAt(0).widget().setVisible(not is_transfer and not is_starting_balance)
+        self.sub_category_combo.setVisible(not is_transfer and not is_starting_balance)
         
-        if not is_transfer:
+        # Payee should not be visible for transfers
+        payee_visible = not is_transfer and not is_starting_balance
+        self.payee_layout.itemAt(0).widget().setVisible(payee_visible)
+        self.payee_input.setVisible(payee_visible)
+        
+        # To account layout - visible for transfers, but different for starting balance
+        self.to_account_layout.itemAt(0).widget().setVisible(is_transfer or is_starting_balance)
+        self.to_account_combo.setVisible(is_transfer or is_starting_balance)
+        
+        # From account - hidden for starting balance
+        from_account_visible = not is_starting_balance
+        self.from_account_layout.itemAt(0).widget().setVisible(from_account_visible)
+        self.account_combo.setVisible(from_account_visible)
+        
+        # Show to_amount only for transfers (not starting balance)
+        to_amount_visible = is_transfer and not is_starting_balance
+        self.to_amount_layout.itemAt(0).widget().setVisible(to_amount_visible)
+        self.to_amount_input.setVisible(to_amount_visible)
+        self.exchange_rate_label.setVisible(to_amount_visible)
+        
+        # Connect amount changes to calculate exchange rate
+        if is_transfer and not is_starting_balance:
+            self.amount_input.textChanged.connect(self.calculate_exchange_rate)
+            self.to_amount_input.textChanged.connect(self.calculate_exchange_rate_from_to)
+        else:
+            try:
+                self.amount_input.textChanged.disconnect(self.calculate_exchange_rate)
+            except:
+                pass
+            try:
+                self.to_amount_input.textChanged.disconnect(self.calculate_exchange_rate_from_to)
+            except:
+                pass
+        
+        if not is_transfer and not is_starting_balance:
             trans_type = 'income' if is_income else 'expense'
             self.update_parent_categories(trans_type)
+        
+        # Update labels for starting balance
+        if is_starting_balance:
+            self.to_account_layout.itemAt(0).widget().setText('Account:')
+            self.amount_input.setPlaceholderText('Starting balance amount')
+        else:
+            self.to_account_layout.itemAt(0).widget().setText('To Account:')
+            self.amount_input.setPlaceholderText('Enter amount')
+
+    def calculate_exchange_rate(self):
+        """Calculate exchange rate when from amount changes"""
+        try:
+            from_amount = float(self.amount_input.text())
+            to_amount_text = self.to_amount_input.text().strip()
+            
+            if to_amount_text and float(to_amount_text) > 0:
+                to_amount = float(to_amount_text)
+                if from_amount > 0:
+                    exchange_rate = to_amount / from_amount
+                    self.exchange_rate_label.setText(f'Exchange Rate: {exchange_rate:.4f}')
+            elif from_amount > 0:
+                # Default to 1:1 if to_amount not entered
+                self.exchange_rate_label.setText('Exchange Rate: 1.0000')
+                self.to_amount_input.setText(str(from_amount))
+        except (ValueError, ZeroDivisionError):
+            self.exchange_rate_label.setText('Exchange Rate: -')
+
+    def calculate_exchange_rate_from_to(self):
+        """Calculate exchange rate when to amount changes"""
+        try:
+            to_amount = float(self.to_amount_input.text())
+            from_amount_text = self.amount_input.text().strip()
+            
+            if from_amount_text and float(from_amount_text) > 0:
+                from_amount = float(from_amount_text)
+                if to_amount > 0:
+                    exchange_rate = to_amount / from_amount
+                    self.exchange_rate_label.setText(f'Exchange Rate: {exchange_rate:.4f}')
+        except (ValueError, ZeroDivisionError):
+            self.exchange_rate_label.setText('Exchange Rate: -')
 
     def update_parent_categories(self, trans_type):
         self.parent_category_combo.clear()
@@ -426,18 +535,50 @@ class BudgetTrackerWindow(QMainWindow):
         payee = self.payee_input.text().strip()
         notes = self.notes_input.text().strip()
         
-        if self.transfer_radio.isChecked():
+        is_starting_balance = self.starting_balance_checkbox.isChecked()
+        
+        if is_starting_balance:
+            # Starting balance transaction - treat exactly like a transfer
+            to_account_id = self.to_account_combo.currentData()
+            
+            # For starting balance, from_account is the Starting Balance account (ID 0)
+            from_account_id = 0  # Starting Balance account
+            from_amount = amount
+            to_amount = amount
+            
+            success = self.budget_app.add_transfer(
+                date=date,
+                from_account_id=from_account_id,
+                to_account_id=to_account_id,
+                from_amount=from_amount,
+                to_amount=to_amount,
+                notes=notes
+            )
+            
+        elif self.transfer_radio.isChecked():
             to_account_id = self.to_account_combo.currentData()
             
             if account_id == to_account_id:
                 self.show_status('Cannot transfer to the same account', error=True)
                 return
             
+            # Get to_amount if provided, otherwise use from_amount
+            to_amount_text = self.to_amount_input.text().strip()
+            if to_amount_text:
+                try:
+                    to_amount = float(to_amount_text)
+                except ValueError:
+                    self.show_status('Please enter a valid number for To Amount', error=True)
+                    return
+            else:
+                to_amount = amount
+            
             success = self.budget_app.add_transfer(
                 date=date,
                 from_account_id=account_id,
                 to_account_id=to_account_id,
                 from_amount=amount,
+                to_amount=to_amount,
                 notes=notes
             )
             
@@ -453,7 +594,7 @@ class BudgetTrackerWindow(QMainWindow):
                 notes=notes
             )
             
-        else:
+        else:  # Expense
             sub_category = self.sub_category_combo.currentText()
             
             success = self.budget_app.add_expense(
@@ -468,10 +609,12 @@ class BudgetTrackerWindow(QMainWindow):
         if success:
             self.show_status('Transaction added successfully! ✓')
             self.amount_input.clear()
+            self.to_amount_input.clear()
             self.payee_input.clear()
             self.notes_input.clear()
             self.account_combo.setCurrentIndex(0)
             self.to_account_combo.setCurrentIndex(0)
+            self.starting_balance_checkbox.setChecked(False)
         else:
             self.show_status('Error adding transaction', error=True)
 
