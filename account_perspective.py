@@ -136,10 +136,9 @@ class AccountPerspectiveDialog(QDialog):
             accounts = self.budget_app.get_all_accounts()
             all_transactions = self.budget_app.get_all_transactions()
             
-            # Count transactions per account
             account_transaction_count = {}
             for account in accounts:
-                if account.id == 0:  # Skip account with ID=0
+                if account.id == 0:
                     continue
                 count = 0
                 for trans in all_transactions:
@@ -148,13 +147,11 @@ class AccountPerspectiveDialog(QDialog):
                         count += 1
                 account_transaction_count[account.id] = count
             
-            # Filter out account ID=0 and sort by transaction count (descending)
             filtered_accounts = [acc for acc in accounts if acc.id != 0]
             sorted_accounts = sorted(filtered_accounts, 
                                    key=lambda x: account_transaction_count.get(x.id, 0), 
                                    reverse=True)
             
-            # Add accounts to combo box with transaction count in display
             for account in sorted_accounts:
                 transaction_count = account_transaction_count.get(account.id, 0)
                 display_text = f"{account.account} {account.currency} ({transaction_count})"
@@ -162,7 +159,6 @@ class AccountPerspectiveDialog(QDialog):
                 
         except Exception as e:
             print(f"Error populating accounts combo: {e}")
-            # Fallback: just show all accounts except ID=0 without sorting
             accounts = self.budget_app.get_all_accounts()
             filtered_accounts = [acc for acc in accounts if acc.id != 0]
             for account in filtered_accounts:
