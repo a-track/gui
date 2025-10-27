@@ -154,10 +154,13 @@ class BudgetApp:
     def add_account(self, account_name, account_type, company, currency, show_in_balance=True):
         conn = self._get_connection()
         try:
+            # Get the next available ID
+            next_id = self._get_next_id('accounts')
+            
             conn.execute("""
-                INSERT INTO accounts (account, type, company, currency, show_in_balance)
-                VALUES (?, ?, ?, ?, ?)
-            """, [account_name, account_type, company, currency, show_in_balance])
+                INSERT INTO accounts (id, account, type, company, currency, show_in_balance)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, [next_id, account_name, account_type, company, currency, show_in_balance])
             conn.commit()
             return True
         except Exception as e:
