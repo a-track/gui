@@ -28,11 +28,7 @@ class AccountPerspectiveDialog(QDialog):
         account_layout.addWidget(QLabel('Select Account:'))
         
         self.account_combo = QComboBox()
-        accounts = self.budget_app.get_all_accounts()
-        accounts_sorted = sorted(accounts, key=lambda x: x.id)
-        for account in accounts_sorted:
-            display_text = f"{account.account} {account.currency}"
-            self.account_combo.addItem(display_text, account.id)
+        self.populate_accounts_combo()
         self.account_combo.currentIndexChanged.connect(self.on_account_changed)
         account_layout.addWidget(self.account_combo)
         
@@ -130,9 +126,48 @@ class AccountPerspectiveDialog(QDialog):
         
         self.set_current_month_year()
         
-        if accounts:
+        if self.account_combo.count() > 0:
             self.account_combo.setCurrentIndex(0)
             self.on_account_changed(0)
+    
+    def populate_accounts_combo(self):
+        """Populate accounts combo box, filtering out ID=0 and sorting by transaction count"""
+        try:
+            accounts = self.budget_app.get_all_accounts()
+            all_transactions = self.budget_app.get_all_transactions()
+            
+            # Count transactions per account
+            account_transaction_count = {}
+            for account in accounts:
+                if account.id == 0:  # Skip account with ID=0
+                    continue
+                count = 0
+                for trans in all_transactions:
+                    if (trans.account_id == account.id or 
+                        trans.to_account_id == account.id):
+                        count += 1
+                account_transaction_count[account.id] = count
+            
+            # Filter out account ID=0 and sort by transaction count (descending)
+            filtered_accounts = [acc for acc in accounts if acc.id != 0]
+            sorted_accounts = sorted(filtered_accounts, 
+                                   key=lambda x: account_transaction_count.get(x.id, 0), 
+                                   reverse=True)
+            
+            # Add accounts to combo box with transaction count in display
+            for account in sorted_accounts:
+                transaction_count = account_transaction_count.get(account.id, 0)
+                display_text = f"{account.account} {account.currency} ({transaction_count})"
+                self.account_combo.addItem(display_text, account.id)
+                
+        except Exception as e:
+            print(f"Error populating accounts combo: {e}")
+            # Fallback: just show all accounts except ID=0 without sorting
+            accounts = self.budget_app.get_all_accounts()
+            filtered_accounts = [acc for acc in accounts if acc.id != 0]
+            for account in filtered_accounts:
+                display_text = f"{account.account} {account.currency}"
+                self.account_combo.addItem(display_text, account.id)
     
     def populate_years(self):
         current_year = datetime.datetime.now().year
@@ -349,7 +384,7 @@ class AccountPerspectiveDialog(QDialog):
         self.current_balance_label.setText(balance_text)
         self.current_balance_label.setStyleSheet(f'font-weight: bold; font-size: 14px; color: {balance_color};')
         
-        account_name = self.account_combo.currentText()
+        account_name = self.account_combo.currentText().split(' (')[0]  # Remove transaction count from display
         self.show_status(f'Showing {len(transaction_history)} transactions for {account_name} ({filter_info})')
         
     def populate_table(self, transaction_history):

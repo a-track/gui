@@ -110,6 +110,7 @@ class AccountsDialog(QDialog):
     def load_accounts(self):
         try:
             accounts = self.budget_app.get_all_accounts()
+            accounts = [account for account in accounts if account.id != 0]
             accounts = sorted(accounts, key=lambda x: x.id)
             self.populate_table(accounts)
         except Exception as e:

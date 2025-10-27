@@ -55,6 +55,7 @@ class BudgetApp:
         self.db_path = db_path
         self.init_database()
         self.update_database_schema()
+        self.get_or_create_starting_balance_account()
 
     def _get_connection(self):
         return duckdb.connect(self.db_path)
@@ -317,6 +318,9 @@ class BudgetApp:
         trans_id = self._get_next_id('transactions')
         conn = self._get_connection()
         try:
+            if from_account_id == 0 or to_account_id == 0:
+                self.get_or_create_starting_balance_account()
+                
             conn.execute("""
                 INSERT INTO transactions 
                 (id, date, type, account_id, to_account_id, amount, to_amount, qty, notes)
@@ -327,6 +331,30 @@ class BudgetApp:
         except Exception as e:
             print(f"Error adding transfer: {e}")
             return False
+        finally:
+            conn.close()
+
+ 
+    def get_or_create_starting_balance_account(self):
+        conn = self._get_connection()
+        try:
+            result = conn.execute("""
+                SELECT id, account, type, company, currency, show_in_balance
+                FROM accounts WHERE id = 0
+            """).fetchone()
+            
+            if result:
+                return Account(*result)
+            else:
+                conn.execute("""
+                    INSERT INTO accounts (id, account, type, company, currency, show_in_balance)
+                    VALUES (0, 'Starting Balance', 'System', 'System', 'MULTI', FALSE)
+                """)
+                conn.commit()
+                return Account(0, 'Starting Balance', 'System', 'System', 'MULTI', False)
+        except Exception as e:
+            print(f"Error getting starting balance account: {e}")
+            return None
         finally:
             conn.close()
 
