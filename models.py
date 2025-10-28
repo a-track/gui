@@ -43,14 +43,6 @@ class Category:
         self.category = category
 
 
-class Budget:
-    def __init__(self, year: int, month: int, sub_category: str, budget_amount: float):
-        self.year = year
-        self.month = month
-        self.sub_category = sub_category
-        self.budget_amount = budget_amount
-
-
 class BudgetApp:
     def __init__(self, db_path=None):
         if db_path is None:
@@ -114,13 +106,11 @@ class BudgetApp:
                 )
             """)
             
+            # Create the new simplified budgets table
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS budgets (
-                    year INTEGER NOT NULL,
-                    month INTEGER NOT NULL,
-                    sub_category VARCHAR NOT NULL,
+                CREATE TABLE IF NOT EXISTS budgets_new (
+                    sub_category VARCHAR PRIMARY KEY,
                     budget_amount DECIMAL(10, 2) NOT NULL,
-                    PRIMARY KEY (year, month, sub_category),
                     FOREIGN KEY (sub_category) REFERENCES categories(sub_category)
                 )
             """)
@@ -136,10 +126,56 @@ class BudgetApp:
     def update_database_schema(self):
         conn = self._get_connection()
         try:
+            # Add show_in_balance column if it doesn't exist
             conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_in_balance BOOLEAN DEFAULT TRUE")
+            
+            # Check if old budgets table exists with year/month columns
+            result = conn.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='budgets'
+            """).fetchone()
+            
+            if result:
+                # Check if old table has year/month columns
+                columns_result = conn.execute("PRAGMA table_info(budgets)").fetchall()
+                has_year_month = any(col[1] in ['year', 'month'] for col in columns_result)
+                
+                if has_year_month:
+                    print("Migrating from old budget schema to new schema...")
+                    # Migrate data from old table to new table
+                    conn.execute("""
+                        INSERT OR REPLACE INTO budgets_new (sub_category, budget_amount)
+                        SELECT DISTINCT sub_category, budget_amount 
+                        FROM budgets 
+                        WHERE budget_amount > 0
+                    """)
+                    # Drop the old table
+                    conn.execute("DROP TABLE budgets")
+                    # Rename new table to budgets
+                    conn.execute("ALTER TABLE budgets_new RENAME TO budgets")
+                    print("Budget schema migration completed!")
+                else:
+                    # Table exists but doesn't have year/month, so it's already the new schema
+                    conn.execute("DROP TABLE IF EXISTS budgets_new")
+            else:
+                # No old budgets table, create the new one
+                conn.execute("ALTER TABLE budgets_new RENAME TO budgets")
+            
             conn.commit()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error updating database schema: {e}")
+            # If migration fails, ensure we have a proper budgets table
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS budgets (
+                        sub_category VARCHAR PRIMARY KEY,
+                        budget_amount DECIMAL(10, 2) NOT NULL,
+                        FOREIGN KEY (sub_category) REFERENCES categories(sub_category)
+                    )
+                """)
+                conn.commit()
+            except:
+                pass
         finally:
             conn.close()
 
@@ -572,58 +608,48 @@ class BudgetApp:
         finally:
             conn.close()
 
-    def add_or_update_monthly_budget(self, sub_category: str, budget_amount: float):
-        """Add or update a monthly budget for a subcategory (applies to all months)"""
+    def add_or_update_budget(self, sub_category: str, budget_amount: float):
+        """Add or update a monthly budget for a subcategory"""
         conn = self._get_connection()
         try:
-            # We'll use a special table for monthly budgets that don't depend on specific months
-            # First, ensure the table exists
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS monthly_budgets (
-                    sub_category VARCHAR PRIMARY KEY,
-                    budget_amount DECIMAL(10, 2) NOT NULL,
-                    FOREIGN KEY (sub_category) REFERENCES categories(sub_category)
-                )
-            """)
-            
-            conn.execute("""
-                INSERT OR REPLACE INTO monthly_budgets (sub_category, budget_amount)
+                INSERT OR REPLACE INTO budgets (sub_category, budget_amount)
                 VALUES (?, ?)
             """, [sub_category, budget_amount])
             conn.commit()
             return True
         except Exception as e:
-            print(f"Error adding/updating monthly budget: {e}")
+            print(f"Error adding/updating budget: {e}")
             return False
         finally:
             conn.close()
 
-    def get_all_budgets_for_period(self, year: int, month: int):
-        """Get all budgets for a specific period"""
+    def get_all_budgets(self):
+        """Get all monthly budgets"""
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT sub_category, budget_amount FROM budgets 
-                WHERE year = ? AND month = ?
+                SELECT sub_category, budget_amount FROM budgets
                 ORDER BY sub_category
-            """, [year, month]).fetchall()
+            """).fetchall()
             budgets = {}
             for row in result:
                 budgets[row[0]] = float(row[1])
             return budgets
         except Exception as e:
-            print(f"Error getting budgets for period: {e}")
+            print(f"Error getting budgets: {e}")
             return {}
         finally:
             conn.close()
 
-    def delete_budget(self, year: int, month: int, sub_category: str):
+    def delete_budget(self, sub_category: str):
+        """Delete a budget"""
         conn = self._get_connection()
         try:
             conn.execute("""
                 DELETE FROM budgets 
-                WHERE year = ? AND month = ? AND sub_category = ?
-            """, [year, month, sub_category])
+                WHERE sub_category = ?
+            """, [sub_category])
             conn.commit()
             return True
         except Exception as e:
@@ -634,7 +660,7 @@ class BudgetApp:
 
     def get_budget_vs_expenses(self, year: int, month: int):
         """Get budget vs actual expenses for a given month"""
-        budgets = self.get_all_budgets_for_period(year, month)
+        budgets = self.get_all_budgets()
         all_transactions = self.get_all_transactions()
         
         expenses = {}
@@ -693,127 +719,4 @@ class BudgetApp:
             if category.category not in result:
                 result[category.category] = []
             result[category.category].append(category.sub_category)
-        return result
-    
-
-    def add_or_update_monthly_budget(self, sub_category: str, budget_amount: float):
-        conn = self._get_connection()
-        try:
-            # We'll use a special table for monthly budgets that don't depend on specific months
-            # First, ensure the table exists
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS monthly_budgets (
-                    sub_category VARCHAR PRIMARY KEY,
-                    budget_amount DECIMAL(10, 2) NOT NULL,
-                    FOREIGN KEY (sub_category) REFERENCES categories(sub_category)
-                )
-            """)
-            
-            conn.execute("""
-                INSERT OR REPLACE INTO monthly_budgets (sub_category, budget_amount)
-                VALUES (?, ?)
-            """, [sub_category, budget_amount])
-            conn.commit()
-            return True
-        except Exception as e:
-            print(f"Error adding/updating monthly budget: {e}")
-            return False
-        finally:
-            conn.close()
-
-    def get_all_monthly_budgets(self):
-        """Get all monthly budgets (not tied to specific months)"""
-        conn = self._get_connection()
-        try:
-            # Check if monthly_budgets table exists
-            result = conn.execute("""
-                SELECT name FROM sqlite_master 
-                WHERE type='table' AND name='monthly_budgets'
-            """).fetchone()
-            
-            if not result:
-                return {}
-                
-            result = conn.execute("""
-                SELECT sub_category, budget_amount FROM monthly_budgets
-                ORDER BY sub_category
-            """).fetchall()
-            budgets = {}
-            for row in result:
-                budgets[row[0]] = float(row[1])
-            return budgets
-        except Exception as e:
-            print(f"Error getting monthly budgets: {e}")
-            return {}
-        finally:
-            conn.close()
-
-    def delete_monthly_budget(self, sub_category: str):
-        """Delete a monthly budget"""
-        conn = self._get_connection()
-        try:
-            conn.execute("""
-                DELETE FROM monthly_budgets 
-                WHERE sub_category = ?
-            """, [sub_category])
-            conn.commit()
-            return True
-        except Exception as e:
-            print(f"Error deleting monthly budget: {e}")
-            return False
-        finally:
-            conn.close()
-
-    def get_budget_vs_expenses(self, year: int, month: int):
-        """Get budget vs actual expenses for a given month using monthly budgets"""
-        monthly_budgets = self.get_all_monthly_budgets()
-        all_transactions = self.get_all_transactions()
-        
-        expenses = {}
-        for trans in all_transactions:
-            if trans.type == 'expense' and trans.date:
-                try:
-                    trans_date = trans.date
-                    if isinstance(trans_date, str):
-                        trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
-                    
-                    if trans_date.year == year and trans_date.month == month:
-                        sub_category = trans.sub_category or 'Uncategorized'
-                        amount = float(trans.amount or 0)
-                        if sub_category in expenses:
-                            expenses[sub_category] += amount
-                        else:
-                            expenses[sub_category] = amount
-                except (ValueError, AttributeError):
-                    continue
-        
-        result = {}
-        categories = self.get_all_categories()
-        category_map = {cat.sub_category: cat.category for cat in categories}
-        
-
-        for sub_category, budget_amount in monthly_budgets.items():
-            category = category_map.get(sub_category, 'Other')
-            actual_amount = expenses.get(sub_category, 0.0)
-            remaining = budget_amount - actual_amount
-            
-            result[sub_category] = {
-                'category': category,
-                'budget': budget_amount,
-                'actual': actual_amount,
-                'remaining': remaining,
-                'percentage': (actual_amount / budget_amount * 100) if budget_amount > 0 else 0
-            }
-        
-        for sub_category, actual_amount in expenses.items():
-            if sub_category not in result:
-                category = category_map.get(sub_category, 'Other')
-                result[sub_category] = {
-                    'category': category,
-                    'budget': 0.0,
-                    'actual': actual_amount,
-                    'remaining': -actual_amount,
-                    'percentage': 0.0
-                }
-        
         return result

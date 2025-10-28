@@ -119,7 +119,7 @@ class BudgetDialog(QDialog):
             year, month = self.get_selected_period()
             
             # Get monthly budgets (fixed monthly budget that applies to all months)
-            monthly_budgets = self.budget_app.get_all_monthly_budgets()
+            monthly_budgets = self.budget_app.get_all_budgets()  # CHANGED: get_all_budgets()
             
             # Get current month expenses
             current_expenses = self.budget_app.get_budget_vs_expenses(year, month)
@@ -432,7 +432,7 @@ class SetMonthlyBudgetsDialog(QDialog):
             sub_categories_by_category[category.category].append(category.sub_category)
         
         # Load current monthly budgets to pre-fill values
-        current_budgets = self.budget_app.get_all_monthly_budgets()
+        current_budgets = self.budget_app.get_all_budgets()  # CHANGED: get_all_budgets()
         
         for category_name, sub_categories in sub_categories_by_category.items():
             # Category header
@@ -544,7 +544,7 @@ class SetMonthlyBudgetsDialog(QDialog):
                 sub_category = budget_info['sub_category']
                 amount = budget_info['amount']
                 
-                success = self.budget_app.add_or_update_monthly_budget(sub_category, amount)
+                success = self.budget_app.add_or_update_budget(sub_category, amount)  # CHANGED: add_or_update_budget()
                 if success:
                     success_count += 1
             
