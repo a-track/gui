@@ -38,18 +38,26 @@ class BudgetTrackerWindow(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle('Budget Tracker')
-        self.setMinimumSize(1000, 800)
-        self.resize(1200, 800)
+        self.setMinimumSize(950, 800)
         
+        # Create a scroll area for the entire window
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        # Create central widget that will hold all content
         central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        self.setCentralWidget(scroll_area)
+        scroll_area.setWidget(central_widget)
         
         main_layout = QVBoxLayout()
         central_widget.setLayout(main_layout)
         
+        # Balance section with proper spacing
         balance_header_layout = QHBoxLayout()
         balance_label = QLabel('Account Balances')
-        balance_label.setStyleSheet('font-weight: bold; font-size: 14px;')
+        balance_label.setStyleSheet('font-weight: bold; font-size: 16px; margin-bottom: 10px;')
         
         refresh_btn = QPushButton('Refresh Balances')
         refresh_btn.clicked.connect(self.load_balances_async)
@@ -62,27 +70,50 @@ class BudgetTrackerWindow(QMainWindow):
         
         main_layout.addLayout(balance_header_layout)
         
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setMaximumHeight(2000)
-        scroll_area.setStyleSheet('border: 1px solid #cccccc; border-radius: 5px;')
+        # Balance display with proper spacing
+        balance_scroll_area = QScrollArea()
+        balance_scroll_area.setWidgetResizable(True)
+        balance_scroll_area.setMinimumHeight(200)  # Increased minimum height
+        balance_scroll_area.setMaximumHeight(400)  # Increased maximum height
+        balance_scroll_area.setStyleSheet('border: 1px solid #cccccc; border-radius: 5px; margin-bottom: 20px;')
         
         balance_widget = QWidget()
         self.balance_layout = QVBoxLayout(balance_widget)
         
         self.balance_display = QLabel('Loading balances...')
-        self.balance_display.setStyleSheet('background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-family: "Courier New", monospace; font-size: 12px;')
+        self.balance_display.setStyleSheet('''
+            background-color: #f5f5f5; 
+            padding: 20px;  /* Increased padding */
+            border-radius: 5px; 
+            font-family: "Courier New", monospace; 
+            font-size: 13px;
+            line-height: 1.4;
+        ''')
         self.balance_display.setWordWrap(False)
         self.balance_layout.addWidget(self.balance_display)
         
-        scroll_area.setWidget(balance_widget)
-        main_layout.addWidget(scroll_area)
+        balance_scroll_area.setWidget(balance_widget)
+        main_layout.addWidget(balance_scroll_area)
         
         main_layout.addSpacing(20)
         
+        # Transaction form with same header style as Account Balances
         form_group = QGroupBox('Add Transaction')
-        form_group.setStyleSheet('QGroupBox { font-weight: bold}')
+        form_group.setStyleSheet('''
+            QGroupBox { 
+                font-weight: bold; 
+                font-size: 16px; 
+                margin-top: 10px; 
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        ''')
         form_layout = QVBoxLayout()
+        form_layout.setSpacing(10)  # Add spacing between form elements
         
         type_layout = QHBoxLayout()
         type_layout.addWidget(QLabel('Transaction Type:'))
@@ -227,43 +258,136 @@ class BudgetTrackerWindow(QMainWindow):
         self.status_label.setStyleSheet('color: #4CAF50; padding: 5px; font-weight: bold;')
         main_layout.addWidget(self.status_label)
         
-        button_layout = QHBoxLayout()
+        # All 6 buttons in one row with vertical alignment
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(10)  # Space between buttons
         
         add_btn = QPushButton('Add Transaction')
         add_btn.clicked.connect(self.add_transaction)
-        add_btn.setStyleSheet('background-color: #2196F3; color: white; padding: 10px; font-size: 14px;')
-        button_layout.addWidget(add_btn)
-        
-        view_btn = QPushButton('View All Transactions')
-        view_btn.clicked.connect(self.view_transactions)
-        view_btn.setStyleSheet('background-color: #4CAF50; color: white; padding: 10px; font-size: 14px;')
-        button_layout.addWidget(view_btn)
-
-        account_view_btn = QPushButton('Account Perspective')
-        account_view_btn.clicked.connect(self.view_account_perspective)
-        account_view_btn.setStyleSheet('background-color: #9C27B0; color: white; padding: 10px; font-size: 14px;')
-        button_layout.addWidget(account_view_btn)
+        add_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #2196F3; 
+                color: white; 
+                padding: 12px 8px; 
+                font-size: 14px; 
+                border: none; 
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        ''')
+        add_btn.setMinimumWidth(140)
+        buttons_layout.addWidget(add_btn)
         
         budget_btn = QPushButton('Budget vs Expenses')
         budget_btn.clicked.connect(self.view_budget)
-        budget_btn.setStyleSheet('background-color: #FF5722; color: white; padding: 10px; font-size: 14px;')
-        button_layout.addWidget(budget_btn)
+        budget_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #FF5722; 
+                color: white; 
+                padding: 12px 8px; 
+                font-size: 14px; 
+                border: none; 
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #E64A19;
+            }
+        ''')
+        budget_btn.setMinimumWidth(140)
+        buttons_layout.addWidget(budget_btn)
         
-        main_layout.addLayout(button_layout)
+        view_btn = QPushButton('View All Transactions')
+        view_btn.clicked.connect(self.view_transactions)
+        view_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #4CAF50; 
+                color: white; 
+                padding: 12px 8px; 
+                font-size: 14px; 
+                border: none; 
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #388E3C;
+            }
+        ''')
+        view_btn.setMinimumWidth(140)
+        buttons_layout.addWidget(view_btn)
 
-        management_layout = QHBoxLayout()
+        account_view_btn = QPushButton('Account Perspective')
+        account_view_btn.clicked.connect(self.view_account_perspective)
+        account_view_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #9C27B0; 
+                color: white; 
+                padding: 12px 8px; 
+                font-size: 14px; 
+                border: none; 
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #7B1FA2;
+            }
+        ''')
+        account_view_btn.setMinimumWidth(140)
+        buttons_layout.addWidget(account_view_btn)
 
         accounts_btn = QPushButton('Manage Accounts')
         accounts_btn.clicked.connect(self.manage_accounts)
-        accounts_btn.setStyleSheet('background-color: #FF9800; color: white; padding: 10px; font-size: 14px;')
-        management_layout.addWidget(accounts_btn)
+        accounts_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #FF9800; 
+                color: white; 
+                padding: 12px 8px; 
+                font-size: 14px; 
+                border: none; 
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #F57C00;
+            }
+        ''')
+        accounts_btn.setMinimumWidth(140)
+        buttons_layout.addWidget(accounts_btn)
 
         categories_btn = QPushButton('Manage Categories')
         categories_btn.clicked.connect(self.manage_categories)
-        categories_btn.setStyleSheet('background-color: #795548; color: white; padding: 10px; font-size: 14px;')
-        management_layout.addWidget(categories_btn)
+        categories_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #795548; 
+                color: white; 
+                padding: 12px 8px; 
+                font-size: 14px; 
+                border: none; 
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #5D4037;
+            }
+        ''')
+        categories_btn.setMinimumWidth(140)
+        buttons_layout.addWidget(categories_btn)
+        
+        buttons_layout.addStretch()
+        main_layout.addLayout(buttons_layout)
 
-        main_layout.addLayout(management_layout)
+        # Add stretch at the bottom for better spacing
+        main_layout.addStretch(1)
+        
+        # Auto-size the window to fit content
+        self.adjustSize()
+
+    # ... (rest of the methods remain exactly the same as in the previous version)
+    # All other methods (load_balances_async, update_balance_display_with_data, etc.)
+    # remain completely unchanged from the previous version
 
     def load_balances_async(self):
         self.balance_display.setText('Loading balances...')
