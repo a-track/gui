@@ -500,3 +500,54 @@ class BudgetApp:
             return 0
         finally:
             conn.close()
+
+    def get_transaction_counts(self):
+        """Get counts of transactions by account, category, and payee"""
+        conn = self._get_connection()
+        try:
+            account_counts = {}
+            result = conn.execute("""
+                SELECT account_id, COUNT(*) FROM transactions 
+                WHERE account_id IS NOT NULL 
+                GROUP BY account_id
+                UNION ALL
+                SELECT to_account_id, COUNT(*) FROM transactions 
+                WHERE to_account_id IS NOT NULL 
+                GROUP BY to_account_id
+            """).fetchall()
+            
+            for account_id, count in result:
+                if account_id not in account_counts:
+                    account_counts[account_id] = 0
+                account_counts[account_id] += count
+            
+            category_counts = {}
+            result = conn.execute("""
+                SELECT sub_category, COUNT(*) FROM transactions 
+                WHERE sub_category IS NOT NULL 
+                GROUP BY sub_category
+            """).fetchall()
+            
+            for sub_category, count in result:
+                category_counts[sub_category] = count
+            
+            payee_counts = {}
+            result = conn.execute("""
+                SELECT payee, COUNT(*) FROM transactions 
+                WHERE payee IS NOT NULL AND payee != '' 
+                GROUP BY payee
+            """).fetchall()
+            
+            for payee, count in result:
+                payee_counts[payee] = count
+                
+            return {
+                'accounts': account_counts,
+                'categories': category_counts,
+                'payees': payee_counts
+            }
+        except Exception as e:
+            print(f"Error getting transaction counts: {e}")
+            return {'accounts': {}, 'categories': {}, 'payees': {}}
+        finally:
+            conn.close()

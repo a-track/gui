@@ -31,6 +31,7 @@ class BudgetTrackerWindow(QMainWindow):
         super().__init__()
         self.budget_app = BudgetApp()
         self.balance_loader = None
+        self.transaction_counts = self.budget_app.get_transaction_counts()  # Add this line
         self.init_ui()
         self.load_balances_async()
 
@@ -132,7 +133,7 @@ class BudgetTrackerWindow(QMainWindow):
         form_layout.addLayout(amount_layout)
         
         self.from_account_layout = QHBoxLayout()
-        self.from_account_layout.addWidget(QLabel('From Account:'))
+        self.from_account_layout.addWidget(QLabel('Account:'))
         self.account_combo = QComboBox()
         self.account_combo.setMinimumWidth(250)
         self.update_account_combo()
@@ -188,8 +189,13 @@ class BudgetTrackerWindow(QMainWindow):
         
         self.payee_layout = QHBoxLayout()
         self.payee_layout.addWidget(QLabel('Payee:'))
-        self.payee_input = QLineEdit()
-        self.payee_input.setPlaceholderText('Optional')
+        
+        self.payee_input = QComboBox()
+        self.payee_input.setEditable(True)  
+        self.payee_input.setInsertPolicy(QComboBox.InsertPolicy.InsertAtTop)
+        self.payee_input.setPlaceholderText('Optional - select or type new')
+        self.update_payee_combo()
+        
         self.payee_layout.addWidget(self.payee_input)
         self.payee_layout.addStretch()
         form_layout.addLayout(self.payee_layout)
@@ -358,7 +364,12 @@ class BudgetTrackerWindow(QMainWindow):
     def update_account_combo(self):
         self.account_combo.clear()
         accounts = self.budget_app.get_all_accounts()
-        accounts_sorted = sorted(accounts, key=lambda x: x.id)
+        
+        # Sort accounts by transaction count (most used first)
+        accounts_sorted = sorted(accounts, 
+                               key=lambda x: self.transaction_counts['accounts'].get(x.id, 0), 
+                               reverse=True)
+        
         for account in accounts_sorted:
             if account.id == 0:
                 continue
@@ -369,13 +380,39 @@ class BudgetTrackerWindow(QMainWindow):
     def update_to_account_combo(self):
         self.to_account_combo.clear()
         accounts = self.budget_app.get_all_accounts()
-        accounts_sorted = sorted(accounts, key=lambda x: x.id)
+        
+        # Sort accounts by transaction count (most used first)
+        accounts_sorted = sorted(accounts, 
+                               key=lambda x: self.transaction_counts['accounts'].get(x.id, 0), 
+                               reverse=True)
+        
         for account in accounts_sorted:
             if account.id == 0:
                 continue
             display_text = f"{account.account} ({account.currency})"
             self.to_account_combo.addItem(display_text, account.id)
         self.to_account_combo.adjustSize()
+    
+    def update_payee_combo(self):
+        """Update payee dropdown with most used payees first"""
+        payee_counts = self.transaction_counts['payees']
+        
+        # Sort payees by count (most used first)
+        sorted_payees = sorted(payee_counts.items(), key=lambda x: x[1], reverse=True)
+        
+        current_text = self.payee_input.currentText()
+        self.payee_input.clear()
+        
+        # Add most used payees
+        for payee, count in sorted_payees:
+            self.payee_input.addItem(payee)
+        
+        # Set current text back if it exists
+        index = self.payee_input.findText(current_text)
+        if index >= 0:
+            self.payee_input.setCurrentIndex(index)
+        elif current_text:
+            self.payee_input.setCurrentText(current_text)
     
     def on_accounts_changed(self):
         self.update_currency_labels()
@@ -511,15 +548,30 @@ class BudgetTrackerWindow(QMainWindow):
         categories = self.budget_app.get_all_categories()
         
         parent_categories = set()
+        category_counts = {}
+        
         for category in categories:
             if trans_type == 'income':
                 if category.category.lower() == 'income':
                     parent_categories.add(category.category)
+                    # Get count for this parent category (sum of all subcategories)
+                    count = sum(self.transaction_counts['categories'].get(sub.sub_category, 0) 
+                               for sub in categories if sub.category == category.category)
+                    category_counts[category.category] = count
             else:
                 if category.category.lower() != 'income':
                     parent_categories.add(category.category)
+                    # Get count for this parent category (sum of all subcategories)
+                    count = sum(self.transaction_counts['categories'].get(sub.sub_category, 0) 
+                               for sub in categories if sub.category == category.category)
+                    category_counts[category.category] = count
         
-        for parent in sorted(list(parent_categories)):
+        # Sort parent categories by count (most used first)
+        sorted_parents = sorted(list(parent_categories), 
+                              key=lambda x: category_counts.get(x, 0), 
+                              reverse=True)
+        
+        for parent in sorted_parents:
             self.parent_category_combo.addItem(parent)
         
         self.parent_category_combo.adjustSize()
@@ -543,9 +595,13 @@ class BudgetTrackerWindow(QMainWindow):
         sub_categories = []
         for category in categories:
             if category.category == parent_category:
-                sub_categories.append(category.sub_category)
+                count = self.transaction_counts['categories'].get(category.sub_category, 0)
+                sub_categories.append((category.sub_category, count))
         
-        for sub in sorted(sub_categories):
+        # Sort subcategories by count (most used first)
+        sorted_subs = sorted(sub_categories, key=lambda x: x[1], reverse=True)
+        
+        for sub, count in sorted_subs:
             self.sub_category_combo.addItem(sub)
         
         self.sub_category_combo.adjustSize()
@@ -579,7 +635,7 @@ class BudgetTrackerWindow(QMainWindow):
         
         date = self.date_input.date().toString("yyyy-MM-dd")
         account_id = self.account_combo.currentData()
-        payee = self.payee_input.text().strip()
+        payee = self.payee_input.currentText().strip()  # Changed from text() to currentText()
         notes = self.notes_input.text().strip()
         
         is_starting_balance = self.starting_balance_checkbox.isChecked()
@@ -660,11 +716,15 @@ class BudgetTrackerWindow(QMainWindow):
             self.show_status('Transaction added successfully! ✓')
             self.amount_input.clear()
             self.to_amount_input.clear()
-            self.payee_input.clear()
+            self.payee_input.setCurrentText('')  # Clear payee instead of clear()
             self.notes_input.clear()
             self.account_combo.setCurrentIndex(0)
             self.to_account_combo.setCurrentIndex(0)
             self.starting_balance_checkbox.setChecked(False)
+            
+            # Refresh transaction counts and dropdowns after adding transaction
+            self.transaction_counts = self.budget_app.get_transaction_counts()
+            self.update_payee_combo()
         else:
             self.show_status('Error adding transaction', error=True)
 
@@ -734,6 +794,7 @@ class BudgetTrackerWindow(QMainWindow):
     def manage_categories(self):
         dialog = CategoriesDialog(self.budget_app, self)
         dialog.exec()
+        self.transaction_counts = self.budget_app.get_transaction_counts()  # Refresh counts
         self.update_ui_for_type()
 
     def update_balance_display(self):
