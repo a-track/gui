@@ -1,8 +1,10 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTableWidget, QTableWidgetItem,
-                             QMessageBox, QHeaderView, QLineEdit, QComboBox, QWidget)
+                             QMessageBox, QHeaderView, QLineEdit, QComboBox, 
+                             QWidget, QDoubleSpinBox)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QColor
+import datetime
 
 
 class CategoriesDialog(QDialog):
@@ -10,9 +12,10 @@ class CategoriesDialog(QDialog):
         super().__init__(parent)
         self.budget_app = budget_app
         self.parent_window = parent
+        self.current_budgets = {}
         
         self.setWindowTitle('Manage Categories')
-        self.setMinimumSize(800, 500)
+        self.setMinimumSize(1000, 500)
         
         layout = QVBoxLayout()
         
@@ -45,9 +48,43 @@ class CategoriesDialog(QDialog):
         new_category_layout.addLayout(sub_category_layout)
         layout.addLayout(new_category_layout)
         
+        budget_layout = QHBoxLayout()
+        budget_layout.addWidget(QLabel('Set Monthly Budget:'))
+        
+        budget_layout.addWidget(QLabel('Year:'))
+        self.budget_year_combo = QComboBox()
+        self.populate_budget_years()
+        budget_layout.addWidget(self.budget_year_combo)
+        
+        budget_layout.addWidget(QLabel('Month:'))
+        self.budget_month_combo = QComboBox()
+        self.populate_budget_months()
+        budget_layout.addWidget(self.budget_month_combo)
+        
+        budget_layout.addWidget(QLabel('Sub Category:'))
+        self.budget_sub_category_combo = QComboBox()
+        budget_layout.addWidget(self.budget_sub_category_combo)
+        
+        budget_layout.addWidget(QLabel('Amount:'))
+        self.budget_amount_input = QDoubleSpinBox()
+        self.budget_amount_input.setRange(0, 1000000)
+        self.budget_amount_input.setDecimals(2)
+        self.budget_amount_input.setPrefix('CHF ')
+        self.budget_amount_input.setMaximumWidth(100)
+        budget_layout.addWidget(self.budget_amount_input)
+        
+        set_budget_btn = QPushButton('Set Budget')
+        set_budget_btn.clicked.connect(self.set_budget)
+        set_budget_btn.setStyleSheet('background-color: #2196F3; color: white; padding: 5px;')
+        budget_layout.addWidget(set_budget_btn)
+        
+        budget_layout.addStretch()
+        layout.addLayout(budget_layout)
+        
+        # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(['Category', 'Sub Category', 'Actions'])
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(['Category', 'Sub Category', 'Current Month Budget', 'Actions'])
 
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -80,13 +117,13 @@ class CategoriesDialog(QDialog):
         self.table.verticalHeader().hide()
 
         header = self.table.horizontalHeader()
-        self.table.setColumnWidth(2, 70)
+        self.table.setColumnWidth(3, 100)
 
-        content_based_columns = [0, 1]
+        content_based_columns = [0, 1, 2]
         for col in content_based_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
 
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
 
         self.table.verticalHeader().setDefaultSectionSize(35)
         layout.addWidget(self.table)
@@ -97,8 +134,31 @@ class CategoriesDialog(QDialog):
         
         self.setLayout(layout)
         
-        self.load_categories()
         self.load_parent_categories()
+        self.populate_budget_sub_categories()
+        self.load_current_budgets()
+        self.load_categories()
+    
+    def populate_budget_years(self):
+        current_year = datetime.datetime.now().year
+        years = list(range(current_year - 1, current_year + 2))
+        self.budget_year_combo.addItems([str(year) for year in years])
+        self.budget_year_combo.setCurrentText(str(current_year))
+    
+    def populate_budget_months(self):
+        months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ]
+        self.budget_month_combo.addItems(months)
+        current_month = datetime.datetime.now().month
+        self.budget_month_combo.setCurrentIndex(current_month - 1)
+    
+    def populate_budget_sub_categories(self):
+        categories = self.budget_app.get_all_categories()
+        self.budget_sub_category_combo.clear()
+        for category in categories:
+            self.budget_sub_category_combo.addItem(category.sub_category)
     
     def load_parent_categories(self):
         categories = self.budget_app.get_all_categories()
@@ -113,6 +173,12 @@ class CategoriesDialog(QDialog):
     def on_parent_category_changed(self, parent_category):
         pass
     
+    def load_current_budgets(self):
+        """Load current month's budgets for display"""
+        current_year = datetime.datetime.now().year
+        current_month = datetime.datetime.now().month
+        self.current_budgets = self.budget_app.get_all_budgets_for_period(current_year, current_month)
+    
     def load_categories(self):
         try:
             categories = self.budget_app.get_all_categories()
@@ -126,6 +192,15 @@ class CategoriesDialog(QDialog):
                 sub_item = QTableWidgetItem(category.sub_category)
                 sub_item.setFlags(sub_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 1, sub_item)
+                
+                # Current month budget
+                current_budget = self.current_budgets.get(category.sub_category, 0.0)
+                budget_item = QTableWidgetItem(f"CHF {current_budget:.2f}" if current_budget > 0 else "")
+                budget_item.setFlags(budget_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                if current_budget > 0:
+                    budget_item.setForeground(QColor(0, 128, 0))  # Green for set budgets
+                    budget_item.setFont(QFont("", weight=QFont.Weight.Bold))
+                self.table.setItem(row, 2, budget_item)
                 
                 action_widget = QWidget()
                 action_layout = QHBoxLayout()
@@ -159,17 +234,19 @@ class CategoriesDialog(QDialog):
                 action_layout.addWidget(delete_btn)
                 action_widget.setLayout(action_layout)
                 
-                self.table.setCellWidget(row, 2, action_widget)
+                self.table.setCellWidget(row, 3, action_widget)
             
             self.table.resizeColumnsToContents()
             
             self.table.setColumnWidth(0, max(120, self.table.columnWidth(0)))
             self.table.setColumnWidth(1, max(120, self.table.columnWidth(1)))
-            self.table.setColumnWidth(2, max(70, self.table.columnWidth(2)))
+            self.table.setColumnWidth(2, max(150, self.table.columnWidth(2)))
+            self.table.setColumnWidth(3, max(70, self.table.columnWidth(3)))
             
             self.show_status(f'Loaded {len(categories)} categories')
             
             self.load_parent_categories()
+            self.populate_budget_sub_categories()
             
         except Exception as e:
             print(f"Error loading categories: {e}")
@@ -191,6 +268,35 @@ class CategoriesDialog(QDialog):
             self.load_categories()
         else:
             self.show_status('Error adding category', error=True)
+    
+    def set_budget(self):
+        try:
+            year = int(self.budget_year_combo.currentText())
+            month = self.budget_month_combo.currentIndex() + 1
+            sub_category = self.budget_sub_category_combo.currentText()
+            budget_amount = self.budget_amount_input.value()
+            
+            if not sub_category:
+                self.show_status('Please select a sub category', error=True)
+                return
+            
+            if budget_amount <= 0:
+                self.show_status('Budget amount must be greater than 0', error=True)
+                return
+            
+            success = self.budget_app.add_or_update_budget(year, month, sub_category, budget_amount)
+            
+            if success:
+                self.show_status(f'Budget for {sub_category} set to CHF {budget_amount:.2f} for {month}/{year}')
+                self.budget_amount_input.setValue(0)
+                self.load_current_budgets()
+                self.load_categories()
+            else:
+                self.show_status('Error setting budget', error=True)
+                
+        except Exception as e:
+            print(f"Error setting budget: {e}")
+            self.show_status('Error setting budget', error=True)
     
     def delete_category(self):
         try:

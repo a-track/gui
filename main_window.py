@@ -10,6 +10,7 @@ from transactions_dialog import TransactionsDialog
 from account_perspective import AccountPerspectiveDialog
 from accounts_dialog import AccountsDialog
 from categories_dialog import CategoriesDialog
+from budget_dialog import BudgetDialog
 
 class BalanceLoaderThread(QThread):
     finished = pyqtSignal(dict)
@@ -242,6 +243,11 @@ class BudgetTrackerWindow(QMainWindow):
         account_view_btn.clicked.connect(self.view_account_perspective)
         account_view_btn.setStyleSheet('background-color: #9C27B0; color: white; padding: 10px; font-size: 14px;')
         button_layout.addWidget(account_view_btn)
+        
+        budget_btn = QPushButton('Budget vs Expenses')
+        budget_btn.clicked.connect(self.view_budget)
+        budget_btn.setStyleSheet('background-color: #FF5722; color: white; padding: 10px; font-size: 14px;')
+        button_layout.addWidget(budget_btn)
         
         main_layout.addLayout(button_layout)
 
@@ -784,6 +790,30 @@ class BudgetTrackerWindow(QMainWindow):
             traceback.print_exc()
             QMessageBox.critical(self, 'Error', f'Error opening account perspective:\n{str(e)}')
             self.show_status('Error opening account perspective', error=True)
+
+    def view_budget(self):
+        try:
+            if hasattr(self, 'budget_dialog') and self.budget_dialog is not None:
+                try:
+                    if self.budget_dialog.isVisible():
+                        self.budget_dialog.raise_()
+                        self.budget_dialog.activateWindow()
+                        return
+                except:
+                    pass
+            
+            dialog = BudgetDialog(self.budget_app, self)
+            self.budget_dialog = dialog
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+            
+        except Exception as e:
+            print(f"Error in view_budget: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, 'Error', f'Error opening budget view:\n{str(e)}')
+            self.show_status('Error opening budget view', error=True)
 
     def manage_accounts(self):
         dialog = AccountsDialog(self.budget_app, self)

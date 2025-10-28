@@ -2,6 +2,7 @@ import sys
 import os
 import duckdb
 from datetime import datetime
+import datetime as dt
 
 
 class Transaction:
@@ -40,6 +41,14 @@ class Category:
     def __init__(self, sub_category: str, category: str):
         self.sub_category = sub_category
         self.category = category
+
+
+class Budget:
+    def __init__(self, year: int, month: int, sub_category: str, budget_amount: float):
+        self.year = year
+        self.month = month
+        self.sub_category = sub_category
+        self.budget_amount = budget_amount
 
 
 class BudgetApp:
@@ -104,6 +113,17 @@ class BudgetApp:
                     FOREIGN KEY (sub_category) REFERENCES categories(sub_category)
                 )
             """)
+            
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS budgets (
+                    year INTEGER NOT NULL,
+                    month INTEGER NOT NULL,
+                    sub_category VARCHAR NOT NULL,
+                    budget_amount DECIMAL(10, 2) NOT NULL,
+                    PRIMARY KEY (year, month, sub_category),
+                    FOREIGN KEY (sub_category) REFERENCES categories(sub_category)
+                )
+            """)
             conn.commit()
             
         except Exception as e:
@@ -116,7 +136,7 @@ class BudgetApp:
     def update_database_schema(self):
         conn = self._get_connection()
         try:
-            conn.execute("ALTER TABLE accounts ADD COLUMN show_in_balance BOOLEAN DEFAULT TRUE")
+            conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_in_balance BOOLEAN DEFAULT TRUE")
             conn.commit()
         except:
             pass
@@ -551,3 +571,115 @@ class BudgetApp:
             return {'accounts': {}, 'categories': {}, 'payees': {}}
         finally:
             conn.close()
+
+    def add_or_update_budget(self, year: int, month: int, sub_category: str, budget_amount: float):
+        conn = self._get_connection()
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO budgets (year, month, sub_category, budget_amount)
+                VALUES (?, ?, ?, ?)
+            """, [year, month, sub_category, budget_amount])
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error adding/updating budget: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def get_all_budgets_for_period(self, year: int, month: int):
+        """Get all budgets for a specific period"""
+        conn = self._get_connection()
+        try:
+            result = conn.execute("""
+                SELECT sub_category, budget_amount FROM budgets 
+                WHERE year = ? AND month = ?
+                ORDER BY sub_category
+            """, [year, month]).fetchall()
+            budgets = {}
+            for row in result:
+                budgets[row[0]] = float(row[1])
+            return budgets
+        except Exception as e:
+            print(f"Error getting budgets for period: {e}")
+            return {}
+        finally:
+            conn.close()
+
+    def delete_budget(self, year: int, month: int, sub_category: str):
+        conn = self._get_connection()
+        try:
+            conn.execute("""
+                DELETE FROM budgets 
+                WHERE year = ? AND month = ? AND sub_category = ?
+            """, [year, month, sub_category])
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error deleting budget: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def get_budget_vs_expenses(self, year: int, month: int):
+        """Get budget vs actual expenses for a given month"""
+        budgets = self.get_all_budgets_for_period(year, month)
+        all_transactions = self.get_all_transactions()
+        
+        expenses = {}
+        for trans in all_transactions:
+            if trans.type == 'expense' and trans.date:
+                try:
+                    trans_date = trans.date
+                    if isinstance(trans_date, str):
+                        trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
+                    
+                    if trans_date.year == year and trans_date.month == month:
+                        sub_category = trans.sub_category or 'Uncategorized'
+                        amount = float(trans.amount or 0)
+                        if sub_category in expenses:
+                            expenses[sub_category] += amount
+                        else:
+                            expenses[sub_category] = amount
+                except (ValueError, AttributeError):
+                    continue
+        
+        result = {}
+        categories = self.get_all_categories()
+        category_map = {cat.sub_category: cat.category for cat in categories}
+        
+        for sub_category, budget_amount in budgets.items():
+            category = category_map.get(sub_category, 'Other')
+            actual_amount = expenses.get(sub_category, 0.0)
+            remaining = budget_amount - actual_amount
+            
+            result[sub_category] = {
+                'category': category,
+                'budget': budget_amount,
+                'actual': actual_amount,
+                'remaining': remaining,
+                'percentage': (actual_amount / budget_amount * 100) if budget_amount > 0 else 0
+            }
+        
+        for sub_category, actual_amount in expenses.items():
+            if sub_category not in result:
+                category = category_map.get(sub_category, 'Other')
+                result[sub_category] = {
+                    'category': category,
+                    'budget': 0.0,
+                    'actual': actual_amount,
+                    'remaining': -actual_amount,
+                    'percentage': 0.0
+                }
+        
+        return result
+    
+    def get_subcategories_by_category(self):
+        """Get all subcategories grouped by category"""
+        categories = self.get_all_categories()
+        result = {}
+        for category in categories:
+            if category.category not in result:
+                result[category.category] = []
+            result[category.category].append(category.sub_category)
+        return result
