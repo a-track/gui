@@ -118,8 +118,8 @@ class BudgetDialog(QDialog):
         try:
             year, month = self.get_selected_period()
             
-            # Get monthly budgets (use selected month as the fixed monthly budget)
-            monthly_budgets = self.budget_app.get_all_budgets_for_period(year, month)
+            # Get monthly budgets (fixed monthly budget that applies to all months)
+            monthly_budgets = self.budget_app.get_all_monthly_budgets()
             
             # Get current month expenses
             current_expenses = self.budget_app.get_budget_vs_expenses(year, month)
@@ -336,8 +336,6 @@ class BudgetDialog(QDialog):
             total_remaining = totals['remaining']
             total_percentage = (total_actual / total_budget * 100) if total_budget > 0 else 0
             
-
-            
             # Budget total
             total_budget_item = QTableWidgetItem(f"{total_budget:.2f}")
             total_budget_item.setBackground(QColor(220, 220, 220))
@@ -388,7 +386,7 @@ class BudgetDialog(QDialog):
     
     def show_set_budgets_dialog(self):
         """Show the dialog to set monthly budgets"""
-        dialog = SetBudgetsDialog(self.budget_app, self)
+        dialog = SetMonthlyBudgetsDialog(self.budget_app, self)
         if dialog.exec():
             self.load_budget_data()
     
@@ -402,7 +400,7 @@ class BudgetDialog(QDialog):
         QTimer.singleShot(5000, lambda: self.status_label.setText(''))
 
 
-class SetBudgetsDialog(QDialog):
+class SetMonthlyBudgetsDialog(QDialog):
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
         
@@ -415,7 +413,7 @@ class SetBudgetsDialog(QDialog):
         layout = QVBoxLayout()
         
         # Info label
-        info_label = QLabel('Set fixed monthly budgets for each subcategory.')
+        info_label = QLabel('Set monthly budgets for each subcategory. These budgets will apply to all months.')
         info_label.setStyleSheet('color: #666; padding: 10px;')
         layout.addWidget(info_label)
         
@@ -433,16 +431,13 @@ class SetBudgetsDialog(QDialog):
                 sub_categories_by_category[category.category] = []
             sub_categories_by_category[category.category].append(category.sub_category)
         
-        # Load current budgets to pre-fill values
-        current_year = datetime.datetime.now().year
-        current_month = datetime.datetime.now().month
-        current_budgets = self.budget_app.get_all_budgets_for_period(current_year, current_month)
+        # Load current monthly budgets to pre-fill values
+        current_budgets = self.budget_app.get_all_monthly_budgets()
         
         for category_name, sub_categories in sub_categories_by_category.items():
             # Category header
             category_header = QLabel(category_name)
             category_header.setStyleSheet('font-weight: bold; background: #f0f0f0; padding: 8px; margin-top: 5px;')
-            category_header.setProperty('category_name', category_name)
             scroll_layout.addWidget(category_header)
             
             for sub_category in sorted(sub_categories):
@@ -477,9 +472,7 @@ class SetBudgetsDialog(QDialog):
                 
                 self.sub_category_widgets.append({
                     'sub_category': sub_category,
-                    'category': category_name,
-                    'amount_input': amount_input,
-                    'category_header': category_header
+                    'amount_input': amount_input
                 })
         
         scroll_layout.addStretch()
@@ -546,16 +539,12 @@ class SetBudgetsDialog(QDialog):
                 QMessageBox.warning(self, 'Warning', 'No budget amounts specified')
                 return
             
-            # Save budgets for current month (this represents the fixed monthly budget)
-            current_year = datetime.datetime.now().year
-            current_month = datetime.datetime.now().month
-            
             success_count = 0
             for budget_info in budgets_to_save:
                 sub_category = budget_info['sub_category']
                 amount = budget_info['amount']
                 
-                success = self.budget_app.add_or_update_budget(current_year, current_month, sub_category, amount)
+                success = self.budget_app.add_or_update_monthly_budget(sub_category, amount)
                 if success:
                     success_count += 1
             
@@ -563,7 +552,8 @@ class SetBudgetsDialog(QDialog):
                 self, 
                 'Success', 
                 f'Monthly budgets saved successfully!\n\n'
-                f'Saved {success_count} budgets.'
+                f'Saved {success_count} budgets.\n\n'
+                f'These budgets will apply to all months.'
             )
             self.accept()
                 
