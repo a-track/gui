@@ -147,7 +147,7 @@ class AccountPerspectiveDialog(QDialog):
                         count += 1
                 account_transaction_count[account.id] = count
             
-            filtered_accounts = [acc for acc in accounts if acc.id != 0]
+            filtered_accounts = [acc for acc in accounts if acc.id != 0 and account_transaction_count.get(acc.id, 0) > 0]
             sorted_accounts = sorted(filtered_accounts, 
                                    key=lambda x: account_transaction_count.get(x.id, 0), 
                                    reverse=True)
