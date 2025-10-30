@@ -19,7 +19,6 @@ class CategoriesDialog(QDialog):
         
         layout = QVBoxLayout()
         
-        # First row: Category type and parent category
         type_parent_layout = QHBoxLayout()
         
         type_parent_layout.addWidget(QLabel('Category Type:'))
@@ -38,7 +37,6 @@ class CategoriesDialog(QDialog):
         type_parent_layout.addStretch()
         layout.addLayout(type_parent_layout)
         
-        # Second row: Sub category and add button
         sub_category_layout = QHBoxLayout()
         sub_category_layout.addWidget(QLabel('Sub Category:'))
         self.sub_category_input = QLineEdit()
@@ -54,9 +52,8 @@ class CategoriesDialog(QDialog):
         
         layout.addLayout(sub_category_layout)
         
-        # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(4)  # Category Type, Category, Sub Category, Actions
+        self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(['Category Type', 'Category', 'Sub Category', 'Actions'])
         
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -98,8 +95,6 @@ class CategoriesDialog(QDialog):
         layout.addWidget(self.status_label)
         
         self.setLayout(layout)
-        
-        # Load initial data
         self.load_categories()
 
     def on_category_type_changed(self, category_type):
@@ -108,8 +103,6 @@ class CategoriesDialog(QDialog):
 
     def on_parent_category_changed(self, parent_category):
         """When parent category changes - placeholder for future functionality"""
-        # This method is connected but doesn't need to do anything for now
-        # It's kept for future expansion if needed
         pass
 
     def load_parent_categories(self, category_type=None):
@@ -125,7 +118,6 @@ class CategoriesDialog(QDialog):
         self.parent_category_combo.clear()
         self.parent_category_combo.addItems(sorted(list(parent_categories)))
         
-        # Restore current text if it exists in the new list
         index = self.parent_category_combo.findText(current_text)
         if index >= 0:
             self.parent_category_combo.setCurrentIndex(index)
@@ -136,22 +128,18 @@ class CategoriesDialog(QDialog):
             self.table.setRowCount(len(categories))
             
             for row, category in enumerate(categories):
-                # Category Type column
                 type_item = QTableWidgetItem(category.category_type)
                 type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 0, type_item)
                 
-                # Parent Category column
                 parent_item = QTableWidgetItem(category.category)
                 parent_item.setFlags(parent_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 1, parent_item)
                 
-                # Sub Category column
                 sub_item = QTableWidgetItem(category.sub_category)
                 sub_item.setFlags(sub_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 2, sub_item)
                 
-                # Actions column
                 action_widget = QWidget()
                 action_layout = QHBoxLayout()
                 action_layout.setContentsMargins(1, 1, 1, 1)
@@ -188,14 +176,13 @@ class CategoriesDialog(QDialog):
             
             self.table.resizeColumnsToContents()
             
-            self.table.setColumnWidth(0, max(100, self.table.columnWidth(0)))  # Category Type
-            self.table.setColumnWidth(1, max(120, self.table.columnWidth(1)))  # Category
-            self.table.setColumnWidth(2, max(120, self.table.columnWidth(2)))  # Sub Category
-            self.table.setColumnWidth(3, max(70, self.table.columnWidth(3)))   # Actions
+            self.table.setColumnWidth(0, max(100, self.table.columnWidth(0)))
+            self.table.setColumnWidth(1, max(120, self.table.columnWidth(1)))
+            self.table.setColumnWidth(2, max(120, self.table.columnWidth(2)))
+            self.table.setColumnWidth(3, max(70, self.table.columnWidth(3)))
             
             self.show_status(f'Loaded {len(categories)} categories')
             
-            # Load parent categories with current type
             current_type = self.category_type_combo.currentText()
             self.load_parent_categories(current_type)
             
