@@ -218,6 +218,16 @@ class BudgetTrackerWindow(QMainWindow):
         
         self.to_amount_layout.addStretch()
         form_layout.addLayout(self.to_amount_layout)
+
+        self.qty_layout = QHBoxLayout()
+        self.qty_layout.addWidget(QLabel('Quantity:'))
+        self.qty_input = QLineEdit()
+        self.qty_input.setPlaceholderText('Optional - for investment transfers')
+        self.qty_input.setMinimumWidth(150)
+        self.qty_layout.addWidget(self.qty_input)
+        self.qty_layout.addStretch()
+        form_layout.addLayout(self.qty_layout)
+
         
         self.payee_layout = QHBoxLayout()
         self.payee_layout.addWidget(QLabel('Payee:'))
@@ -612,6 +622,10 @@ class BudgetTrackerWindow(QMainWindow):
         self.from_amount_currency_label.setVisible(True)
         self.to_amount_currency_label.setVisible(is_transfer and not is_starting_balance)
         
+        # Show quantity field only for transfers (not starting balance)
+        self.qty_layout.itemAt(0).widget().setVisible(is_transfer and not is_starting_balance)
+        self.qty_input.setVisible(is_transfer and not is_starting_balance)
+        
         if is_transfer and not is_starting_balance:
             self.update_transfer_ui_based_on_currencies()
             self.amount_input.textChanged.connect(self.calculate_exchange_rate)
@@ -765,8 +779,18 @@ class BudgetTrackerWindow(QMainWindow):
         
         date = self.date_input.date().toString("yyyy-MM-dd")
         account_id = self.account_combo.currentData()
-        payee = self.payee_input.currentText().strip()  # Changed from text() to currentText()
+        payee = self.payee_input.currentText().strip()
         notes = self.notes_input.text().strip()
+        
+        # Get quantity if provided (for transfers)
+        qty_text = self.qty_input.text().strip()
+        qty = None
+        if qty_text:
+            try:
+                qty = float(qty_text)
+            except ValueError:
+                self.show_status('Please enter a valid number for quantity', error=True)
+                return
         
         is_starting_balance = self.starting_balance_checkbox.isChecked()
         
@@ -815,6 +839,7 @@ class BudgetTrackerWindow(QMainWindow):
                 to_account_id=to_account_id,
                 from_amount=amount,
                 to_amount=to_amount,
+                qty=qty,  # Add quantity parameter
                 notes=notes
             )
             
@@ -846,7 +871,8 @@ class BudgetTrackerWindow(QMainWindow):
             self.show_status('Transaction added successfully! ✓')
             self.amount_input.clear()
             self.to_amount_input.clear()
-            self.payee_input.setCurrentText('')  # Clear payee instead of clear()
+            self.qty_input.clear()  # Clear quantity field
+            self.payee_input.setCurrentText('')
             self.notes_input.clear()
             self.account_combo.setCurrentIndex(0)
             self.to_account_combo.setCurrentIndex(0)
