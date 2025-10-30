@@ -473,7 +473,8 @@ class BudgetTrackerWindow(QMainWindow):
             for currency in all_currencies:
                 balance = group_balances[currency]
                 if abs(balance) >= 0.001:
-                    line += f"{balance:>{currency_col_width}.2f}"
+                    formatted_balance = self.format_with_thousand_separators(balance)
+                    line += f"{formatted_balance:>{currency_col_width}}"
                     total_by_currency[currency] += balance
                 else:
                     line += f"{'':>{currency_col_width}}"
@@ -482,7 +483,8 @@ class BudgetTrackerWindow(QMainWindow):
         balance_text += "-" * (account_col_width + len(all_currencies) * currency_col_width) + "\n"
         total_line = f"{'Total':{account_col_width}}"
         for currency in all_currencies:
-            total_line += f"{total_by_currency[currency]:>{currency_col_width}.2f}"
+            formatted_total = self.format_with_thousand_separators(total_by_currency[currency])
+            total_line += f"{formatted_total:>{currency_col_width}}"
         balance_text += total_line
         
         self.balance_display.setText(balance_text)
@@ -952,3 +954,9 @@ class BudgetTrackerWindow(QMainWindow):
 
     def update_balance_display(self):
         self.load_balances_async()
+
+    def format_with_thousand_separators(self, number):
+        if abs(number) < 0.001:
+            return "0.00"
+        formatted = f"{number:,.2f}"
+        return formatted.replace(",", "'")
