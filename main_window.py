@@ -669,6 +669,38 @@ class BudgetTrackerWindow(QMainWindow):
         except (ValueError, ZeroDivisionError):
             self.exchange_rate_label.setText('Exchange Rate: -')
 
+    def on_parent_category_changed(self, parent_category):
+        self.update_sub_categories()
+
+    def update_sub_categories(self):
+        self.sub_category_combo.clear()
+        
+        parent_category = self.parent_category_combo.currentText()
+        if not parent_category:
+            return
+            
+        categories = self.budget_app.get_all_categories()
+        
+        is_income = self.income_radio.isChecked()
+        expected_category_type = 'Income' if is_income else 'Expense'
+        
+        sub_categories = []
+        for category in categories:
+            if (category.category == parent_category and 
+                category.category_type == expected_category_type):
+                count = self.transaction_counts['categories'].get(category.sub_category, 0)
+                sub_categories.append((category.sub_category, count))
+        
+        sorted_subs = sorted(sub_categories, key=lambda x: x[1], reverse=True)
+        
+        for sub, count in sorted_subs:
+            self.sub_category_combo.addItem(sub)
+        
+        self.sub_category_combo.adjustSize()
+        
+        if self.sub_category_combo.count() > 0:
+            self.sub_category_combo.setCurrentIndex(0)
+
     def update_parent_categories(self, trans_type):
         self.parent_category_combo.clear()
         categories = self.budget_app.get_all_categories()
@@ -676,19 +708,14 @@ class BudgetTrackerWindow(QMainWindow):
         parent_categories = set()
         category_counts = {}
         
+        expected_category_type = 'Income' if trans_type == 'income' else 'Expense'
+        
         for category in categories:
-            if trans_type == 'income':
-                if category.category.lower() == 'income':
-                    parent_categories.add(category.category)
-                    count = sum(self.transaction_counts['categories'].get(sub.sub_category, 0) 
-                               for sub in categories if sub.category == category.category)
-                    category_counts[category.category] = count
-            else:
-                if category.category.lower() != 'income':
-                    parent_categories.add(category.category)
-                    count = sum(self.transaction_counts['categories'].get(sub.sub_category, 0) 
-                               for sub in categories if sub.category == category.category)
-                    category_counts[category.category] = count
+            if category.category_type == expected_category_type:
+                parent_categories.add(category.category)
+                count = sum(self.transaction_counts['categories'].get(sub.sub_category, 0) 
+                           for sub in categories if sub.category == category.category)
+                category_counts[category.category] = count
         
         sorted_parents = sorted(list(parent_categories), 
                               key=lambda x: category_counts.get(x, 0), 
@@ -703,9 +730,6 @@ class BudgetTrackerWindow(QMainWindow):
             self.parent_category_combo.setCurrentIndex(0)
             self.update_sub_categories()
 
-    def on_parent_category_changed(self, parent_category):
-        self.update_sub_categories()
-
     def update_sub_categories(self):
         self.sub_category_combo.clear()
         
@@ -715,9 +739,13 @@ class BudgetTrackerWindow(QMainWindow):
             
         categories = self.budget_app.get_all_categories()
         
+        is_income = self.income_radio.isChecked()
+        expected_category_type = 'Income' if is_income else 'Expense'
+        
         sub_categories = []
         for category in categories:
-            if category.category == parent_category:
+            if (category.category == parent_category and 
+                category.category_type == expected_category_type):
                 count = self.transaction_counts['categories'].get(category.sub_category, 0)
                 sub_categories.append((category.sub_category, count))
         

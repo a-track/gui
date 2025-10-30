@@ -10,27 +10,35 @@ import datetime
 class CategoriesDialog(QDialog):
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
+        
         self.budget_app = budget_app
         self.parent_window = parent
         
         self.setWindowTitle('Manage Categories')
-        self.setMinimumSize(800, 500) 
+        self.setMinimumSize(700, 500)
         
         layout = QVBoxLayout()
         
-        new_category_layout = QVBoxLayout()
+        # First row: Category type and parent category
+        type_parent_layout = QHBoxLayout()
         
-        parent_layout = QHBoxLayout()
-        parent_layout.addWidget(QLabel('Category:'))
+        type_parent_layout.addWidget(QLabel('Category Type:'))
+        self.category_type_combo = QComboBox()
+        self.category_type_combo.addItems(['Expense', 'Income'])
+        self.category_type_combo.currentTextChanged.connect(self.on_category_type_changed)
+        type_parent_layout.addWidget(self.category_type_combo)
+        
+        type_parent_layout.addWidget(QLabel('Category:'))
         self.parent_category_combo = QComboBox()
         self.parent_category_combo.setEditable(True)
         self.parent_category_combo.setInsertPolicy(QComboBox.InsertPolicy.InsertAtTop)
         self.parent_category_combo.currentTextChanged.connect(self.on_parent_category_changed)
-        parent_layout.addWidget(self.parent_category_combo)
+        type_parent_layout.addWidget(self.parent_category_combo)
         
-        parent_layout.addStretch()
-        new_category_layout.addLayout(parent_layout)
+        type_parent_layout.addStretch()
+        layout.addLayout(type_parent_layout)
         
+        # Second row: Sub category and add button
         sub_category_layout = QHBoxLayout()
         sub_category_layout.addWidget(QLabel('Sub Category:'))
         self.sub_category_input = QLineEdit()
@@ -44,17 +52,14 @@ class CategoriesDialog(QDialog):
         add_btn.setStyleSheet('background-color: #4CAF50; color: white; padding: 8px;')
         sub_category_layout.addWidget(add_btn)
         
-        new_category_layout.addLayout(sub_category_layout)
-        layout.addLayout(new_category_layout)
+        layout.addLayout(sub_category_layout)
         
+        # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(3) 
-        self.table.setHorizontalHeaderLabels(['Category', 'Sub Category', 'Actions'])
-
+        self.table.setColumnCount(4)  # Category Type, Category, Sub Category, Actions
+        self.table.setHorizontalHeaderLabels(['Category Type', 'Category', 'Sub Category', 'Actions'])
+        
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
             QTableWidget {
@@ -78,18 +83,13 @@ class CategoriesDialog(QDialog):
                 font-size: 11px;
             }
         """)
-
+        
         self.table.verticalHeader().hide()
-
+        
         header = self.table.horizontalHeader()
-        self.table.setColumnWidth(2, 100)
-
-        content_based_columns = [0, 1] 
-        for col in content_based_columns:
+        for col in range(4):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
-
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-
+        
         self.table.verticalHeader().setDefaultSectionSize(35)
         layout.addWidget(self.table)
         
@@ -99,36 +99,59 @@ class CategoriesDialog(QDialog):
         
         self.setLayout(layout)
         
-        self.load_parent_categories()
+        # Load initial data
         self.load_categories()
-    
-    def load_parent_categories(self):
+
+    def on_category_type_changed(self, category_type):
+        """When category type changes, update the parent categories combo"""
+        self.load_parent_categories(category_type)
+
+    def on_parent_category_changed(self, parent_category):
+        """When parent category changes - placeholder for future functionality"""
+        # This method is connected but doesn't need to do anything for now
+        # It's kept for future expansion if needed
+        pass
+
+    def load_parent_categories(self, category_type=None):
+        """Load parent categories filtered by type"""
         categories = self.budget_app.get_all_categories()
         parent_categories = set()
         
         for category in categories:
-            parent_categories.add(category.category)
+            if category_type is None or category.category_type == category_type:
+                parent_categories.add(category.category)
         
+        current_text = self.parent_category_combo.currentText()
         self.parent_category_combo.clear()
         self.parent_category_combo.addItems(sorted(list(parent_categories)))
-    
-    def on_parent_category_changed(self, parent_category):
-        pass
-    
+        
+        # Restore current text if it exists in the new list
+        index = self.parent_category_combo.findText(current_text)
+        if index >= 0:
+            self.parent_category_combo.setCurrentIndex(index)
+
     def load_categories(self):
         try:
             categories = self.budget_app.get_all_categories()
             self.table.setRowCount(len(categories))
             
             for row, category in enumerate(categories):
+                # Category Type column
+                type_item = QTableWidgetItem(category.category_type)
+                type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 0, type_item)
+                
+                # Parent Category column
                 parent_item = QTableWidgetItem(category.category)
                 parent_item.setFlags(parent_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 0, parent_item)
+                self.table.setItem(row, 1, parent_item)
                 
+                # Sub Category column
                 sub_item = QTableWidgetItem(category.sub_category)
                 sub_item.setFlags(sub_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 1, sub_item)
+                self.table.setItem(row, 2, sub_item)
                 
+                # Actions column
                 action_widget = QWidget()
                 action_layout = QHBoxLayout()
                 action_layout.setContentsMargins(1, 1, 1, 1)
@@ -161,23 +184,27 @@ class CategoriesDialog(QDialog):
                 action_layout.addWidget(delete_btn)
                 action_widget.setLayout(action_layout)
                 
-                self.table.setCellWidget(row, 2, action_widget)
+                self.table.setCellWidget(row, 3, action_widget)
             
             self.table.resizeColumnsToContents()
             
-            self.table.setColumnWidth(0, max(120, self.table.columnWidth(0)))
-            self.table.setColumnWidth(1, max(120, self.table.columnWidth(1)))
-            self.table.setColumnWidth(2, max(70, self.table.columnWidth(2)))
+            self.table.setColumnWidth(0, max(100, self.table.columnWidth(0)))  # Category Type
+            self.table.setColumnWidth(1, max(120, self.table.columnWidth(1)))  # Category
+            self.table.setColumnWidth(2, max(120, self.table.columnWidth(2)))  # Sub Category
+            self.table.setColumnWidth(3, max(70, self.table.columnWidth(3)))   # Actions
             
             self.show_status(f'Loaded {len(categories)} categories')
             
-            self.load_parent_categories()
+            # Load parent categories with current type
+            current_type = self.category_type_combo.currentText()
+            self.load_parent_categories(current_type)
             
         except Exception as e:
             print(f"Error loading categories: {e}")
             self.show_status('Error loading categories', error=True)
-    
+
     def add_category(self):
+        category_type = self.category_type_combo.currentText()
         parent_category = self.parent_category_combo.currentText().strip()
         sub_category = self.sub_category_input.text().strip()
         
@@ -185,7 +212,7 @@ class CategoriesDialog(QDialog):
             self.show_status('Please enter both category and sub category', error=True)
             return
         
-        success = self.budget_app.add_category(sub_category, parent_category)
+        success = self.budget_app.add_category(sub_category, parent_category, category_type)
         
         if success:
             self.show_status('Category added successfully!')

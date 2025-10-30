@@ -38,9 +38,10 @@ class Account:
 
 
 class Category:
-    def __init__(self, sub_category: str, category: str):
+    def __init__(self, sub_category: str, category: str, category_type: str = "Expense"):
         self.sub_category = sub_category
         self.category = category
+        self.category_type = category_type
 
 
 class BudgetApp:
@@ -78,7 +79,8 @@ class BudgetApp:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS categories (
                     sub_category VARCHAR PRIMARY KEY,
-                    category VARCHAR NOT NULL
+                    category VARCHAR NOT NULL,
+                    category_type VARCHAR DEFAULT 'Expense'
                 )
             """)
             
@@ -126,7 +128,7 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_in_balance BOOLEAN DEFAULT TRUE")
-            
+            conn.execute("ALTER TABLE categories ADD COLUMN IF NOT EXISTS category_type VARCHAR DEFAULT 'Expense'")
             result = conn.execute("""
                 SELECT name FROM sqlite_master 
                 WHERE type='table' AND name='budgets'
@@ -317,6 +319,35 @@ class BudgetApp:
         finally:
             conn.close()
 
+    def add_category(self, sub_category: str, category: str, category_type: str = "Expense"):
+        conn = self._get_connection()
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO categories (sub_category, category, category_type)
+                VALUES (?, ?, ?)
+            """, [sub_category, category, category_type])
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error adding category: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def get_all_categories(self):
+        conn = self._get_connection()
+        try:
+            result = conn.execute("""
+                SELECT sub_category, category, category_type
+                FROM categories 
+                ORDER BY category, sub_category
+            """).fetchall()
+            return [Category(*row) for row in result]
+        except Exception as e:
+            print(f"Error getting categories: {e}")
+            return []
+        finally:
+            conn.close()
     def add_income(self, date: str, amount: float, account_id: int, 
                    payee: str = "", sub_category: str = "", 
                    notes: str = "", invest_account_id: int = None):
