@@ -18,12 +18,10 @@ class BudgetDialog(QDialog):
         
         layout = QVBoxLayout()
         
-        # Period selection
         period_layout = QHBoxLayout()
         period_layout.addWidget(QLabel('Year:'))
         self.year_combo = QComboBox()
         current_year = datetime.datetime.now().year
-        # Add current year and previous 2 years
         for year in range(current_year - 2, current_year + 1):
             self.year_combo.addItem(str(year))
         self.year_combo.setCurrentText(str(current_year))
@@ -45,17 +43,14 @@ class BudgetDialog(QDialog):
         period_layout.addStretch()
         layout.addLayout(period_layout)
         
-        # Summary info
         self.summary_label = QLabel('')
         self.summary_label.setStyleSheet('color: #666; padding: 5px;')
         layout.addWidget(self.summary_label)
         
-        # Income summary
         self.income_summary_label = QLabel('')
         self.income_summary_label.setStyleSheet('color: #4CAF50; padding: 5px;')
         layout.addWidget(self.income_summary_label)
 
-        # Table
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(['Category', 'Sub Category', 'Monthly Budget', 'Current Month Expenses', 'Remaining', 'Usage %'])
@@ -94,7 +89,6 @@ class BudgetDialog(QDialog):
         self.table.verticalHeader().setDefaultSectionSize(35)
         layout.addWidget(self.table)
         
-        # Set Budgets button
         set_budgets_btn = QPushButton('Set Monthly Budgets')
         set_budgets_btn.clicked.connect(self.show_set_budgets_dialog)
         set_budgets_btn.setStyleSheet('background-color: #2196F3; color: white; padding: 10px; font-size: 14px;')
@@ -109,7 +103,6 @@ class BudgetDialog(QDialog):
         self.load_budget_data()
     
     def get_selected_period(self):
-        """Get the currently selected year and month"""
         year = int(self.year_combo.currentText())
         month = self.month_combo.currentData()
         return year, month
@@ -118,30 +111,23 @@ class BudgetDialog(QDialog):
         try:
             year, month = self.get_selected_period()
             
-            # Get monthly budgets (fixed monthly budget that applies to all months)
-            monthly_budgets = self.budget_app.get_all_budgets()  # CHANGED: get_all_budgets()
+            monthly_budgets = self.budget_app.get_all_budgets()
             
-            # Get current month expenses
             current_expenses = self.budget_app.get_budget_vs_expenses(year, month)
             
-            # Get current month income by category
             income_by_category = self.get_income_by_category(year, month)
             
-            # Calculate totals
             total_budget = 0.0
             total_actual = 0.0
             total_remaining = 0.0
             total_income = sum(income_by_category.values())
             
-            # Prepare data for display - group by category
             categories = self.budget_app.get_all_categories()
             category_map = {cat.sub_category: cat.category for cat in categories}
             
-            # Group data by category
             category_data = {}
             category_totals = {}
             
-            # Add all budgeted categories
             for sub_category, budget_amount in monthly_budgets.items():
                 category = category_map.get(sub_category, 'Other')
                 actual_data = current_expenses.get(sub_category, {})
@@ -172,7 +158,6 @@ class BudgetDialog(QDialog):
                 total_actual += actual_amount
                 total_remaining += remaining
             
-            # Add categories with expenses but no budget
             for sub_category, data in current_expenses.items():
                 if sub_category not in monthly_budgets:
                     category = category_map.get(sub_category, 'Other')
@@ -200,12 +185,10 @@ class BudgetDialog(QDialog):
                     total_actual += actual_amount
                     total_remaining -= actual_amount
             
-            # Update summary
             month_name = self.month_combo.currentText()
             summary_text = f"Selected Period ({month_name} {year}) - Budget: {total_budget:.2f} | Expenses: {total_actual:.2f} | Remaining: {total_remaining:.2f}"
             self.summary_label.setText(summary_text)
             
-            # Update income summary
             income_text = "Monthly Income: "
             if income_by_category:
                 income_parts = []
@@ -218,7 +201,6 @@ class BudgetDialog(QDialog):
                 income_text += "No income recorded"
             self.income_summary_label.setText(income_text)
             
-            # Populate table with grouped data
             self.populate_table_grouped(category_data, category_totals)
             
             self.show_status(f'Loaded budget data for {month_name} {year}')
@@ -252,131 +234,111 @@ class BudgetDialog(QDialog):
         return income_by_category
     
     def populate_table_grouped(self, category_data, category_totals):
-        """Populate table with data grouped by category including category totals"""
-        # Calculate total number of rows (categories + subcategories + category totals)
         total_rows = 0
         for category, items in category_data.items():
-            total_rows += 1 + len(items) + 1  # Category header + subcategory rows + category total row
+            total_rows += 1 + len(items) + 1
         
         self.table.setRowCount(total_rows)
         
         current_row = 0
         
-        # Sort categories alphabetically
         sorted_categories = sorted(category_data.keys())
         
         for category in sorted_categories:
             items = category_data[category]
             totals = category_totals.get(category, {'budget': 0, 'actual': 0, 'remaining': 0})
             
-            # Add category header row
             category_item = QTableWidgetItem(category)
             category_item.setBackground(QColor(240, 240, 240))
             category_item.setFont(QFont("", weight=QFont.Weight.Bold))
             self.table.setItem(current_row, 0, category_item)
             
-            # Merge cells for category header
-            self.table.setSpan(current_row, 0, 1, 6)  # Span all columns
+            self.table.setSpan(current_row, 0, 1, 6)
             
             current_row += 1
             
-            # Sort subcategories alphabetically
             sorted_items = sorted(items, key=lambda x: x['sub_category'])
             
             for item in sorted_items:
-                # Sub Category
-                sub_category_item = QTableWidgetItem(f"  {item['sub_category']}")  # Indent subcategories
+                sub_category_item = QTableWidgetItem(f"  {item['sub_category']}")
                 self.table.setItem(current_row, 1, sub_category_item)
                 
-                # Monthly Budget
                 budget_item = QTableWidgetItem(f"{item['budget']:.2f}")
                 budget_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(current_row, 2, budget_item)
                 
-                # Current Month Expenses
                 actual_item = QTableWidgetItem(f"{item['actual']:.2f}")
                 actual_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(current_row, 3, actual_item)
                 
-                # Remaining
                 remaining = item['remaining']
                 remaining_item = QTableWidgetItem(f"{remaining:.2f}")
                 remaining_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 remaining_item.setFont(QFont("", weight=QFont.Weight.Bold))
                 
-                # Color code remaining amount
                 if remaining >= 0:
-                    remaining_item.setForeground(QColor(0, 128, 0))  # Green
+                    remaining_item.setForeground(QColor(0, 128, 0))
                 else:
-                    remaining_item.setForeground(QColor(255, 0, 0))  # Red
+                    remaining_item.setForeground(QColor(255, 0, 0))
                 
                 self.table.setItem(current_row, 4, remaining_item)
                 
-                # Usage Percentage
                 percentage = item['percentage']
                 percentage_item = QTableWidgetItem(f"{percentage:.1f}%")
                 percentage_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 percentage_item.setFont(QFont("", weight=QFont.Weight.Bold))
                 
-                # Color code percentage
                 if percentage <= 75:
-                    percentage_item.setForeground(QColor(0, 128, 0))  # Green
+                    percentage_item.setForeground(QColor(0, 128, 0))
                 elif percentage <= 90:
-                    percentage_item.setForeground(QColor(255, 165, 0))  # Orange
+                    percentage_item.setForeground(QColor(255, 165, 0))
                 else:
-                    percentage_item.setForeground(QColor(255, 0, 0))  # Red
+                    percentage_item.setForeground(QColor(255, 0, 0))
                 
                 self.table.setItem(current_row, 5, percentage_item)
                 
                 current_row += 1
             
-            # Add category total row
             total_budget = totals['budget']
             total_actual = totals['actual']
             total_remaining = totals['remaining']
             total_percentage = (total_actual / total_budget * 100) if total_budget > 0 else 0
             
-            # Budget total
             total_budget_item = QTableWidgetItem(f"{total_budget:.2f}")
             total_budget_item.setBackground(QColor(220, 220, 220))
             total_budget_item.setFont(QFont("", weight=QFont.Weight.Bold))
             total_budget_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table.setItem(current_row, 2, total_budget_item)
             
-            # Actual total
             total_actual_item = QTableWidgetItem(f"{total_actual:.2f}")
             total_actual_item.setBackground(QColor(220, 220, 220))
             total_actual_item.setFont(QFont("", weight=QFont.Weight.Bold))
             total_actual_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table.setItem(current_row, 3, total_actual_item)
             
-            # Remaining total
             total_remaining_item = QTableWidgetItem(f"{total_remaining:.2f}")
             total_remaining_item.setBackground(QColor(220, 220, 220))
             total_remaining_item.setFont(QFont("", weight=QFont.Weight.Bold))
             total_remaining_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             
-            # Color code remaining total
             if total_remaining >= 0:
-                total_remaining_item.setForeground(QColor(0, 128, 0))  # Green
+                total_remaining_item.setForeground(QColor(0, 128, 0))
             else:
-                total_remaining_item.setForeground(QColor(255, 0, 0))  # Red
+                total_remaining_item.setForeground(QColor(255, 0, 0))
             
             self.table.setItem(current_row, 4, total_remaining_item)
             
-            # Usage percentage total
             total_percentage_item = QTableWidgetItem(f"{total_percentage:.1f}%")
             total_percentage_item.setBackground(QColor(220, 220, 220))
             total_percentage_item.setFont(QFont("", weight=QFont.Weight.Bold))
             total_percentage_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             
-            # Color code percentage total
             if total_percentage <= 75:
-                total_percentage_item.setForeground(QColor(0, 128, 0))  # Green
+                total_percentage_item.setForeground(QColor(0, 128, 0))
             elif total_percentage <= 90:
-                total_percentage_item.setForeground(QColor(255, 165, 0))  # Orange
+                total_percentage_item.setForeground(QColor(255, 165, 0))
             else:
-                total_percentage_item.setForeground(QColor(255, 0, 0))  # Red
+                total_percentage_item.setForeground(QColor(255, 0, 0))
             
             self.table.setItem(current_row, 5, total_percentage_item)
             
@@ -385,7 +347,6 @@ class BudgetDialog(QDialog):
         self.table.resizeColumnsToContents()
     
     def show_set_budgets_dialog(self):
-        """Show the dialog to set monthly budgets"""
         dialog = SetMonthlyBudgetsDialog(self.budget_app, self)
         if dialog.exec():
             self.load_budget_data()
@@ -412,12 +373,10 @@ class SetMonthlyBudgetsDialog(QDialog):
         
         layout = QVBoxLayout()
         
-        # Info label
         info_label = QLabel('Set monthly budgets for each subcategory. These budgets will apply to all months.')
         info_label.setStyleSheet('color: #666; padding: 10px;')
         layout.addWidget(info_label)
         
-        # Sub Category selection with budget amount
         self.sub_category_widgets = []
         
         scroll_widget = QWidget()
@@ -431,11 +390,9 @@ class SetMonthlyBudgetsDialog(QDialog):
                 sub_categories_by_category[category.category] = []
             sub_categories_by_category[category.category].append(category.sub_category)
         
-        # Load current monthly budgets to pre-fill values
-        current_budgets = self.budget_app.get_all_budgets()  # CHANGED: get_all_budgets()
+        current_budgets = self.budget_app.get_all_budgets()
         
         for category_name, sub_categories in sub_categories_by_category.items():
-            # Category header
             category_header = QLabel(category_name)
             category_header.setStyleSheet('font-weight: bold; background: #f0f0f0; padding: 8px; margin-top: 5px;')
             scroll_layout.addWidget(category_header)
@@ -447,7 +404,6 @@ class SetMonthlyBudgetsDialog(QDialog):
                 sub_label.setMinimumWidth(150)
                 sub_layout.addWidget(sub_label)
                 
-                # Amount input layout
                 amount_input_layout = QHBoxLayout()
                 amount_input_layout.addWidget(QLabel('CHF'))
                 
@@ -455,7 +411,6 @@ class SetMonthlyBudgetsDialog(QDialog):
                 amount_input.setPlaceholderText('0.00')
                 amount_input.setMaximumWidth(100)
                 
-                # Pre-fill with current budget if exists
                 current_budget = current_budgets.get(sub_category, 0.0)
                 if current_budget > 0:
                     amount_input.setText(f"{current_budget:.2f}")
@@ -483,7 +438,6 @@ class SetMonthlyBudgetsDialog(QDialog):
         scroll_area.setMinimumHeight(300)
         layout.addWidget(scroll_area)
         
-        # Buttons
         button_layout = QHBoxLayout()
         
         apply_btn = QPushButton('Save Monthly Budgets')
@@ -527,7 +481,7 @@ class SetMonthlyBudgetsDialog(QDialog):
                 if amount_text:
                     try:
                         amount = float(amount_text)
-                        if amount >= 0:  # Allow 0 to clear budget
+                        if amount >= 0:
                             budgets_to_save.append({
                                 'sub_category': widget_info['sub_category'],
                                 'amount': amount
@@ -544,7 +498,7 @@ class SetMonthlyBudgetsDialog(QDialog):
                 sub_category = budget_info['sub_category']
                 amount = budget_info['amount']
                 
-                success = self.budget_app.add_or_update_budget(sub_category, amount)  # CHANGED: add_or_update_budget()
+                success = self.budget_app.add_or_update_budget(sub_category, amount)
                 if success:
                     success_count += 1
             
@@ -570,6 +524,5 @@ class SetMonthlyBudgetsDialog(QDialog):
         )
         
         if reply == QMessageBox.StandardButton.Yes:
-            # Set all budget inputs to 0
             for widget_info in self.sub_category_widgets:
                 widget_info['amount_input'].setText('0.00')

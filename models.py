@@ -106,7 +106,6 @@ class BudgetApp:
                 )
             """)
             
-            # Create the new simplified budgets table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS budgets_new (
                     sub_category VARCHAR PRIMARY KEY,
@@ -126,45 +125,36 @@ class BudgetApp:
     def update_database_schema(self):
         conn = self._get_connection()
         try:
-            # Add show_in_balance column if it doesn't exist
             conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_in_balance BOOLEAN DEFAULT TRUE")
             
-            # Check if old budgets table exists with year/month columns
             result = conn.execute("""
                 SELECT name FROM sqlite_master 
                 WHERE type='table' AND name='budgets'
             """).fetchone()
             
             if result:
-                # Check if old table has year/month columns
                 columns_result = conn.execute("PRAGMA table_info(budgets)").fetchall()
                 has_year_month = any(col[1] in ['year', 'month'] for col in columns_result)
                 
                 if has_year_month:
                     print("Migrating from old budget schema to new schema...")
-                    # Migrate data from old table to new table
                     conn.execute("""
                         INSERT OR REPLACE INTO budgets_new (sub_category, budget_amount)
                         SELECT DISTINCT sub_category, budget_amount 
                         FROM budgets 
                         WHERE budget_amount > 0
                     """)
-                    # Drop the old table
                     conn.execute("DROP TABLE budgets")
-                    # Rename new table to budgets
                     conn.execute("ALTER TABLE budgets_new RENAME TO budgets")
                     print("Budget schema migration completed!")
                 else:
-                    # Table exists but doesn't have year/month, so it's already the new schema
                     conn.execute("DROP TABLE IF EXISTS budgets_new")
             else:
-                # No old budgets table, create the new one
                 conn.execute("ALTER TABLE budgets_new RENAME TO budgets")
             
             conn.commit()
         except Exception as e:
             print(f"Error updating database schema: {e}")
-            # If migration fails, ensure we have a proper budgets table
             try:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS budgets (
@@ -211,7 +201,6 @@ class BudgetApp:
     def add_account(self, account_name, account_type, company, currency, show_in_balance=True):
         conn = self._get_connection()
         try:
-            # Get the next available ID
             next_id = self._get_next_id('accounts')
             
             conn.execute("""

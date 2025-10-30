@@ -4,7 +4,6 @@ from main_window import BudgetTrackerWindow
 
 
 def main():
-    # Catch any uncaught exceptions
     def exception_hook(exctype, value, tb):
         print("\n" + "="*60)
         print("UNCAUGHT EXCEPTION - APP CRASHED:")

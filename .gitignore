@@ -1,9 +1,4 @@
-# Ignore everything
 *
-
-# Track only Python and spec files
 !*.py
 !*.spec
-
-# Keep gitignore
 !.gitignore

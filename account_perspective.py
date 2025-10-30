@@ -380,7 +380,7 @@ class AccountPerspectiveDialog(QDialog):
         self.current_balance_label.setText(balance_text)
         self.current_balance_label.setStyleSheet(f'font-weight: bold; font-size: 14px; color: {balance_color};')
         
-        account_name = self.account_combo.currentText().split(' (')[0]  # Remove transaction count from display
+        account_name = self.account_combo.currentText().split(' (')[0]
         self.show_status(f'Showing {len(transaction_history)} transactions for {account_name} ({filter_info})')
         
     def populate_table(self, transaction_history):

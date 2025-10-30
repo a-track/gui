@@ -32,7 +32,7 @@ class BudgetTrackerWindow(QMainWindow):
         super().__init__()
         self.budget_app = BudgetApp()
         self.balance_loader = None
-        self.transaction_counts = self.budget_app.get_transaction_counts()  # Add this line
+        self.transaction_counts = self.budget_app.get_transaction_counts()
         self.init_ui()
         self.load_balances_async()
 
@@ -40,13 +40,11 @@ class BudgetTrackerWindow(QMainWindow):
         self.setWindowTitle('Budget Tracker')
         self.setMinimumSize(950, 800)
         
-        # Create a scroll area for the entire window
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
-        # Create central widget that will hold all content
         central_widget = QWidget()
         self.setCentralWidget(scroll_area)
         scroll_area.setWidget(central_widget)
@@ -54,7 +52,6 @@ class BudgetTrackerWindow(QMainWindow):
         main_layout = QVBoxLayout()
         central_widget.setLayout(main_layout)
         
-        # Balance section with proper spacing
         balance_header_layout = QHBoxLayout()
         balance_label = QLabel('Account Balances')
         balance_label.setStyleSheet('font-weight: bold; font-size: 16px; margin-bottom: 10px;')
@@ -70,11 +67,10 @@ class BudgetTrackerWindow(QMainWindow):
         
         main_layout.addLayout(balance_header_layout)
         
-        # Balance display with proper spacing
         balance_scroll_area = QScrollArea()
         balance_scroll_area.setWidgetResizable(True)
-        balance_scroll_area.setMinimumHeight(200)  # Increased minimum height
-        balance_scroll_area.setMaximumHeight(400)  # Increased maximum height
+        balance_scroll_area.setMinimumHeight(200)
+        balance_scroll_area.setMaximumHeight(400)
         balance_scroll_area.setStyleSheet('border: 1px solid #cccccc; border-radius: 5px; margin-bottom: 20px;')
         
         balance_widget = QWidget()
@@ -96,8 +92,7 @@ class BudgetTrackerWindow(QMainWindow):
         main_layout.addWidget(balance_scroll_area)
         
         main_layout.addSpacing(20)
-        
-        # Transaction form with same header style as Account Balances
+
         form_group = QGroupBox('Add Transaction')
         form_group.setStyleSheet('''
             QGroupBox { 
@@ -113,7 +108,7 @@ class BudgetTrackerWindow(QMainWindow):
             }
         ''')
         form_layout = QVBoxLayout()
-        form_layout.setSpacing(10)  # Add spacing between form elements
+        form_layout.setSpacing(10)
         
         type_layout = QHBoxLayout()
         type_layout.addWidget(QLabel('Transaction Type:'))
@@ -268,9 +263,8 @@ class BudgetTrackerWindow(QMainWindow):
         self.status_label.setStyleSheet('color: #4CAF50; padding: 5px; font-weight: bold;')
         main_layout.addWidget(self.status_label)
         
-        # All 6 buttons in one row with vertical alignment
         buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(10)  # Space between buttons
+        buttons_layout.setSpacing(10)
         
         add_btn = QPushButton('Add Transaction')
         add_btn.clicked.connect(self.add_transaction)
@@ -388,16 +382,8 @@ class BudgetTrackerWindow(QMainWindow):
         
         buttons_layout.addStretch()
         main_layout.addLayout(buttons_layout)
-
-        # Add stretch at the bottom for better spacing
         main_layout.addStretch(1)
-        
-        # Auto-size the window to fit content
         self.adjustSize()
-
-    # ... (rest of the methods remain exactly the same as in the previous version)
-    # All other methods (load_balances_async, update_balance_display_with_data, etc.)
-    # remain completely unchanged from the previous version
 
     def load_balances_async(self):
         self.balance_display.setText('Loading balances...')
@@ -505,7 +491,6 @@ class BudgetTrackerWindow(QMainWindow):
         self.account_combo.clear()
         accounts = self.budget_app.get_all_accounts()
         
-        # Sort accounts by transaction count (most used first)
         accounts_sorted = sorted(accounts, 
                                key=lambda x: self.transaction_counts['accounts'].get(x.id, 0), 
                                reverse=True)
@@ -521,7 +506,6 @@ class BudgetTrackerWindow(QMainWindow):
         self.to_account_combo.clear()
         accounts = self.budget_app.get_all_accounts()
         
-        # Sort accounts by transaction count (most used first)
         accounts_sorted = sorted(accounts, 
                                key=lambda x: self.transaction_counts['accounts'].get(x.id, 0), 
                                reverse=True)
@@ -537,17 +521,14 @@ class BudgetTrackerWindow(QMainWindow):
         """Update payee dropdown with most used payees first"""
         payee_counts = self.transaction_counts['payees']
         
-        # Sort payees by count (most used first)
         sorted_payees = sorted(payee_counts.items(), key=lambda x: x[1], reverse=True)
         
         current_text = self.payee_input.currentText()
         self.payee_input.clear()
         
-        # Add most used payees
         for payee, count in sorted_payees:
             self.payee_input.addItem(payee)
         
-        # Set current text back if it exists
         index = self.payee_input.findText(current_text)
         if index >= 0:
             self.payee_input.setCurrentIndex(index)
@@ -622,7 +603,6 @@ class BudgetTrackerWindow(QMainWindow):
         self.from_amount_currency_label.setVisible(True)
         self.to_amount_currency_label.setVisible(is_transfer and not is_starting_balance)
         
-        # Show quantity field only for transfers (not starting balance)
         self.qty_layout.itemAt(0).widget().setVisible(is_transfer and not is_starting_balance)
         self.qty_input.setVisible(is_transfer and not is_starting_balance)
         
@@ -698,19 +678,16 @@ class BudgetTrackerWindow(QMainWindow):
             if trans_type == 'income':
                 if category.category.lower() == 'income':
                     parent_categories.add(category.category)
-                    # Get count for this parent category (sum of all subcategories)
                     count = sum(self.transaction_counts['categories'].get(sub.sub_category, 0) 
                                for sub in categories if sub.category == category.category)
                     category_counts[category.category] = count
             else:
                 if category.category.lower() != 'income':
                     parent_categories.add(category.category)
-                    # Get count for this parent category (sum of all subcategories)
                     count = sum(self.transaction_counts['categories'].get(sub.sub_category, 0) 
                                for sub in categories if sub.category == category.category)
                     category_counts[category.category] = count
         
-        # Sort parent categories by count (most used first)
         sorted_parents = sorted(list(parent_categories), 
                               key=lambda x: category_counts.get(x, 0), 
                               reverse=True)
@@ -742,7 +719,6 @@ class BudgetTrackerWindow(QMainWindow):
                 count = self.transaction_counts['categories'].get(category.sub_category, 0)
                 sub_categories.append((category.sub_category, count))
         
-        # Sort subcategories by count (most used first)
         sorted_subs = sorted(sub_categories, key=lambda x: x[1], reverse=True)
         
         for sub, count in sorted_subs:
@@ -782,7 +758,6 @@ class BudgetTrackerWindow(QMainWindow):
         payee = self.payee_input.currentText().strip()
         notes = self.notes_input.text().strip()
         
-        # Get quantity if provided (for transfers)
         qty_text = self.qty_input.text().strip()
         qty = None
         if qty_text:
@@ -839,7 +814,7 @@ class BudgetTrackerWindow(QMainWindow):
                 to_account_id=to_account_id,
                 from_amount=amount,
                 to_amount=to_amount,
-                qty=qty,  # Add quantity parameter
+                qty=qty,
                 notes=notes
             )
             
@@ -871,14 +846,12 @@ class BudgetTrackerWindow(QMainWindow):
             self.show_status('Transaction added successfully! ✓')
             self.amount_input.clear()
             self.to_amount_input.clear()
-            self.qty_input.clear()  # Clear quantity field
+            self.qty_input.clear()
             self.payee_input.setCurrentText('')
             self.notes_input.clear()
             self.account_combo.setCurrentIndex(0)
             self.to_account_combo.setCurrentIndex(0)
             self.starting_balance_checkbox.setChecked(False)
-            
-            # Refresh transaction counts and dropdowns after adding transaction
             self.transaction_counts = self.budget_app.get_transaction_counts()
             self.update_payee_combo()
         else:
@@ -974,7 +947,7 @@ class BudgetTrackerWindow(QMainWindow):
     def manage_categories(self):
         dialog = CategoriesDialog(self.budget_app, self)
         dialog.exec()
-        self.transaction_counts = self.budget_app.get_transaction_counts()  # Refresh counts
+        self.transaction_counts = self.budget_app.get_transaction_counts()
         self.update_ui_for_type()
 
     def update_balance_display(self):

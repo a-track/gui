@@ -41,7 +41,7 @@ class AccountsDialog(QDialog):
         new_account_layout.addWidget(self.currency_input)
         
         self.show_in_balance_checkbox = QCheckBox('Show in Balance')
-        self.show_in_balance_checkbox.setChecked(True)  # Default to True
+        self.show_in_balance_checkbox.setChecked(True)
         new_account_layout.addWidget(self.show_in_balance_checkbox)
         
         add_btn = QPushButton('Add Account')
