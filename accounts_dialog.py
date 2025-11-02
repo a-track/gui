@@ -235,7 +235,7 @@ class AccountsDialog(QDialog):
         
         show_in_balance = self.show_in_balance_checkbox.isChecked()
         
-        success = self.budget_app.add_account(account_name, account_type, company, currency, show_in_balance)
+        success, message = self.budget_app.add_account(account_name, account_type, company, currency, show_in_balance)
         
         if success:
             self.show_status('Account added successfully!')
@@ -249,7 +249,7 @@ class AccountsDialog(QDialog):
             if hasattr(self.parent_window, 'update_balance_display'):
                 self.parent_window.update_balance_display()
         else:
-            self.show_status('Error adding account', error=True)
+            self.show_status(f'Error: {message}', error=True)
 
     def delete_account(self):
         try:

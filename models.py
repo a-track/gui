@@ -203,6 +203,14 @@ class BudgetApp:
     def add_account(self, account_name, account_type, company, currency, show_in_balance=True):
         conn = self._get_connection()
         try:
+            existing_account = conn.execute("""
+                SELECT id FROM accounts 
+                WHERE account = ? AND currency = ? AND id != 0
+            """, [account_name, currency]).fetchone()
+            
+            if existing_account:
+                return False, f"Account '{account_name}' with currency '{currency}' already exists"
+            
             next_id = self._get_next_id('accounts')
             
             conn.execute("""
@@ -210,10 +218,10 @@ class BudgetApp:
                 VALUES (?, ?, ?, ?, ?, ?)
             """, [next_id, account_name, account_type, company, currency, show_in_balance])
             conn.commit()
-            return True
+            return True, "Account added successfully"
         except Exception as e:
             print(f"Error adding account: {e}")
-            return False
+            return False, str(e)
         finally:
             conn.close()
 
