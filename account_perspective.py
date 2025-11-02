@@ -62,6 +62,48 @@ class AccountPerspectiveDialog(QDialog):
         
         layout.addLayout(filter_layout)
         
+        button_layout = QHBoxLayout()
+        
+        self.confirm_all_button = QPushButton('Confirm All Visible Transactions')
+        self.confirm_all_button.setStyleSheet('''
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        ''')
+        self.confirm_all_button.clicked.connect(self.confirm_all_visible)
+        self.confirm_all_button.setEnabled(False)
+        button_layout.addWidget(self.confirm_all_button)
+        
+        self.all_confirmed_label = QLabel('✓ All transactions confirmed')
+        self.all_confirmed_label.setStyleSheet('''
+            QLabel {
+                color: #4CAF50;
+                font-weight: bold;
+                padding: 8px 16px;
+                background-color: #f0f9f0;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+            }
+        ''')
+        self.all_confirmed_label.setVisible(False)
+        button_layout.addWidget(self.all_confirmed_label)
+        
+        button_layout.addStretch()
+        
+        layout.addLayout(button_layout)
+        
         info_label = QLabel('Showing all transactions where this account is involved. Click checkbox to confirm transaction.')
         info_label.setStyleSheet('color: #666; font-style: italic; padding: 5px; background-color: #f0f0f0;')
         layout.addWidget(info_label)
@@ -131,7 +173,6 @@ class AccountPerspectiveDialog(QDialog):
             self.on_account_changed(0)
     
     def populate_accounts_combo(self):
-        """Populate accounts combo box, filtering out ID=0 and sorting by transaction count"""
         try:
             accounts = self.budget_app.get_all_accounts()
             all_transactions = self.budget_app.get_all_transactions()
@@ -323,7 +364,7 @@ class AccountPerspectiveDialog(QDialog):
             month_name = self.month_combo.currentText()
             filter_info = f"{month_name} {selected_year}"
         
-        transactions_to_display.sort(key=lambda x: (x.date, x.id))
+        transactions_to_display = sorted(transactions_to_display, key=lambda x: (x.date, x.id), reverse=True)
         
         transaction_history = []
         
@@ -383,6 +424,8 @@ class AccountPerspectiveDialog(QDialog):
         account_name = self.account_combo.currentText().split(' (')[0]
         self.show_status(f'Showing {len(transaction_history)} transactions for {account_name} ({filter_info})')
         
+        self.update_confirm_all_button_state()
+    
     def populate_table(self, transaction_history):
         self.table.setRowCount(len(transaction_history))
         
@@ -418,12 +461,14 @@ class AccountPerspectiveDialog(QDialog):
             trans_effect_item.setFont(QFont("", weight=QFont.Weight.Bold))
             self.table.setItem(row, 5, trans_effect_item)
             
-            formatted_balance = self.format_swiss_number(running_balance)
+            formatted_balance = self.format_swiss_number(abs(running_balance))
             balance_item = QTableWidgetItem(formatted_balance)
-            if running_balance >= 0:
+            if running_balance > 0:
                 balance_item.setForeground(QColor(0, 128, 0))
-            else:
+            elif running_balance < 0:
                 balance_item.setForeground(QColor(255, 0, 0))
+            else:
+                balance_item.setForeground(QColor(0, 0, 0))
             balance_item.setFont(QFont("", weight=QFont.Weight.Bold))
             self.table.setItem(row, 6, balance_item)
             
@@ -484,7 +529,48 @@ class AccountPerspectiveDialog(QDialog):
         self.table.setColumnWidth(8, max(70, self.table.columnWidth(8)))
         
         if transaction_history:
-            self.table.scrollToBottom()
+            self.table.scrollToTop()
+    
+    def confirm_all_visible(self):
+        try:
+            unconfirmed_transactions = []
+            
+            for row in range(self.table.rowCount()):
+                checkbox_widget = self.table.cellWidget(row, 7)
+                if checkbox_widget:
+                    checkbox = checkbox_widget.findChild(QCheckBox)
+                    if checkbox and not checkbox.isChecked():
+                        trans_id = checkbox.property('trans_id')
+                        unconfirmed_transactions.append(trans_id)
+            
+            if not unconfirmed_transactions:
+                self.show_status('All visible transactions are already confirmed!')
+                return
+            
+            reply = QMessageBox.question(
+                self,
+                'Confirm All Transactions',
+                f'Are you sure you want to confirm all {len(unconfirmed_transactions)} unconfirmed transactions?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                confirmed_count = 0
+                for trans_id in unconfirmed_transactions:
+                    try:
+                        self.budget_app.toggle_confirmation(trans_id)
+                        confirmed_count += 1
+                    except Exception as e:
+                        print(f"Error confirming transaction {trans_id}: {e}")
+                
+                self.refresh_data()
+                
+                self.show_status(f'Successfully confirmed {confirmed_count} transactions!')
+                
+        except Exception as e:
+            print(f"Error in confirm_all_visible: {e}")
+            self.show_status('Error confirming transactions!', error=True)
     
     def on_checkbox_changed(self, state):
         try:
@@ -493,9 +579,29 @@ class AccountPerspectiveDialog(QDialog):
             self.budget_app.toggle_confirmation(trans_id)
             self.show_status(f'Transaction #{trans_id} confirmation toggled!')
             
+            self.update_confirm_all_button_state()
+            
         except Exception as e:
             print(f"Error in on_checkbox_changed: {e}")
             self.show_status('Error updating confirmation!', error=True)
+    
+    def update_confirm_all_button_state(self):
+        has_unconfirmed = False
+        all_confirmed = True
+        
+        for row in range(self.table.rowCount()):
+            checkbox_widget = self.table.cellWidget(row, 7)
+            if checkbox_widget:
+                checkbox = checkbox_widget.findChild(QCheckBox)
+                if checkbox:
+                    if not checkbox.isChecked():
+                        has_unconfirmed = True
+                        all_confirmed = False
+                        break
+        
+        self.confirm_all_button.setEnabled(self.table.rowCount() > 0 and has_unconfirmed)
+        
+        self.all_confirmed_label.setVisible(self.table.rowCount() > 0 and all_confirmed)
     
     def on_delete_clicked(self):
         try:
