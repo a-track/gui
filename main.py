@@ -2,7 +2,6 @@ import sys
 from PyQt6.QtWidgets import QApplication
 from main_window import BudgetTrackerWindow
 
-
 def main():
     def exception_hook(exctype, value, tb):
         print("\n" + "="*60)
@@ -30,7 +29,6 @@ def main():
         import traceback
         traceback.print_exc()
         print("="*60)
-
 
 if __name__ == '__main__':
     main()
