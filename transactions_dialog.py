@@ -1,10 +1,11 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QCheckBox, QHeaderView, QWidget, QMessageBox,
-                             QProgressBar, QComboBox)
+                             QProgressBar, QComboBox, QStyledItemDelegate)
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
 import datetime
+from delegates import ComboBoxDelegate, DateDelegate
 
 class TransactionLoaderThread(QThread):
     finished = pyqtSignal(list)
@@ -67,13 +68,14 @@ class TransactionsDialog(QDialog):
         self.table = QTableWidget()
         self.table.verticalHeader().hide()
         
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels([
-            'ID', 'Date', 'Type', 'Amount', 'Account', 'Payee', 
+            'ID', 'Date', 'Type', 'Amount', 'Account', 'Account To', 'Payee', 
             'Category', 'Confirmed', 'Actions'
         ])
         
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.AnyKeyPressed)
+        self.table.cellChanged.connect(self.on_cell_changed)
         
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
@@ -100,17 +102,31 @@ class TransactionsDialog(QDialog):
         """)
         
         self.table.setColumnWidth(0, 50)
+        self.table.setColumnWidth(1, 120) # Date
         self.table.setColumnWidth(2, 80)
         self.table.setColumnWidth(3, 90)
-        self.table.setColumnWidth(7, 80)
-        self.table.setColumnWidth(8, 70)
+        self.table.setColumnWidth(4, 150) # Account From
+        self.table.setColumnWidth(5, 150) # Account To
+        self.table.setColumnWidth(8, 80) # Confirmed
+        self.table.setColumnWidth(9, 70) # Actions
         
         header = self.table.horizontalHeader()
-        content_columns = [1, 4, 5, 6]
+        content_columns = [6, 7] # Payee, Category
         for col in content_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         
         self.table.verticalHeader().setDefaultSectionSize(35)
+        
+        # Set Delegates
+        self.date_delegate = DateDelegate(self.table)
+        self.table.setItemDelegateForColumn(1, self.date_delegate)
+
+        self.account_delegate = ComboBoxDelegate(self.table, self.get_account_options)
+        self.table.setItemDelegateForColumn(4, self.account_delegate)
+        self.table.setItemDelegateForColumn(5, self.account_delegate) # Also for Account To
+        
+        self.category_delegate = ComboBoxDelegate(self.table, self.get_category_options)
+        self.table.setItemDelegateForColumn(7, self.category_delegate) # Verify index
         
         layout.addWidget(self.table)
         
@@ -123,6 +139,15 @@ class TransactionsDialog(QDialog):
         self.set_current_month_year()
         
         self.load_transactions()
+    
+    def get_account_options(self):
+        accounts = self.budget_app.get_all_accounts()
+        return [f"{a.account} {a.currency}" for a in accounts] # Intentionally similar to display format
+    
+    def get_category_options(self):
+        categories = self.budget_app.get_all_categories()
+        # Return sub_category
+        return sorted([c.sub_category for c in categories])
     
     def populate_years(self):
         current_year = datetime.datetime.now().year
@@ -192,6 +217,7 @@ class TransactionsDialog(QDialog):
         self.populate_table()
     
     def populate_table(self):
+        self.table.blockSignals(True)
         self.table.setRowCount(len(self.filtered_transactions))
         
         for row, trans in enumerate(self.filtered_transactions):
@@ -205,6 +231,7 @@ class TransactionsDialog(QDialog):
             self.table.setItem(row, 1, date_item)
             
             type_item = QTableWidgetItem(str.title(trans.type))
+            type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable) # Type read-only for now
             self.table.setItem(row, 2, type_item)
             
             if trans.type == 'transfer':
@@ -224,12 +251,28 @@ class TransactionsDialog(QDialog):
             
             account_item = QTableWidgetItem(account_name or "")
             self.table.setItem(row, 4, account_item)
+
+            # Account To (Column 5)
+            if trans.type == 'transfer':
+                to_account_name = self.get_account_name_by_id(trans.to_account_id)
+            else:
+                to_account_name = ""
+            
+            to_account_item = QTableWidgetItem(to_account_name)
+            if trans.type != 'transfer':
+                to_account_item.setFlags(to_account_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                to_account_item.setBackground(QColor(245, 245, 245)) # Grey out
+            self.table.setItem(row, 5, to_account_item)
             
             payee_item = QTableWidgetItem(trans.payee or "")
-            self.table.setItem(row, 5, payee_item)
+            if trans.type == 'transfer':
+                payee_item.setFlags(payee_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 6, payee_item)
             
             sub_category_item = QTableWidgetItem(trans.sub_category or "")
-            self.table.setItem(row, 6, sub_category_item)
+            if trans.type == 'transfer':
+                sub_category_item.setFlags(sub_category_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 7, sub_category_item)
             
             checkbox_widget = QWidget()
             checkbox_layout = QHBoxLayout()
@@ -243,7 +286,7 @@ class TransactionsDialog(QDialog):
             
             checkbox_layout.addWidget(checkbox)
             checkbox_widget.setLayout(checkbox_layout)
-            self.table.setCellWidget(row, 7, checkbox_widget)
+            self.table.setCellWidget(row, 8, checkbox_widget)
             
             action_widget = QWidget()
             action_layout = QHBoxLayout()
@@ -277,9 +320,107 @@ class TransactionsDialog(QDialog):
             action_layout.addWidget(delete_btn)
             action_widget.setLayout(action_layout)
             
-            self.table.setCellWidget(row, 8, action_widget)
+            self.table.setCellWidget(row, 9, action_widget)
             
             self.color_row_by_type(row, trans.type)
+        self.table.blockSignals(False)
+
+    def on_cell_changed(self, row, column):
+        try:
+            item = self.table.item(row, column)
+            if not item:
+                return
+                
+            trans_id_item = self.table.item(row, 0)
+            if not trans_id_item:
+                return
+                
+            trans_id = int(trans_id_item.text())
+            new_value = item.text().strip()
+            
+            # Map column to db field
+            # 1: Date, 3: Amount, 4: Account, 5: Account To, 6: Payee, 7: Sub Category
+            field = None
+            
+            if column == 1: # Date
+                field = 'date'
+                try:
+                    datetime.datetime.strptime(new_value, '%Y-%m-%d')
+                except ValueError:
+                    self.show_status(f'Invalid date format: {new_value}. Use YYYY-MM-DD', error=True)
+                    self.revert_cell(row, column)
+                    return
+            elif column == 3: # Amount
+                field = 'amount'
+                try:
+                    new_value = float(new_value)
+                except ValueError:
+                    self.show_status('Invalid amount', error=True)
+                    self.revert_cell(row, column)
+                    return
+            elif column == 4: # Account From
+                field = 'account_id'
+                account_id = self.budget_app.get_account_id_from_name_currency(new_value)
+                if account_id is None:
+                    self.show_status(f'Account "{new_value}" not found.', error=True)
+                    self.revert_cell(row, column)
+                    return
+                new_value = account_id
+            elif column == 5: # Account To (Transfer only)
+                field = 'to_account_id'
+                account_id = self.budget_app.get_account_id_from_name_currency(new_value)
+                if account_id is None:
+                    self.show_status(f'Account "{new_value}" not found.', error=True)
+                    self.revert_cell(row, column)
+                    return
+                new_value = account_id
+            elif column == 6: # Payee
+                field = 'payee'
+            elif column == 7: # Category (Sub Category in DB)
+                field = 'sub_category'
+            
+            if field:
+                success = self.budget_app.update_transaction(trans_id, **{field: new_value})
+                if success:
+                    self.show_status(f'Updated transaction #{trans_id}')
+                    # Update local model
+                    trans = self.filtered_transactions[row]
+                    setattr(trans, field, new_value)
+                else:
+                    self.show_status(f'Error updating transaction #{trans_id}', error=True)
+                    self.revert_cell(row, column)
+                    
+        except Exception as e:
+            print(f"Error in on_cell_changed: {e}")
+            self.show_status('Error updating transaction', error=True)
+            self.revert_cell(row, column)
+
+    def revert_cell(self, row, column):
+        """Revert cell to value from local model"""
+        try:
+            self.table.blockSignals(True)
+            trans = self.filtered_transactions[row]
+            
+            value = ""
+            value = ""
+            if column == 1:
+                value = str(trans.date)
+            elif column == 3:
+                value = f"{trans.amount:.2f}" if trans.amount else ""
+            elif column == 4:
+                value = self.get_account_name_by_id(trans.account_id)
+            elif column == 5:
+                value = self.get_account_name_by_id(trans.to_account_id)
+            elif column == 6:
+                value = trans.payee or ""
+            elif column == 7:
+                value = trans.sub_category or ""
+                
+            self.table.item(row, column).setText(value)
+        except Exception as e:
+            print(f"Error reverting cell: {e}")
+        finally:
+            self.table.blockSignals(False)
     
     def get_account_name_by_id(self, account_id):
         if account_id is None:

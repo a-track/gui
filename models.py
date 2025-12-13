@@ -342,6 +342,82 @@ class BudgetApp:
         finally:
             conn.close()
 
+    def update_category(self, sub_category: str, new_category: str = None, new_type: str = None, new_sub_category: str = None):
+        conn = self._get_connection()
+        try:
+            # If renaming the primary key (sub_category)
+            if new_sub_category and new_sub_category != sub_category:
+                # 1. Check if new sub_category already exists
+                exists = conn.execute("SELECT 1 FROM categories WHERE sub_category = ?", [new_sub_category]).fetchone()
+                if exists:
+                    return False
+                
+                # 2. Get current values if not provided
+                if not new_category or not new_type:
+                    curr = conn.execute("SELECT category, category_type FROM categories WHERE sub_category = ?", [sub_category]).fetchone()
+                    if not curr:
+                        return False
+                    if not new_category:
+                        new_category = curr[0]
+                    if not new_type:
+                        new_type = curr[1]
+                
+                # 3. Create new category
+                conn.execute("""
+                    INSERT INTO categories (sub_category, category, category_type)
+                    VALUES (?, ?, ?)
+                """, [new_sub_category, new_category, new_type])
+                
+                # 4. Update references in transactions
+                conn.execute("""
+                    UPDATE transactions 
+                    SET sub_category = ? 
+                    WHERE sub_category = ?
+                """, [new_sub_category, sub_category])
+                
+                # 5. Update references in budgets
+                conn.execute("""
+                    UPDATE budgets 
+                    SET sub_category = ? 
+                    WHERE sub_category = ?
+                """, [new_sub_category, sub_category])
+                
+                # 6. Delete old category
+                conn.execute("DELETE FROM categories WHERE sub_category = ?", [sub_category])
+                
+                conn.commit()
+                return True
+
+            # Standard update (not renaming PK)
+            updates = []
+            params = []
+            
+            if new_category:
+                updates.append("category = ?")
+                params.append(new_category)
+            
+            if new_type:
+                updates.append("category_type = ?")
+                params.append(new_type)
+            
+            if not updates:
+                return True
+                
+            params.append(sub_category)
+            
+            conn.execute(f"""
+                UPDATE categories 
+                SET {', '.join(updates)}
+                WHERE sub_category = ?
+            """, params)
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error updating category: {e}")
+            return False
+        finally:
+            conn.close()
+
     def get_all_categories(self):
         conn = self._get_connection()
         try:
@@ -565,6 +641,47 @@ class BudgetApp:
             
             if result:
                 return Account(*result)
+            return None
+        finally:
+            conn.close()
+
+    def get_account_by_id(self, account_id: int):
+        conn = self._get_connection()
+        try:
+            result = conn.execute("""
+                SELECT id, account, type, company, currency, show_in_balance, is_investment
+                FROM accounts 
+                WHERE id = ?
+            """, [account_id]).fetchone()
+            
+            if result:
+                account = Account(result[0], result[1], result[2], result[3], result[4])
+                account.show_in_balance = bool(result[5]) if result[5] is not None else True
+                account.is_investment = bool(result[6]) if len(result) > 6 and result[6] is not None else False
+                return account
+            return None
+        except Exception as e:
+            print(f"Error getting account by id: {e}")
+            return None
+        finally:
+            conn.close()
+
+    def get_account_id_from_name_currency(self, account_str):
+        """Helper to get account ID from 'Name Currency' string format"""
+        conn = self._get_connection()
+        try:
+            # First try exact match
+            # The format in the table is "Name Currency" (e.g. "Main CHF")
+            # But account name could contain spaces.
+            # We know currency is usually 3 chars at the end? Not essentially.
+            # Let's try to match against all accounts
+            accounts = self.get_all_accounts()
+            for account in accounts:
+                if f"{account.account} {account.currency}" == account_str:
+                    return account.id
+            
+            # Fallback: try to find by name only if currency matches default or is omitted
+            # This is ambiguous, so sticking to exact match first is safer.
             return None
         finally:
             conn.close()
