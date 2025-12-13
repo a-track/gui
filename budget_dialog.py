@@ -375,6 +375,11 @@ class BudgetDialog(QDialog):
             current_row += 1
         
         self.table.resizeColumnsToContents()
+        
+        # Autosize window width
+        total_width = self.table.horizontalHeader().length() + 80
+        if total_width > self.width():
+            self.resize(total_width, self.height())
     
     def show_set_budgets_dialog(self):
         dialog = SetMonthlyBudgetsDialog(self.budget_app, self)

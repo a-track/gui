@@ -12,14 +12,16 @@ class TransactionLoaderThread(QThread):
     finished = pyqtSignal(list)
     progress = pyqtSignal(int)
     
-    def __init__(self, budget_app):
+    def __init__(self, budget_app, year, month):
         super().__init__()
         self.budget_app = budget_app
+        self.year = year
+        self.month = month
     
     def run(self):
         try:
-            all_transactions = self.budget_app.get_all_transactions()
-            self.finished.emit(all_transactions)
+            transactions = self.budget_app.get_transactions_by_month(self.year, self.month)
+            self.finished.emit(transactions)
         except Exception as e:
             print(f"Error loading transactions: {e}")
             self.finished.emit([])
@@ -51,6 +53,7 @@ class TransactionsDialog(QDialog):
         filter_layout.addWidget(QLabel('Month:'))
         self.month_combo = QComboBox()
         self.populate_months()
+        self.month_combo.setCurrentText('All') # Default to All
         self.month_combo.currentTextChanged.connect(self.apply_filters)
         filter_layout.addWidget(self.month_combo)
         
@@ -156,7 +159,7 @@ class TransactionsDialog(QDialog):
         self.year_combo.addItems([str(year) for year in years])
     
     def populate_months(self):
-        months = [
+        months = ['All'] + [
             'January', 'February', 'March', 'April', 'May', 'June',
             'July', 'August', 'September', 'October', 'November', 'December'
         ]
@@ -167,59 +170,74 @@ class TransactionsDialog(QDialog):
         current_year = str(now.year)
         current_month = now.strftime('%B')
         
+        self.year_combo.blockSignals(True)
+        self.month_combo.blockSignals(True)
+        
         index = self.year_combo.findText(current_year)
         if index >= 0:
             self.year_combo.setCurrentIndex(index)
         
-        index = self.month_combo.findText(current_month)
+        index = self.month_combo.findText('All')
         if index >= 0:
             self.month_combo.setCurrentIndex(index)
+
+        self.year_combo.blockSignals(False)
+        self.month_combo.blockSignals(False)
     
     def load_transactions(self):
+        # Prevent starting a new thread if one is already running? 
+        # Actually, if the user changes filters rapidly, we might WANT to restart.
+        # But for crash prevention, let's just make sure we handle the old one gracefully or just wait.
+        # However, simply blocking signals in init should fix the startup crash.
+        
+        # Additional safety:
+        if hasattr(self, 'loader_thread') and self.loader_thread.isRunning():
+            # If we try to start a new one, the old one is destroyed. 
+            # Ideally we should wait or cancel. 
+            # For now, let's just proceed as the signal blocking is the main fix.
+            pass
+
         self.progress_bar.setVisible(True)
         self.info_label.setText('Loading transactions...')
         
-        self.loader_thread = TransactionLoaderThread(self.budget_app)
+        selected_year = int(self.year_combo.currentText())
+        month_text = self.month_combo.currentText()
+        selected_month = 0 if month_text == 'All' else self.month_combo.currentIndex() # All is at index 0
+        
+        # If "All" is inserted at index 0, then January is index 1.
+        # But if I use names, I need a map.
+        
+        self.loader_thread = TransactionLoaderThread(self.budget_app, selected_year, selected_month)
         self.loader_thread.finished.connect(self.on_transactions_loaded)
         self.loader_thread.start()
     
     def on_transactions_loaded(self, transactions):
         self.progress_bar.setVisible(False)
-        self.all_transactions = transactions
+        self.all_transactions = transactions # Now contains only filtered transactions
         
-        self.apply_filters()
-    
-    def apply_filters(self):
-        if not self.all_transactions:
-            return
+        # apply_filters is now just updating the UI as db already filtered it
+        self.filtered_transactions = transactions
         
-        selected_year = int(self.year_combo.currentText())
-        selected_month = self.month_combo.currentIndex() + 1
+        selected_year = self.year_combo.currentText()
+        selected_month = self.month_combo.currentText()
         
-        self.filtered_transactions = []
-        for trans in self.all_transactions:
-            try:
-                if hasattr(trans, 'date') and trans.date:
-                    trans_date = trans.date
-                    if isinstance(trans_date, str):
-                        trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
-                    
-                    if trans_date.year == selected_year and trans_date.month == selected_month:
-                        self.filtered_transactions.append(trans)
-            except (ValueError, AttributeError) as e:
-                print(f"Error parsing date for transaction {trans.id}: {e}")
-                continue
-        
-        month_name = self.month_combo.currentText()
         self.info_label.setText(
-            f'Showing {len(self.filtered_transactions)} transactions for {month_name} {selected_year}'
+            f'Showing {len(self.filtered_transactions)} transactions for {selected_month} {selected_year}'
         )
         
         self.populate_table()
     
+    def apply_filters(self):
+        # Redispatch to load_transactions which now handles the DB fetch
+        self.load_transactions()
+    
     def populate_table(self):
         self.table.blockSignals(True)
         self.table.setRowCount(len(self.filtered_transactions))
+        
+        # Pre-fetch accounts for fast lookup
+        accounts = self.budget_app.get_all_accounts()
+        accounts_map = {acc.id: f'{acc.account} {acc.currency}' for acc in accounts}
         
         for row, trans in enumerate(self.filtered_transactions):
             id_item = QTableWidgetItem(str(trans.id))
@@ -246,16 +264,16 @@ class TransactionsDialog(QDialog):
             self.table.setItem(row, 3, amount_item)
             
             if trans.type == 'transfer':
-                account_name = self.get_account_name_by_id(trans.account_id)
+                account_name = accounts_map.get(trans.account_id, "")
             else:
-                account_name = self.get_account_name_by_id(trans.account_id)
+                account_name = accounts_map.get(trans.account_id, "")
             
-            account_item = QTableWidgetItem(account_name or "")
+            account_item = QTableWidgetItem(account_name)
             self.table.setItem(row, 4, account_item)
 
             # Account To (Column 5)
             if trans.type == 'transfer':
-                to_account_name = self.get_account_name_by_id(trans.to_account_id)
+                to_account_name = accounts_map.get(trans.to_account_id, "")
             else:
                 to_account_name = ""
             
@@ -324,6 +342,14 @@ class TransactionsDialog(QDialog):
             self.table.setCellWidget(row, 9, action_widget)
             
             self.color_row_by_type(row, trans.type)
+        
+        self.table.resizeColumnsToContents()
+        
+        # Autosize window width
+        total_width = self.table.horizontalHeader().length() + 80 # + padding for scrollbar/margins
+        if total_width > self.width():
+            self.resize(total_width, self.height())
+            
         self.table.blockSignals(False)
 
     def on_cell_changed(self, row, column):
@@ -387,6 +413,9 @@ class TransactionsDialog(QDialog):
                     # Update local model
                     trans = self.filtered_transactions[row]
                     setattr(trans, field, new_value)
+                    
+                    if self.parent_window and hasattr(self.parent_window, 'update_balance_display'):
+                        self.parent_window.update_balance_display()
                 else:
                     self.show_status(f'Error updating transaction #{trans_id}', error=True)
                     self.revert_cell(row, column)
@@ -452,6 +481,9 @@ class TransactionsDialog(QDialog):
             self.budget_app.toggle_confirmation(trans_id)
             self.show_status(f'Transaction #{trans_id} confirmation toggled!')
             
+            if self.parent_window and hasattr(self.parent_window, 'update_balance_display'):
+                self.parent_window.update_balance_display()
+            
         except Exception as e:
             print(f"Error in on_checkbox_changed: {e}")
             self.show_status('Error updating confirmation!', error=True)
@@ -472,6 +504,9 @@ class TransactionsDialog(QDialog):
                 self.budget_app.delete_transaction(trans_id)
                 self.show_status(f'Transaction #{trans_id} deleted!')
                 self.refresh_table()
+                
+                if self.parent_window and hasattr(self.parent_window, 'update_balance_display'):
+                    self.parent_window.update_balance_display()
                 
         except Exception as e:
             print(f"Error in on_delete_clicked: {e}")

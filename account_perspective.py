@@ -386,6 +386,13 @@ class AccountPerspectiveDialog(QDialog):
         
         transaction_history = []
         
+        # Pre-fetch accounts for fast lookup
+        accounts = self.budget_app.get_all_accounts()
+        accounts_map = {acc.id: f'{acc.account}' for acc in accounts} # Only name needed here?
+        # get_account_name_by_id returned account name only. Let's verify.
+        # Line 279: return account.account
+        # Yes, just account name.
+
         for trans in transactions_to_display:
             running_balance = self.running_balance_history.get(trans.id, 0.0)
             
@@ -403,11 +410,11 @@ class AccountPerspectiveDialog(QDialog):
                 if trans.account_id == self.selected_account_id:
                     transaction_amount = float(trans.amount or 0)
                     effect = "-"
-                    other_account = self.get_account_name_by_id(trans.to_account_id)
+                    other_account = accounts_map.get(trans.to_account_id, "")
                 elif trans.to_account_id == self.selected_account_id:
                     transaction_amount = float(trans.to_amount or 0)
                     effect = "+"
-                    other_account = self.get_account_name_by_id(trans.account_id)
+                    other_account = accounts_map.get(trans.account_id, "")
                 else:
                     continue
             else:
@@ -504,6 +511,9 @@ class AccountPerspectiveDialog(QDialog):
                 if success:
                     self.show_status(f'Updated transaction #{trans_id}')
                     self.refresh_data()
+                    
+                    if self.parent_window and hasattr(self.parent_window, 'update_balance_display'):
+                        self.parent_window.update_balance_display()
                 else:
                     self.show_status(f'Error updating transaction #{trans_id}', error=True)
                     self.refresh_data()
@@ -642,6 +652,11 @@ class AccountPerspectiveDialog(QDialog):
         
         if transaction_history:
             self.table.scrollToTop()
+            
+        # Autosize window width
+        total_width = self.table.horizontalHeader().length() + 80
+        if total_width > self.width():
+            self.resize(total_width, self.height())
 
 
 
@@ -680,6 +695,9 @@ class AccountPerspectiveDialog(QDialog):
                 
                 self.refresh_data()
                 
+                if self.parent_window and hasattr(self.parent_window, 'update_balance_display'):
+                    self.parent_window.update_balance_display()
+                
                 self.show_status(f'Successfully confirmed {confirmed_count} transactions!')
                 
         except Exception as e:
@@ -692,6 +710,9 @@ class AccountPerspectiveDialog(QDialog):
             trans_id = checkbox.property('trans_id')
             self.budget_app.toggle_confirmation(trans_id)
             self.show_status(f'Transaction #{trans_id} confirmation toggled!')
+            
+            if self.parent_window and hasattr(self.parent_window, 'update_balance_display'):
+                self.parent_window.update_balance_display()
             
             self.update_confirm_all_button_state()
             
@@ -733,6 +754,9 @@ class AccountPerspectiveDialog(QDialog):
                 self.budget_app.delete_transaction(trans_id)
                 self.show_status(f'Transaction #{trans_id} deleted!')
                 self.refresh_data()
+                
+                if self.parent_window and hasattr(self.parent_window, 'update_balance_display'):
+                    self.parent_window.update_balance_display()
                 
         except Exception as e:
             print(f"Error in on_delete_clicked: {e}")

@@ -616,26 +616,131 @@ class BudgetApp:
             balances = {}
             accounts = self.get_all_accounts()
             
+            # Initialize with 0
             for account in accounts:
                 balances[account.id] = {
                     'account_name': account.account,
                     'balance': 0.0,
-                    'type': account.type
+                    'type': account.type,
+                    'count': 0
                 }
             
-            transactions = self.get_all_transactions()
-            for trans in transactions:
-                if trans.type == 'income' and trans.account_id:
-                    balances[trans.account_id]['balance'] += float(trans.amount or 0)
-                elif trans.type == 'expense' and trans.account_id:
-                    balances[trans.account_id]['balance'] -= float(trans.amount or 0)
-                elif trans.type == 'transfer':
-                    if trans.account_id:
-                        balances[trans.account_id]['balance'] -= float(trans.amount or 0)
-                    if trans.to_account_id:
-                        balances[trans.to_account_id]['balance'] += float(trans.to_amount or 0)
+            # Aggregation via SQL is much faster than iterating in Python
+            # 1. Income (add to account_id)
+            incomes = conn.execute("""
+                SELECT account_id, SUM(amount) 
+                FROM transactions 
+                WHERE type = 'income' AND account_id IS NOT NULL 
+                GROUP BY account_id
+            """).fetchall()
+            
+            for acc_id, amount in incomes:
+                if acc_id in balances:
+                    balances[acc_id]['balance'] += float(amount)
+
+            # 2. Expenses (subtract from account_id)
+            expenses = conn.execute("""
+                SELECT account_id, SUM(amount) 
+                FROM transactions 
+                WHERE type = 'expense' AND account_id IS NOT NULL 
+                GROUP BY account_id
+            """).fetchall()
+            
+            for acc_id, amount in expenses:
+                if acc_id in balances:
+                    balances[acc_id]['balance'] -= float(amount)
+            
+            # 3. Transfers Out (subtract from account_id)
+            transfers_out = conn.execute("""
+                SELECT account_id, SUM(amount) 
+                FROM transactions 
+                WHERE type = 'transfer' AND account_id IS NOT NULL 
+                GROUP BY account_id
+            """).fetchall()
+            
+            for acc_id, amount in transfers_out:
+                if acc_id in balances:
+                    balances[acc_id]['balance'] -= float(amount)
+            
+            # 4. Transfers In (add to to_account_id)
+            transfers_in = conn.execute("""
+                SELECT to_account_id, SUM(to_amount) 
+                FROM transactions 
+                WHERE type = 'transfer' AND to_account_id IS NOT NULL 
+                GROUP BY to_account_id
+            """).fetchall()
+            
+            for acc_id, amount in transfers_in:
+                if acc_id in balances:
+                    balances[acc_id]['balance'] += float(amount)
+            
+            # 5. Count transactions (account_id)
+            counts_1 = conn.execute("""
+                SELECT account_id, COUNT(*) 
+                FROM transactions 
+                WHERE account_id IS NOT NULL 
+                GROUP BY account_id
+            """).fetchall()
+            
+            for acc_id, count in counts_1:
+                if acc_id in balances:
+                    balances[acc_id]['count'] += count
+            
+            # 6. Count transactions (to_account_id)
+            counts_2 = conn.execute("""
+                SELECT to_account_id, COUNT(*) 
+                FROM transactions 
+                WHERE to_account_id IS NOT NULL 
+                GROUP BY to_account_id
+            """).fetchall()
+            
+            for acc_id, count in counts_2:
+                if acc_id in balances:
+                    balances[acc_id]['count'] += count
             
             return balances
+        finally:
+            conn.close()
+
+    def get_transactions_by_month(self, year: int, month: int):
+        conn = self._get_connection()
+        try:
+            if month is None or month == 0:
+                # Get all for the year
+                start_date = f"{year}-01-01"
+                end_date = f"{year+1}-01-01"
+            else:
+                # Calculate start and end date for better index usage
+                start_date = f"{year}-{month:02d}-01"
+                if month == 12:
+                    end_date = f"{year+1}-01-01"
+                else:
+                    end_date = f"{year}-{month+1:02d}-01"
+            
+            result = conn.execute("""
+                SELECT id, date, type, sub_category, amount, account_id, 
+                    payee, notes, invest_account_id, qty, to_account_id, 
+                    to_amount, confirmed
+                FROM transactions 
+                WHERE date >= ? AND date < ?
+                ORDER BY date DESC, id DESC
+            """, [start_date, end_date]).fetchall()
+            
+            transactions = []
+            for row in result:
+                trans = Transaction(
+                    trans_id=row[0], date=row[1], type=row[2],
+                    sub_category=row[3], amount=row[4], account_id=row[5],
+                    payee=row[6], notes=row[7], invest_account_id=row[8],
+                    qty=row[9], to_account_id=row[10], to_amount=row[11],
+                    confirmed=row[12]
+                )
+                transactions.append(trans)
+            
+            return transactions
+        except Exception as e:
+            print(f"Error getting transactions by month: {e}")
+            return []
         finally:
             conn.close()
 

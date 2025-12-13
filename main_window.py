@@ -2,8 +2,10 @@ import sys
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QPushButton, QLineEdit, 
                              QComboBox, QRadioButton, QButtonGroup, QMessageBox,
-                             QDateEdit, QGroupBox, QScrollArea, QProgressBar, QCheckBox)
+                             QDateEdit, QGroupBox, QScrollArea, QProgressBar, QCheckBox,
+                             QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy)
 from PyQt6.QtCore import Qt, QTimer, QDate, QThread, pyqtSignal
+from PyQt6.QtGui import QFont, QColor
 
 from models import BudgetApp
 from transactions_dialog import TransactionsDialog
@@ -57,40 +59,45 @@ class BudgetTrackerWindow(QMainWindow):
         balance_label = QLabel('Account Balances')
         balance_label.setStyleSheet('font-weight: bold; font-size: 16px; margin-bottom: 10px;')
         
-        refresh_btn = QPushButton('Refresh Balances')
-        refresh_btn.clicked.connect(self.load_balances_async)
-        refresh_btn.setStyleSheet('background-color: #607D8B; color: white; padding: 5px; font-size: 12px;')
-        refresh_btn.setMaximumWidth(120)
-        
         balance_header_layout.addWidget(balance_label)
         balance_header_layout.addStretch()
-        balance_header_layout.addWidget(refresh_btn)
         
         main_layout.addLayout(balance_header_layout)
         
-        balance_scroll_area = QScrollArea()
-        balance_scroll_area.setWidgetResizable(True)
-        balance_scroll_area.setMinimumHeight(200)
-        balance_scroll_area.setMaximumHeight(400)
-        balance_scroll_area.setStyleSheet('border: 1px solid #cccccc; border-radius: 5px; margin-bottom: 20px;')
+        # Balance Table
+        self.balance_table = QTableWidget()
+        self.balance_table.setMinimumHeight(200)
+        self.balance_table.setMaximumHeight(400)
+        self.balance_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.balance_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.balance_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.balance_table.setAlternatingRowColors(True)
+        self.balance_table.setShowGrid(False)
+        self.balance_table.setStyleSheet("""
+            QTableWidget {
+                background-color: #fcfcfc;
+                alternate-background-color: #f2f2f2;
+                border: 1px solid #d0d0d0;
+                border-radius: 5px;
+                font-family: "Segoe UI", sans-serif;
+                font-size: 13px;
+            }
+            QTableWidget::item {
+                padding: 5px 10px;
+                border: none;
+            }
+            QHeaderView::section {
+                background-color: #f0f0f0;
+                padding: 6px;
+                border: none;
+                border-bottom: 2px solid #d0d0d0;
+                font-weight: bold;
+                font-size: 13px;
+            }
+        """)
+        self.balance_table.verticalHeader().hide()
         
-        balance_widget = QWidget()
-        self.balance_layout = QVBoxLayout(balance_widget)
-        
-        self.balance_display = QLabel('Loading balances...')
-        self.balance_display.setStyleSheet('''
-            background-color: #f5f5f5; 
-            padding: 20px;  /* Increased padding */
-            border-radius: 5px; 
-            font-family: "Courier New", monospace; 
-            font-size: 13px;
-            line-height: 1.4;
-        ''')
-        self.balance_display.setWordWrap(False)
-        self.balance_layout.addWidget(self.balance_display)
-        
-        balance_scroll_area.setWidget(balance_widget)
-        main_layout.addWidget(balance_scroll_area)
+        main_layout.addWidget(self.balance_table)
         
         main_layout.addSpacing(20)
 
@@ -387,7 +394,13 @@ class BudgetTrackerWindow(QMainWindow):
         self.adjustSize()
 
     def load_balances_async(self):
-        self.balance_display.setText('Loading balances...')
+        self.balance_table.clear()
+        self.balance_table.setRowCount(1)
+        self.balance_table.setColumnCount(1)
+        item = QTableWidgetItem('Loading balances...')
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.balance_table.setItem(0, 0, item)
+        self.balance_table.horizontalHeader().setVisible(False)
         
         self.balance_loader = BalanceLoaderThread(self.budget_app)
         self.balance_loader.finished.connect(self.on_balances_loaded)
@@ -398,21 +411,28 @@ class BudgetTrackerWindow(QMainWindow):
         self.update_balance_display_with_data(balances)
 
     def on_balances_error(self, error_message):
-        self.balance_display.setText(f'Error loading balances: {error_message}')
+        self.balance_table.clear()
+        self.balance_table.setRowCount(1)
+        self.balance_table.setColumnCount(1)
+        item = QTableWidgetItem(f'Error loading balances: {error_message}')
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        item.setForeground(QColor('red'))
+        self.balance_table.setItem(0, 0, item)
 
     def update_balance_display_with_data(self, balances):
-        transaction_counts = {}
+        # Transaction counts are now included in balances
+        
+        # Pre-fetch accounts to avoid DB calls in loop
         all_accounts = self.budget_app.get_all_accounts()
-        for account in all_accounts:
-            count = self.budget_app.count_transactions_for_account(account.id)
-            transaction_counts[account.id] = count
+        accounts_map = {acc.id: acc for acc in all_accounts}
+        currency_map = {acc.id: acc.currency for acc in all_accounts}
         
         account_groups = {}
         for account_id, data in balances.items():
             if abs(data['balance']) < 0.001:
                 continue
                 
-            account_obj = self.get_account_by_id(account_id)
+            account_obj = accounts_map.get(account_id)
 
             if account_obj:
                 if account_obj.id == 0:
@@ -426,9 +446,9 @@ class BudgetTrackerWindow(QMainWindow):
             if account_name not in account_groups:
                 account_groups[account_name] = []
             
-            count = transaction_counts.get(account_id, 0)
+            count = data.get('count', 0)
             account_groups[account_name].append((account_id, data, count))
-                
+            
           
         
         group_transaction_counts = {}
@@ -439,7 +459,7 @@ class BudgetTrackerWindow(QMainWindow):
         currency_totals = {}
         for account_name, accounts in account_groups.items():
             for account_id, data, count in accounts:
-                currency = self.get_currency_for_account(account_id)
+                currency = currency_map.get(account_id, 'CHF')
                 balance = data['balance']
                 if currency in currency_totals:
                     currency_totals[currency] += abs(balance)
@@ -452,43 +472,83 @@ class BudgetTrackerWindow(QMainWindow):
                                     key=lambda x: group_transaction_counts[x[0]], 
                                     reverse=True)
         
-        account_col_width = 35
-        currency_col_width = 15
+        # Setup Table
+        self.balance_table.blockSignals(True)
+        self.balance_table.clear()
+        self.balance_table.setColumnCount(len(all_currencies) + 1)
+        self.balance_table.setHorizontalHeaderLabels(['Account'] + all_currencies)
+        self.balance_table.horizontalHeader().setVisible(True)
         
-        balance_text = ""
+        # Populate Rows
+        row_count = len(sorted_account_groups) + 1 # +1 for Total
+        self.balance_table.setRowCount(row_count)
         
-        header = f"{'Account':{account_col_width}}"
-        for currency in all_currencies:
-            header += f"{currency:>{currency_col_width}}"
-        balance_text += header + "\n"
-        balance_text += "-" * (account_col_width + len(all_currencies) * currency_col_width) + "\n"
-        
+        current_row = 0
         total_by_currency = {currency: 0.0 for currency in all_currencies}
+        
+        font = self.balance_table.font()
+        bold_font = QFont(font)
+        bold_font.setBold(True)
+        
+        # Fill Account Rows
         for account_name, accounts in sorted_account_groups:
+            # Account Name Column
+            name_item = QTableWidgetItem(account_name)
+            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.balance_table.setItem(current_row, 0, name_item)
+            
             group_balances = {currency: 0.0 for currency in all_currencies}
             for account_id, data, count in accounts:
-                currency = self.get_currency_for_account(account_id)
+                currency = currency_map.get(account_id, 'CHF')
                 group_balances[currency] += data['balance']
             
-            line = f"{account_name:{account_col_width}}"
-            for currency in all_currencies:
+            for col_idx, currency in enumerate(all_currencies):
                 balance = group_balances[currency]
                 if abs(balance) >= 0.001:
                     formatted_balance = self.format_with_thousand_separators(balance)
-                    line += f"{formatted_balance:>{currency_col_width}}"
+                    balance_item = QTableWidgetItem(formatted_balance)
+                    balance_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    
+                    if balance < 0:
+                         balance_item.setForeground(QColor(255, 0, 0))
+                    
+                    self.balance_table.setItem(current_row, col_idx + 1, balance_item)
                     total_by_currency[currency] += balance
-                else:
-                    line += f"{'':>{currency_col_width}}"
-            balance_text += line + "\n"
+            
+            current_row += 1
+            
+        # Fill Total Row
+        total_label_item = QTableWidgetItem("Total")
+        total_label_item.setFont(bold_font)
+        total_label_item.setFlags(total_label_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self.balance_table.setItem(current_row, 0, total_label_item)
         
-        balance_text += "-" * (account_col_width + len(all_currencies) * currency_col_width) + "\n"
-        total_line = f"{'Total':{account_col_width}}"
-        for currency in all_currencies:
-            formatted_total = self.format_with_thousand_separators(total_by_currency[currency])
-            total_line += f"{formatted_total:>{currency_col_width}}"
-        balance_text += total_line
+        for col_idx, currency in enumerate(all_currencies):
+             formatted_total = self.format_with_thousand_separators(total_by_currency[currency])
+             total_item = QTableWidgetItem(formatted_total)
+             total_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+             total_item.setFont(bold_font)
+             
+             if total_by_currency[currency] < 0:
+                  total_item.setForeground(QColor(255, 0, 0))
+             
+             self.balance_table.setItem(current_row, col_idx + 1, total_item)
+             
+        self.balance_table.blockSignals(False)
         
-        self.balance_display.setText(balance_text)
+        # Autosize
+        self.balance_table.resizeColumnsToContents()
+        self.balance_table.resizeRowsToContents()
+        
+        # Dynamic Height Adjustment to avoid inner scrolling if possible
+        header_height = self.balance_table.horizontalHeader().height()
+        rows_height = sum(self.balance_table.rowHeight(i) for i in range(self.balance_table.rowCount()))
+        total_height = header_height + rows_height + 20 # Buffer
+        
+        # Constrain min/max
+        total_height = max(100, min(total_height, 400))
+        self.balance_table.setMinimumHeight(total_height)
+        self.balance_table.setMaximumHeight(total_height)
 
     def update_account_combo(self):
         self.account_combo.clear()
@@ -887,6 +947,7 @@ class BudgetTrackerWindow(QMainWindow):
             self.starting_balance_checkbox.setChecked(False)
             self.transaction_counts = self.budget_app.get_transaction_counts()
             self.update_payee_combo()
+            self.update_balance_display()
         else:
             self.show_status('Error adding transaction', error=True)
 

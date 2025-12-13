@@ -176,6 +176,11 @@ class CategoriesDialog(QDialog):
             
             self.table.resizeColumnsToContents()
             
+            # Autosize window width
+            total_width = self.table.horizontalHeader().length() + 80
+            if total_width > self.width():
+                self.resize(total_width, self.height())
+            
             self.table.setColumnWidth(0, max(100, self.table.columnWidth(0)))
             self.table.setColumnWidth(1, max(120, self.table.columnWidth(1)))
             self.table.setColumnWidth(2, max(120, self.table.columnWidth(2)))
