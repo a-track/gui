@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
 import datetime
 from delegates import ComboBoxDelegate, DateDelegate
+from utils import safe_eval_math
 
 class TransactionLoaderThread(QThread):
     finished = pyqtSignal(list)
@@ -142,7 +143,7 @@ class TransactionsDialog(QDialog):
     
     def get_account_options(self):
         accounts = self.budget_app.get_all_accounts()
-        return [f"{a.account} {a.currency}" for a in accounts] # Intentionally similar to display format
+        return [f"{a.account} {a.currency}" for a in accounts if getattr(a, 'is_active', True)] # Intentionally similar to display format
     
     def get_category_options(self):
         categories = self.budget_app.get_all_categories()
@@ -353,9 +354,9 @@ class TransactionsDialog(QDialog):
             elif column == 3: # Amount
                 field = 'amount'
                 try:
-                    new_value = float(new_value)
+                    new_value = safe_eval_math(new_value)
                 except ValueError:
-                    self.show_status('Invalid amount', error=True)
+                    self.show_status('Invalid amount expression', error=True)
                     self.revert_cell(row, column)
                     return
             elif column == 4: # Account From

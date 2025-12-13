@@ -11,6 +11,7 @@ from account_perspective import AccountPerspectiveDialog
 from accounts_dialog import AccountsDialog
 from categories_dialog import CategoriesDialog
 from budget_dialog import BudgetDialog
+from utils import safe_eval_math
 
 class BalanceLoaderThread(QThread):
     finished = pyqtSignal(dict)
@@ -500,6 +501,8 @@ class BudgetTrackerWindow(QMainWindow):
         for account in accounts_sorted:
             if account.id == 0:
                 continue
+            if not getattr(account, 'is_active', True):
+                continue
             display_text = f"{account.account} ({account.currency})"
             self.account_combo.addItem(display_text, account.id)
         self.account_combo.adjustSize()
@@ -514,6 +517,8 @@ class BudgetTrackerWindow(QMainWindow):
         
         for account in accounts_sorted:
             if account.id == 0:
+                continue
+            if not getattr(account, 'is_active', True):
                 continue
             display_text = f"{account.account} ({account.currency})"
             self.to_account_combo.addItem(display_text, account.id)
@@ -642,7 +647,7 @@ class BudgetTrackerWindow(QMainWindow):
 
     def calculate_exchange_rate(self):
         try:
-            from_amount = float(self.amount_input.text())
+            from_amount = safe_eval_math(self.amount_input.text())
             to_amount_text = self.to_amount_input.text().strip()
             
             if to_amount_text and float(to_amount_text) > 0:
@@ -661,8 +666,8 @@ class BudgetTrackerWindow(QMainWindow):
             to_amount = float(self.to_amount_input.text())
             from_amount_text = self.amount_input.text().strip()
             
-            if from_amount_text and float(from_amount_text) > 0:
-                from_amount = float(from_amount_text)
+            if from_amount_text:
+                from_amount = safe_eval_math(from_amount_text)
                 if to_amount > 0:
                     exchange_rate = to_amount / from_amount
                     self.exchange_rate_label.setText(f'Exchange Rate: {exchange_rate:.4f}')
@@ -775,12 +780,12 @@ class BudgetTrackerWindow(QMainWindow):
 
     def add_transaction(self):
         try:
-            amount = float(self.amount_input.text())
+            amount = safe_eval_math(self.amount_input.text())
             if amount <= 0:
                 self.show_status('Amount must be greater than 0', error=True)
                 return
         except ValueError:
-            self.show_status('Please enter a valid number', error=True)
+            self.show_status('Please enter a valid number or expression', error=True)
             return
         
         date = self.date_input.date().toString("yyyy-MM-dd")
@@ -877,10 +882,8 @@ class BudgetTrackerWindow(QMainWindow):
             self.amount_input.clear()
             self.to_amount_input.clear()
             self.qty_input.clear()
-            self.payee_input.setCurrentText('')
             self.notes_input.clear()
-            self.account_combo.setCurrentIndex(0)
-            self.to_account_combo.setCurrentIndex(0)
+            # Account, Payee, and Categories are intentionally NOT cleared to allow rapid entry
             self.starting_balance_checkbox.setChecked(False)
             self.transaction_counts = self.budget_app.get_transaction_counts()
             self.update_payee_combo()

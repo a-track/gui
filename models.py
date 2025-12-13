@@ -28,13 +28,14 @@ class Transaction:
 
 
 class Account:
-    def __init__(self, id, account, type, company, currency, show_in_balance=True):
+    def __init__(self, id, account, type, company, currency, show_in_balance=True, is_active=True):
         self.id = id
         self.account = account
         self.type = type
         self.company = company
         self.currency = currency
         self.show_in_balance = show_in_balance
+        self.is_active = is_active
 
 
 class Category:
@@ -128,6 +129,7 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_in_balance BOOLEAN DEFAULT TRUE")
+            conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
             conn.execute("ALTER TABLE categories ADD COLUMN IF NOT EXISTS category_type VARCHAR DEFAULT 'Expense'")
             result = conn.execute("""
                 SELECT name FROM sqlite_master 
@@ -183,7 +185,7 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT id, account, type, company, currency, show_in_balance
+                SELECT id, account, type, company, currency, show_in_balance, is_active
                 FROM accounts 
                 ORDER BY id
             """).fetchall()
@@ -192,6 +194,7 @@ class BudgetApp:
             for row in result:
                 account = Account(row[0], row[1], row[2], row[3], row[4])
                 account.show_in_balance = bool(row[5]) if row[5] is not None else True
+                account.is_active = bool(row[6]) if len(row) > 6 and row[6] is not None else True
                 accounts.append(account)
             return accounts
         except Exception as e:
@@ -200,7 +203,7 @@ class BudgetApp:
         finally:
             conn.close()
 
-    def add_account(self, account_name, account_type, company, currency, show_in_balance=True):
+    def add_account(self, account_name, account_type, company, currency, show_in_balance=True, is_active=True):
         conn = self._get_connection()
         try:
             existing_account = conn.execute("""
@@ -214,9 +217,9 @@ class BudgetApp:
             next_id = self._get_next_id('accounts')
             
             conn.execute("""
-                INSERT INTO accounts (id, account, type, company, currency, show_in_balance)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, [next_id, account_name, account_type, company, currency, show_in_balance])
+                INSERT INTO accounts (id, account, type, company, currency, show_in_balance, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, [next_id, account_name, account_type, company, currency, show_in_balance, is_active])
             conn.commit()
             return True, "Account added successfully"
         except Exception as e:
@@ -254,6 +257,22 @@ class BudgetApp:
             return True
         except Exception as e:
             print(f"Error updating show_in_balance: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def update_account_active(self, account_id, is_active):
+        conn = self._get_connection()
+        try:
+            conn.execute("""
+                UPDATE accounts 
+                SET is_active = ? 
+                WHERE id = ?
+            """, [is_active, account_id])
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error updating is_active: {e}")
             return False
         finally:
             conn.close()
@@ -634,13 +653,16 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT id, account, type, company, currency, is_investment
+                SELECT id, account, type, company, currency, show_in_balance, is_active
                 FROM accounts 
                 WHERE account = ? AND currency = ?
             """, [account_name, currency]).fetchone()
             
             if result:
-                return Account(*result)
+                account = Account(result[0], result[1], result[2], result[3], result[4])
+                account.show_in_balance = bool(result[5]) if result[5] is not None else True
+                account.is_active = bool(result[6]) if len(result) > 6 and result[6] is not None else True
+                return account
             return None
         finally:
             conn.close()
@@ -649,7 +671,7 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT id, account, type, company, currency, show_in_balance, is_investment
+                SELECT id, account, type, company, currency, show_in_balance, is_active, is_investment
                 FROM accounts 
                 WHERE id = ?
             """, [account_id]).fetchone()
@@ -657,7 +679,8 @@ class BudgetApp:
             if result:
                 account = Account(result[0], result[1], result[2], result[3], result[4])
                 account.show_in_balance = bool(result[5]) if result[5] is not None else True
-                account.is_investment = bool(result[6]) if len(result) > 6 and result[6] is not None else False
+                account.is_active = bool(result[6]) if result[6] is not None else True
+                account.is_investment = bool(result[7]) if len(result) > 7 and result[7] is not None else False
                 return account
             return None
         except Exception as e:

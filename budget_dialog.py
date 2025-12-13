@@ -4,7 +4,9 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QMessageBox, QScrollArea)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QBrush
+from PyQt6.QtGui import QColor, QFont, QBrush
 import datetime
+from utils import safe_eval_math
 
 class BudgetDialog(QDialog):
     def __init__(self, budget_app, parent=None):
@@ -491,13 +493,11 @@ class SetMonthlyBudgetsDialog(QDialog):
         if text == '':
             return
         
-        try:
-            cleaned_text = text.replace(' ', '').replace("'", "")
-            if cleaned_text != '':
-                float(cleaned_text)
-        except ValueError:
+        # Allow numbers and operators
+        allowed_chars = set('0123456789+-*/.() ')
+        if not set(text).issubset(allowed_chars):
             cursor_pos = amount_input.cursorPosition()
-            amount_input.setText(text[:-1])
+            amount_input.setText(text[:-1]) # Simplistic rejection of last char
             amount_input.setCursorPosition(max(0, cursor_pos - 1))
 
     def save_budgets(self):
@@ -505,10 +505,10 @@ class SetMonthlyBudgetsDialog(QDialog):
             budgets_to_save = []
             
             for widget_info in self.sub_category_widgets:
-                amount_text = widget_info['amount_input'].text().strip().replace(' ', '').replace("'", "")
-                if amount_text:
+                amount_text = widget_info['amount_input'].text()
+                if amount_text.strip():
                     try:
-                        amount = float(amount_text)
+                        amount = safe_eval_math(amount_text)
                         if amount >= 0:
                             budgets_to_save.append({
                                 'sub_category': widget_info['sub_category'],
