@@ -4,7 +4,9 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QMessageBox, QScrollArea)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QBrush
+from PyQt6.QtGui import QColor, QFont, QBrush
 import datetime
+from utils import safe_eval_math
 
 class BudgetDialog(QDialog):
     def __init__(self, budget_app, parent=None):
@@ -250,7 +252,11 @@ class BudgetDialog(QDialog):
             
             category_item = QTableWidgetItem(category)
             category_item.setBackground(QColor(240, 240, 240))
-            category_item.setFont(QFont("", weight=QFont.Weight.Bold))
+            category_item.setBackground(QColor(240, 240, 240))
+            font = category_item.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            category_item.setFont(font)
             self.table.setItem(current_row, 0, category_item)
             
             self.table.setSpan(current_row, 0, 1, 6)
@@ -274,7 +280,11 @@ class BudgetDialog(QDialog):
                 remaining = item['remaining']
                 remaining_item = QTableWidgetItem(f"{remaining:.2f}")
                 remaining_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                remaining_item.setFont(QFont("", weight=QFont.Weight.Bold))
+                remaining_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                font = remaining_item.font()
+                font.setBold(True)
+                font.setPointSize(10)
+                remaining_item.setFont(font)
                 
                 if remaining >= 0:
                     remaining_item.setForeground(QColor(0, 128, 0))
@@ -286,7 +296,11 @@ class BudgetDialog(QDialog):
                 percentage = item['percentage']
                 percentage_item = QTableWidgetItem(f"{percentage:.1f}%")
                 percentage_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                percentage_item.setFont(QFont("", weight=QFont.Weight.Bold))
+                percentage_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                font = percentage_item.font()
+                font.setBold(True)
+                font.setPointSize(10)
+                percentage_item.setFont(font)
                 
                 if percentage <= 75:
                     percentage_item.setForeground(QColor(0, 128, 0))
@@ -306,19 +320,31 @@ class BudgetDialog(QDialog):
             
             total_budget_item = QTableWidgetItem(f"{total_budget:.2f}")
             total_budget_item.setBackground(QColor(220, 220, 220))
-            total_budget_item.setFont(QFont("", weight=QFont.Weight.Bold))
+            total_budget_item.setBackground(QColor(220, 220, 220))
+            font = total_budget_item.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            total_budget_item.setFont(font)
             total_budget_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table.setItem(current_row, 2, total_budget_item)
             
             total_actual_item = QTableWidgetItem(f"{total_actual:.2f}")
             total_actual_item.setBackground(QColor(220, 220, 220))
-            total_actual_item.setFont(QFont("", weight=QFont.Weight.Bold))
+            total_actual_item.setBackground(QColor(220, 220, 220))
+            font = total_actual_item.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            total_actual_item.setFont(font)
             total_actual_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table.setItem(current_row, 3, total_actual_item)
             
             total_remaining_item = QTableWidgetItem(f"{total_remaining:.2f}")
             total_remaining_item.setBackground(QColor(220, 220, 220))
-            total_remaining_item.setFont(QFont("", weight=QFont.Weight.Bold))
+            total_remaining_item.setBackground(QColor(220, 220, 220))
+            font = total_remaining_item.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            total_remaining_item.setFont(font)
             total_remaining_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             
             if total_remaining >= 0:
@@ -330,7 +356,11 @@ class BudgetDialog(QDialog):
             
             total_percentage_item = QTableWidgetItem(f"{total_percentage:.1f}%")
             total_percentage_item.setBackground(QColor(220, 220, 220))
-            total_percentage_item.setFont(QFont("", weight=QFont.Weight.Bold))
+            total_percentage_item.setBackground(QColor(220, 220, 220))
+            font = total_percentage_item.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            total_percentage_item.setFont(font)
             total_percentage_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             
             if total_percentage <= 75:
@@ -463,13 +493,11 @@ class SetMonthlyBudgetsDialog(QDialog):
         if text == '':
             return
         
-        try:
-            cleaned_text = text.replace(' ', '').replace("'", "")
-            if cleaned_text != '':
-                float(cleaned_text)
-        except ValueError:
+        # Allow numbers and operators
+        allowed_chars = set('0123456789+-*/.() ')
+        if not set(text).issubset(allowed_chars):
             cursor_pos = amount_input.cursorPosition()
-            amount_input.setText(text[:-1])
+            amount_input.setText(text[:-1]) # Simplistic rejection of last char
             amount_input.setCursorPosition(max(0, cursor_pos - 1))
 
     def save_budgets(self):
@@ -477,10 +505,10 @@ class SetMonthlyBudgetsDialog(QDialog):
             budgets_to_save = []
             
             for widget_info in self.sub_category_widgets:
-                amount_text = widget_info['amount_input'].text().strip().replace(' ', '').replace("'", "")
-                if amount_text:
+                amount_text = widget_info['amount_input'].text()
+                if amount_text.strip():
                     try:
-                        amount = float(amount_text)
+                        amount = safe_eval_math(amount_text)
                         if amount >= 0:
                             budgets_to_save.append({
                                 'sub_category': widget_info['sub_category'],

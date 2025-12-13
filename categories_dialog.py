@@ -56,7 +56,8 @@ class CategoriesDialog(QDialog):
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(['Category Type', 'Category', 'Sub Category', 'Actions'])
         
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.AnyKeyPressed)
+        self.table.cellChanged.connect(self.on_cell_changed)
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
             QTableWidget {
@@ -124,20 +125,19 @@ class CategoriesDialog(QDialog):
 
     def load_categories(self):
         try:
+            self.table.blockSignals(True)
             categories = self.budget_app.get_all_categories()
             self.table.setRowCount(len(categories))
             
             for row, category in enumerate(categories):
                 type_item = QTableWidgetItem(category.category_type)
-                type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 0, type_item)
                 
                 parent_item = QTableWidgetItem(category.category)
-                parent_item.setFlags(parent_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 1, parent_item)
                 
                 sub_item = QTableWidgetItem(category.sub_category)
-                sub_item.setFlags(sub_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                # sub_item.setFlags(sub_item.flags() & ~Qt.ItemFlag.ItemIsEditable) # Allow editing now
                 self.table.setItem(row, 2, sub_item)
                 
                 action_widget = QWidget()
@@ -181,6 +181,7 @@ class CategoriesDialog(QDialog):
             self.table.setColumnWidth(2, max(120, self.table.columnWidth(2)))
             self.table.setColumnWidth(3, max(70, self.table.columnWidth(3)))
             
+            self.table.blockSignals(False)
             self.show_status(f'Loaded {len(categories)} categories')
             
             current_type = self.category_type_combo.currentText()
@@ -188,7 +189,102 @@ class CategoriesDialog(QDialog):
             
         except Exception as e:
             print(f"Error loading categories: {e}")
+            self.table.blockSignals(False)
             self.show_status('Error loading categories', error=True)
+
+    def on_cell_changed(self, row, column):
+        try:
+            item = self.table.item(row, column)
+            if not item:
+                return
+                
+            # We need the ORIGINAL sub_category to identify the row in DB
+            # We can't rely on column 2 item if it was just changed.
+            # But wait, if column 2 changed, item.text() is the NEW value.
+            # We need the OLD sub_category.
+            # The delete button has the property set, we can match row?
+            # Or we store it in UserRole data.
+            
+            # Let's find the delete button for this row to get the original ID?
+            # No, if we reload table, everything is fine.
+            # But here we are in the middle of editing.
+            
+            # Better approach: Store original ID in UserRole of the item
+            
+            # For now, let's try to get it from the delete button which shouldn't have changed yet?
+            # Actually, the delete button is created in load_categories with property set.
+            # So until we reload, the delete button has the old sub_category.
+            
+            cell_widget = self.table.cellWidget(row, 3) # Action column
+            if cell_widget:
+                # Find the button inside
+                btn = cell_widget.findChild(QPushButton)
+                if btn:
+                    sub_category = btn.property('sub_category')
+                else:
+                    return
+            else:
+                return
+
+            new_value = item.text().strip()
+            
+            kwargs = {}
+            if column == 0: # Type
+                kwargs['new_type'] = new_value
+            elif column == 1: # Parent Category
+                kwargs['new_category'] = new_value
+            elif column == 2: # Sub Category (PK)
+                kwargs['new_sub_category'] = new_value
+            else:
+                return
+                
+            success = self.budget_app.update_category(sub_category, **kwargs)
+            
+            if success:
+                self.show_status(f'Category updated successfully')
+                if column == 2:
+                    # If we renamed PK, we MUST reload the table to update all references/buttons
+                    self.load_categories()
+                else:
+                    current_type = self.category_type_combo.currentText()
+                    self.load_parent_categories(current_type)
+            else:
+                self.show_status(f'Error updating category', error=True)
+                self.revert_cell(row, column, sub_category)
+                
+        except Exception as e:
+            print(f"Error in on_cell_changed: {e}")
+            self.show_status('Error updating category', error=True)
+            try:
+                 # Revert needs the OLD sub_category
+                 cell_widget = self.table.cellWidget(row, 3) 
+                 if cell_widget:
+                    btn = cell_widget.findChild(QPushButton)
+                    if btn:
+                        sub_category = btn.property('sub_category')
+                        self.revert_cell(row, column, sub_category)
+            except:
+                pass
+
+    def revert_cell(self, row, column, sub_category):
+        try:
+            self.table.blockSignals(True)
+            # Need to fetch original category data
+            # Since we don't have a direct "get_category" by PK method handy that returns object easily without iterating all
+            # We iterate all (cached in memory usually fine, or fetch all)
+            categories = self.budget_app.get_all_categories()
+            category = next((c for c in categories if c.sub_category == sub_category), None)
+            
+            if category:
+                value = ""
+                if column == 0:
+                    value = category.category_type
+                elif column == 1:
+                    value = category.category
+                
+                self.table.item(row, column).setText(value)
+        finally:
+            self.table.blockSignals(False)
 
     def add_category(self):
         category_type = self.category_type_combo.currentText()

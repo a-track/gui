@@ -44,6 +44,10 @@ class AccountsDialog(QDialog):
         self.show_in_balance_checkbox.setChecked(True)
         new_account_layout.addWidget(self.show_in_balance_checkbox)
         
+        self.is_active_checkbox = QCheckBox('Active')
+        self.is_active_checkbox.setChecked(True)
+        new_account_layout.addWidget(self.is_active_checkbox)
+        
         add_btn = QPushButton('Add Account')
         add_btn.clicked.connect(self.add_account)
         add_btn.setStyleSheet('background-color: #4CAF50; color: white; padding: 5px;')
@@ -52,10 +56,11 @@ class AccountsDialog(QDialog):
         layout.addLayout(new_account_layout)
         
         self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels(['ID', 'Account Name', 'Type', 'Company', 'Currency', 'Show in Balance', 'Actions'])
+        self.table.setColumnCount(8)
+        self.table.setHorizontalHeaderLabels(['ID', 'Account Name', 'Type', 'Company', 'Currency', 'Show in Balance', 'Active', 'Actions'])
         
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.AnyKeyPressed)
+        self.table.cellChanged.connect(self.on_cell_changed)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         
@@ -86,14 +91,15 @@ class AccountsDialog(QDialog):
         self.table.verticalHeader().hide()
         
         header = self.table.horizontalHeader()
-        self.table.setColumnWidth(5, 100) 
-        self.table.setColumnWidth(6, 70)
+        self.table.setColumnWidth(5, 100)
+        self.table.setColumnWidth(6, 60) # Active 
+        self.table.setColumnWidth(7, 70) # Actions
         
         content_based_columns = [0, 1, 2, 3, 4]
         for col in content_based_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
         
         self.table.verticalHeader().setDefaultSectionSize(35)
         
@@ -117,6 +123,7 @@ class AccountsDialog(QDialog):
             self.show_status('Error loading accounts', error=True)
 
     def populate_table(self, accounts):
+        self.table.blockSignals(True)
         self.table.setRowCount(len(accounts))
         
         for row, account in enumerate(accounts):
@@ -127,19 +134,15 @@ class AccountsDialog(QDialog):
             self.table.setItem(row, 0, id_item)
             
             name_item = QTableWidgetItem(account.account)
-            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 1, name_item)
             
             type_item = QTableWidgetItem(account.type)
-            type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 2, type_item)
             
             company_item = QTableWidgetItem(account.company or '')
-            company_item.setFlags(company_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 3, company_item)
             
             currency_item = QTableWidgetItem(account.currency)
-            currency_item.setFlags(currency_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 4, currency_item)
             
             show_in_balance_widget = QWidget()
@@ -154,7 +157,23 @@ class AccountsDialog(QDialog):
             show_in_balance_layout.addWidget(show_checkbox)
             
             show_in_balance_widget.setLayout(show_in_balance_layout)
+            show_in_balance_widget.setLayout(show_in_balance_layout)
             self.table.setCellWidget(row, 5, show_in_balance_widget)
+            
+            # Active (Col 6)
+            active_widget = QWidget()
+            active_layout = QHBoxLayout()
+            active_layout.setContentsMargins(0, 0, 0, 0)
+            active_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            active_checkbox = QCheckBox()
+            active_checkbox.setChecked(getattr(account, 'is_active', True))
+            active_checkbox.setProperty('account_id', account.id)
+            active_checkbox.toggled.connect(self.toggle_active)
+            active_layout.addWidget(active_checkbox)
+            
+            active_widget.setLayout(active_layout)
+            self.table.setCellWidget(row, 6, active_widget)
             
             action_widget = QWidget()
             action_layout = QHBoxLayout()
@@ -188,7 +207,7 @@ class AccountsDialog(QDialog):
             action_layout.addWidget(delete_btn)
             action_widget.setLayout(action_layout)
             
-            self.table.setCellWidget(row, 6, action_widget)
+            self.table.setCellWidget(row, 7, action_widget)
         
         self.table.resizeColumnsToContents()
         
@@ -196,9 +215,93 @@ class AccountsDialog(QDialog):
         self.table.setColumnWidth(2, max(80, self.table.columnWidth(2)))
         self.table.setColumnWidth(4, max(80, self.table.columnWidth(4)))
         self.table.setColumnWidth(5, max(100, self.table.columnWidth(5)))
-        self.table.setColumnWidth(6, max(70, self.table.columnWidth(6)))
+        self.table.setColumnWidth(6, max(60, self.table.columnWidth(6)))
+        self.table.setColumnWidth(7, max(70, self.table.columnWidth(7)))
         
+        self.table.blockSignals(False)
         self.show_status(f'Loaded {len(accounts)} accounts')
+
+    def on_cell_changed(self, row, column):
+        try:
+            item = self.table.item(row, column)
+            if not item:
+                return
+                
+            id_item = self.table.item(row, 0)
+            if not id_item:
+                return
+                
+            account_id = int(id_item.text())
+            new_value = item.text().strip()
+            
+            # Fetch existing account to preserve other fields
+            current_account = self.budget_app.get_account_by_id(account_id)
+            if not current_account:
+                return
+                
+            # Update local object
+            if column == 1:
+                current_account.account = new_value
+            elif column == 2:
+                current_account.type = new_value
+            elif column == 3:
+                current_account.company = new_value
+            elif column == 4:
+                current_account.currency = new_value
+            
+            # Save back to DB
+            # Note: update_account requires all fields. is_investment is not in table (defaults to False in logic if missing? No, we have it in object)
+            # Check if object has is_investment
+            is_investment = getattr(current_account, 'is_investment', False)
+            
+            success = self.budget_app.update_account(
+                account_id=account_id,
+                account=current_account.account,
+                type=current_account.type,
+                company=current_account.company,
+                currency=current_account.currency,
+                is_investment=is_investment
+            )
+            
+            if success:
+                self.show_status(f'Account updated successfully')
+                if hasattr(self.parent_window, 'update_balance_display'):
+                    self.parent_window.update_balance_display()
+            else:
+                self.show_status(f'Error updating account', error=True)
+                self.revert_cell(row, column, current_account)
+                
+        except Exception as e:
+            print(f"Error in on_cell_changed: {e}")
+            self.show_status('Error updating account', error=True)
+            # Cannot easily revert here without referencing the object again or passing it
+            # But we can try fetching by ID from row 0
+            try:
+                id_item = self.table.item(row, 0)
+                if id_item:
+                     acc_id = int(id_item.text())
+                     acc = self.budget_app.get_account_by_id(acc_id)
+                     if acc:
+                         self.revert_cell(row, column, acc)
+            except:
+                pass
+
+    def revert_cell(self, row, column, account):
+        try:
+            self.table.blockSignals(True)
+            value = ""
+            if column == 1:
+                value = account.account
+            elif column == 2:
+                value = account.type
+            elif column == 3:
+                value = account.company or ""
+            elif column == 4:
+                value = account.currency
+            
+            self.table.item(row, column).setText(value)
+        finally:
+            self.table.blockSignals(False)
 
     def toggle_show_in_balance(self, checked):
         checkbox = self.sender()
@@ -213,6 +316,29 @@ class AccountsDialog(QDialog):
                 checkbox.setChecked(not checked)
         except Exception as e:
             self.show_status('Error updating balance display', error=True)
+            checkbox.setChecked(not checked)
+
+            checkbox.setChecked(not checked)
+
+    def toggle_active(self, checked):
+        checkbox = self.sender()
+        account_id = checkbox.property('account_id')
+        
+        try:
+            success = self.budget_app.update_account_active(account_id, checked)
+            if success:
+                self.show_status(f'Active status updated for account')
+                # Trigger parents to update their account lists
+                if hasattr(self.parent_window, 'update_account_combo'):
+                    self.parent_window.update_account_combo()
+                if hasattr(self.parent_window, 'update_to_account_combo'):
+                    self.parent_window.update_to_account_combo()
+            else:
+                self.show_status('Error updating active status', error=True)
+                checkbox.setChecked(not checked)
+        except Exception as e:
+            self.show_status('Error updating active status', error=True)
+            print(f"Error toggle_active: {e}")
             checkbox.setChecked(not checked)
 
     def add_account(self):
@@ -234,8 +360,9 @@ class AccountsDialog(QDialog):
             return
         
         show_in_balance = self.show_in_balance_checkbox.isChecked()
+        is_active = self.is_active_checkbox.isChecked()
         
-        success, message = self.budget_app.add_account(account_name, account_type, company, currency, show_in_balance)
+        success, message = self.budget_app.add_account(account_name, account_type, company, currency, show_in_balance, is_active)
         
         if success:
             self.show_status('Account added successfully!')
@@ -243,7 +370,9 @@ class AccountsDialog(QDialog):
             self.type_input.clear()
             self.company_input.clear()
             self.currency_input.clear()
+            self.currency_input.clear()
             self.show_in_balance_checkbox.setChecked(True)
+            self.is_active_checkbox.setChecked(True)
             self.load_accounts()
             
             if hasattr(self.parent_window, 'update_balance_display'):

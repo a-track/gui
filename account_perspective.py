@@ -7,6 +7,8 @@ from PyQt6.QtGui import QFont, QColor
 import datetime
 
 
+from delegates import ComboBoxDelegate, DateDelegate
+
 class AccountPerspectiveDialog(QDialog):
     
     def __init__(self, budget_app, parent=None):
@@ -116,7 +118,8 @@ class AccountPerspectiveDialog(QDialog):
             'Confirmed', 'Actions'
         ])
         
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.AnyKeyPressed)
+        self.table.cellChanged.connect(self.on_cell_changed)
         
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
@@ -144,21 +147,36 @@ class AccountPerspectiveDialog(QDialog):
         
         self.table.verticalHeader().hide()
         
-        header = self.table.horizontalHeader()
+        # Manually manage column widths
+        self.table.setColumnWidth(0, 120) # Date (Increased to show full date + button)
+        self.table.setColumnWidth(4, 150) # Other Account (Increased width)
         self.table.setColumnWidth(7, 80)
         self.table.setColumnWidth(8, 70)
         
-        content_based_columns = [0, 1, 2, 3, 4, 5, 6]
-        for col in content_based_columns:
+        header = self.table.horizontalHeader()
+        content_columns = [1, 2, 3, 5, 6]
+        for col in content_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         
-        fixed_columns = [7, 8]
+        fixed_columns = [0, 4, 7, 8]
         for col in fixed_columns:
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
         
         self.table.verticalHeader().setDefaultSectionSize(35)
         
+        # Delegates
+        self.date_delegate = DateDelegate(self.table)
+        self.table.setItemDelegateForColumn(0, self.date_delegate)
+        
+        self.category_delegate = ComboBoxDelegate(self.table, self.get_category_options)
+        self.table.setItemDelegateForColumn(2, self.category_delegate)
+        # Note: 'Other Account' (4) editing is complex (could be payee or transfer account), for now maybe leave as text or simple combo?
+        # User asked for 'size of account' not enough, so resizing handles that.
+        # But 'modify function doesnt work everywhere'.
+        # Let's enable editing for basic fields first.
+        
         layout.addWidget(self.table)
+
         
         self.status_label = QLabel('Select an account to view transactions')
         self.status_label.setStyleSheet('color: #666; padding: 5px;')
@@ -426,11 +444,88 @@ class AccountPerspectiveDialog(QDialog):
         
         self.update_confirm_all_button_state()
     
+    def get_category_options(self):
+        categories = self.budget_app.get_all_categories()
+        return sorted([c.sub_category for c in categories])
+
+    def on_cell_changed(self, row, column):
+        try:
+            item = self.table.item(row, column)
+            if not item:
+                return
+            
+            if row not in self.transaction_history_map:
+                return
+                
+            trans = self.transaction_history_map[row]
+            trans_id = trans.id
+            new_value = item.text().strip()
+            
+            field = None
+            
+            if column == 0: # Date
+                field = 'date'
+                try:
+                    datetime.datetime.strptime(new_value, '%Y-%m-%d')
+                except ValueError:
+                    self.show_status(f'Invalid date format: {new_value}. Use YYYY-MM-DD', error=True)
+                    self.revert_cell(row, column, str(trans.date))
+                    return
+            
+            elif column == 2: # Category
+                field = 'sub_category'
+                
+            elif column == 3: # Payee
+                field = 'payee'
+            
+            # Column 4 (Other Account) is read-only now, so no logic needed.
+            
+            elif column == 5: # Amount
+                try:
+                    # Remove currency symbols or thousand separators if any
+                    clean_value = new_value.replace("'", "").replace("+", "").replace("CHF", "").strip()
+                    amount = float(clean_value)
+                    
+                    # For updates, we usually just pass the positive amount for 'amount' field
+                    # The logic for income/expense sign is handled by type.
+                    field = 'amount'
+                    new_value = abs(amount)
+                        
+                except ValueError:
+                     self.show_status('Invalid amount', error=True)
+                     # We can't easily get the original formatted string here without storing it, 
+                     # but we can try to re-format the current trans amount
+                     self.revert_cell(row, column, "?") 
+                     self.refresh_data()
+                     return
+
+            if field:
+                success = self.budget_app.update_transaction(trans_id, **{field: new_value})
+                if success:
+                    self.show_status(f'Updated transaction #{trans_id}')
+                    self.refresh_data()
+                else:
+                    self.show_status(f'Error updating transaction #{trans_id}', error=True)
+                    self.refresh_data()
+                    
+        except Exception as e:
+            print(f"Error in on_cell_changed: {e}")
+            self.show_status('Error updating transaction', error=True)
+
+    def revert_cell(self, row, column, original_value):
+        self.table.blockSignals(True)
+        self.table.item(row, column).setText(original_value)
+        self.table.blockSignals(False)
+
     def populate_table(self, transaction_history):
+        self.table.blockSignals(True)
         self.table.setRowCount(len(transaction_history))
+        self.transaction_history_map = {} # Map row to transaction object for easy access
         
         for row, data in enumerate(transaction_history):
             trans = data['transaction']
+            self.transaction_history_map[row] = trans
+            
             transaction_amount = data['transaction_amount']
             effect = data['effect']
             running_balance = data['running_balance']
@@ -440,25 +535,37 @@ class AccountPerspectiveDialog(QDialog):
             self.table.setItem(row, 0, date_item)
             
             type_item = QTableWidgetItem(trans.type.capitalize())
+            type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable) # Type read-only
             self.table.setItem(row, 1, type_item)
             
             category_item = QTableWidgetItem(trans.sub_category or "")
+            if trans.type == 'transfer':
+                category_item.setFlags(category_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 2, category_item)
             
             payee_item = QTableWidgetItem(trans.payee or "")
+            if trans.type == 'transfer':
+                payee_item.setFlags(payee_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 3, payee_item)
             
             other_acc_item = QTableWidgetItem(other_account)
+            # Make Other Account read-only for ALL types to avoid confusion with Payee column
+            other_acc_item.setFlags(other_acc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 4, other_acc_item)
             
             formatted_amount = self.format_swiss_number(transaction_amount)
             trans_amount_text = f"{effect}{formatted_amount}"
+            # Strip effect for editing? No, we better handle parsing
+             # Actually, amount should probably be editable too.
             trans_effect_item = QTableWidgetItem(trans_amount_text)
             if effect == "+":
                 trans_effect_item.setForeground(QColor(0, 128, 0))
             else:
                 trans_effect_item.setForeground(QColor(255, 0, 0))
-            trans_effect_item.setFont(QFont("", weight=QFont.Weight.Bold))
+            font = trans_effect_item.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            trans_effect_item.setFont(font)
             self.table.setItem(row, 5, trans_effect_item)
             
             formatted_balance = self.format_swiss_number(abs(running_balance))
@@ -469,7 +576,11 @@ class AccountPerspectiveDialog(QDialog):
                 balance_item.setForeground(QColor(255, 0, 0))
             else:
                 balance_item.setForeground(QColor(0, 0, 0))
-            balance_item.setFont(QFont("", weight=QFont.Weight.Bold))
+            font = balance_item.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            balance_item.setFont(font)
+            balance_item.setFlags(balance_item.flags() & ~Qt.ItemFlag.ItemIsEditable) # Balance Read-only
             self.table.setItem(row, 6, balance_item)
             
             checkbox_widget = QWidget()
@@ -520,17 +631,20 @@ class AccountPerspectiveDialog(QDialog):
             
             self.table.setCellWidget(row, 8, action_widget)
         
+        self.table.blockSignals(False)
         self.table.resizeColumnsToContents()
         
-        self.table.setColumnWidth(1, max(80, self.table.columnWidth(1)))
-        self.table.setColumnWidth(5, max(130, self.table.columnWidth(5)))
-        self.table.setColumnWidth(6, max(130, self.table.columnWidth(6)))
-        self.table.setColumnWidth(7, max(80, self.table.columnWidth(7)))
-        self.table.setColumnWidth(8, max(70, self.table.columnWidth(8)))
+        # Override specific widths
+        self.table.setColumnWidth(0, max(80, self.table.columnWidth(0)))
+        self.table.setColumnWidth(4, max(150, self.table.columnWidth(4)))
+        self.table.setColumnWidth(7, 80)
+        self.table.setColumnWidth(8, 70)
         
         if transaction_history:
             self.table.scrollToTop()
-    
+
+
+
     def confirm_all_visible(self):
         try:
             unconfirmed_transactions = []
