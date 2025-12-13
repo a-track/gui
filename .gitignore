@@ -2,3 +2,4 @@
 !*.py
 !*.spec
 !.gitignore
+!README.md
