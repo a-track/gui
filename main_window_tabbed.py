@@ -1,19 +1,13 @@
 import sys
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QLabel, QPushButton, QLineEdit, 
-                             QComboBox, QRadioButton, QButtonGroup, QMessageBox,
-                             QDateEdit, QGroupBox, QScrollArea, QCheckBox)
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+                             QLabel, QPushButton, QLineEdit, QComboBox, 
+                             QRadioButton, QButtonGroup, QDateEdit, QGroupBox,
+                             QScrollArea, QCheckBox, QTabWidget, QMessageBox)
 from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtGui import QFont
 
 from models import BudgetApp
-from transactions_dialog import TransactionsDialog
-from account_perspective import AccountPerspectiveDialog
-from accounts_dialog import AccountsDialog
-from categories_dialog import CategoriesDialog
-from budget_dialog import BudgetDialog
-from balance_dialog import BalanceDialog
 from utils import safe_eval_math
-
 
 
 class BudgetTrackerWindow(QMainWindow):
@@ -22,23 +16,83 @@ class BudgetTrackerWindow(QMainWindow):
         self.budget_app = BudgetApp()
         self.transaction_counts = self.budget_app.get_transaction_counts()
         self.init_ui()
-
+    
     def init_ui(self):
         self.setWindowTitle('Budget Tracker')
-        self.setMinimumSize(950, 800)
+        self.setMinimumSize(1100, 750)
+        
+        # Create central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # Create main layout
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        central_widget.setLayout(main_layout)
+        
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #d0d0d0;
+                border-radius: 4px;
+                background-color: white;
+                top: -1px;
+            }
+            QTabBar::tab {
+                background-color: #f5f5f5;
+                border: 1px solid #d0d0d0;
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                padding: 10px 20px;
+                margin-right: 2px;
+                font-size: 13px;
+                min-width: 100px;
+            }
+            QTabBar::tab:selected {
+                background-color: white;
+                border-bottom-color: white;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #e8e8e8;
+            }
+        """)
+        
+        # Create tabs
+        self.create_add_transaction_tab()
+        self.create_balance_tab()
+        self.create_transactions_tab()
+        self.create_account_perspective_tab()
+        self.create_budget_tab()
+        self.create_accounts_tab()
+        self.create_categories_tab()
+        
+        # Connect tab change signal
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
+        
+        main_layout.addWidget(self.tab_widget)
+    
+    def create_add_transaction_tab(self):
+        """Create the Add Transaction tab"""
+        tab = QWidget()
         
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
-        central_widget = QWidget()
-        self.setCentralWidget(scroll_area)
-        scroll_area.setWidget(central_widget)
+        content_widget = QWidget()
+        scroll_area.setWidget(content_widget)
+        
+        tab_layout = QVBoxLayout()
+        tab.setLayout(tab_layout)
+        tab_layout.addWidget(scroll_area)
         
         main_layout = QVBoxLayout()
-        central_widget.setLayout(main_layout)
-
+        content_widget.setLayout(main_layout)
+        
         form_group = QGroupBox('Add Transaction')
         form_group.setStyleSheet('''
             QGroupBox { 
@@ -56,6 +110,7 @@ class BudgetTrackerWindow(QMainWindow):
         form_layout = QVBoxLayout()
         form_layout.setSpacing(10)
         
+        # Transaction Type
         type_layout = QHBoxLayout()
         type_layout.addWidget(QLabel('Transaction Type:'))
         self.expense_radio = QRadioButton('Expense')
@@ -71,10 +126,10 @@ class BudgetTrackerWindow(QMainWindow):
         type_layout.addWidget(self.income_radio)
         type_layout.addWidget(self.expense_radio)
         type_layout.addWidget(self.transfer_radio)
-        
         type_layout.addStretch()
         form_layout.addLayout(type_layout)
         
+        # Starting Balance Checkbox
         self.starting_balance_layout = QHBoxLayout()
         self.starting_balance_checkbox = QCheckBox('This is a starting balance transaction')
         self.starting_balance_checkbox.toggled.connect(self.update_ui_for_type)
@@ -82,6 +137,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.starting_balance_layout.addStretch()
         form_layout.addLayout(self.starting_balance_layout)
         
+        # Date
         date_layout = QHBoxLayout()
         date_layout.addWidget(QLabel('Date:'))
         self.date_input = QDateEdit()
@@ -91,20 +147,19 @@ class BudgetTrackerWindow(QMainWindow):
         date_layout.addStretch()
         form_layout.addLayout(date_layout)
         
+        # Amount
         amount_layout = QHBoxLayout()
         amount_layout.addWidget(QLabel('Amount:'))
-        
         self.from_amount_currency_label = QLabel('CHF')
         self.from_amount_currency_label.setStyleSheet('font-weight: bold; color: #666; min-width: 40px;')
         amount_layout.addWidget(self.from_amount_currency_label)
-        
         self.amount_input = QLineEdit()
         self.amount_input.setPlaceholderText('Enter amount')
         amount_layout.addWidget(self.amount_input)
-        
         amount_layout.addStretch()
         form_layout.addLayout(amount_layout)
         
+        # From Account
         self.from_account_layout = QHBoxLayout()
         self.from_account_layout.addWidget(QLabel('Account:'))
         self.account_combo = QComboBox()
@@ -114,6 +169,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.from_account_layout.addStretch()
         form_layout.addLayout(self.from_account_layout)
         
+        # Category
         self.parent_category_layout = QHBoxLayout()
         self.parent_category_layout.addWidget(QLabel('Category:'))
         self.parent_category_combo = QComboBox()
@@ -123,6 +179,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.parent_category_layout.addStretch()
         form_layout.addLayout(self.parent_category_layout)
         
+        # Sub Category
         self.sub_category_layout = QHBoxLayout()
         self.sub_category_layout.addWidget(QLabel('Sub Category:'))
         self.sub_category_combo = QComboBox()
@@ -131,6 +188,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.sub_category_layout.addStretch()
         form_layout.addLayout(self.sub_category_layout)
         
+        # To Account
         self.to_account_layout = QHBoxLayout()
         self.to_account_layout.addWidget(QLabel('To Account:'))
         self.to_account_combo = QComboBox()
@@ -140,26 +198,24 @@ class BudgetTrackerWindow(QMainWindow):
         self.to_account_layout.addStretch()
         form_layout.addLayout(self.to_account_layout)
         
+        # To Amount
         self.to_amount_layout = QHBoxLayout()
         self.to_amount_layout.addWidget(QLabel('To Amount:'))
-        
         self.to_amount_currency_label = QLabel('')
         self.to_amount_currency_label.setStyleSheet('font-weight: bold; color: #666; min-width: 40px;')
         self.to_amount_layout.addWidget(self.to_amount_currency_label)
-        
         self.to_amount_input = QLineEdit()
         self.to_amount_input.setPlaceholderText('Receiving amount (for different currency)')
         self.to_amount_input.setMinimumWidth(150)
         self.to_amount_layout.addWidget(self.to_amount_input)
-        
         self.exchange_rate_label = QLabel('Exchange Rate: 1.0000')
         self.exchange_rate_label.setStyleSheet('color: #666; font-style: italic; min-width: 150px;')
         self.exchange_rate_label.setMinimumWidth(150)
         self.to_amount_layout.addWidget(self.exchange_rate_label)
-        
         self.to_amount_layout.addStretch()
         form_layout.addLayout(self.to_amount_layout)
-
+        
+        # Quantity
         self.qty_layout = QHBoxLayout()
         self.qty_layout.addWidget(QLabel('Quantity:'))
         self.qty_input = QLineEdit()
@@ -168,21 +224,20 @@ class BudgetTrackerWindow(QMainWindow):
         self.qty_layout.addWidget(self.qty_input)
         self.qty_layout.addStretch()
         form_layout.addLayout(self.qty_layout)
-
         
+        # Payee
         self.payee_layout = QHBoxLayout()
         self.payee_layout.addWidget(QLabel('Payee:'))
-        
         self.payee_input = QComboBox()
-        self.payee_input.setEditable(True)  
+        self.payee_input.setEditable(True)
         self.payee_input.setInsertPolicy(QComboBox.InsertPolicy.InsertAtTop)
         self.payee_input.setPlaceholderText('Optional - select or type new')
         self.update_payee_combo()
-        
         self.payee_layout.addWidget(self.payee_input)
         self.payee_layout.addStretch()
         form_layout.addLayout(self.payee_layout)
         
+        # Notes
         notes_layout = QHBoxLayout()
         notes_layout.addWidget(QLabel('Notes:'))
         self.notes_input = QLineEdit()
@@ -194,10 +249,10 @@ class BudgetTrackerWindow(QMainWindow):
         form_group.setLayout(form_layout)
         main_layout.addWidget(form_group)
         
+        # Connect signals
         self.income_radio.toggled.connect(self.update_ui_for_type)
         self.expense_radio.toggled.connect(self.update_ui_for_type)
         self.transfer_radio.toggled.connect(self.update_ui_for_type)
-        
         self.account_combo.currentIndexChanged.connect(self.on_accounts_changed)
         self.to_account_combo.currentIndexChanged.connect(self.on_accounts_changed)
         
@@ -205,10 +260,12 @@ class BudgetTrackerWindow(QMainWindow):
         
         main_layout.addSpacing(20)
         
+        # Status label
         self.status_label = QLabel('')
         self.status_label.setStyleSheet('color: #4CAF50; padding: 5px; font-weight: bold;')
         main_layout.addWidget(self.status_label)
         
+        # Add Transaction button
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(10)
         
@@ -230,139 +287,150 @@ class BudgetTrackerWindow(QMainWindow):
         ''')
         add_btn.setMinimumWidth(140)
         buttons_layout.addWidget(add_btn)
-        
-        balance_btn = QPushButton('View Balances')
-        balance_btn.clicked.connect(self.view_balances)
-        balance_btn.setStyleSheet('''
-            QPushButton {
-                background-color: #00BCD4; 
-                color: white; 
-                padding: 12px 8px; 
-                font-size: 14px; 
-                border: none; 
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QPushButton:hover {
-                background-color: #0097A7;
-            }
-        ''')
-        balance_btn.setMinimumWidth(140)
-        buttons_layout.addWidget(balance_btn)
-        
-        budget_btn = QPushButton('Budget vs Expenses')
-        budget_btn.clicked.connect(self.view_budget)
-        budget_btn.setStyleSheet('''
-            QPushButton {
-                background-color: #FF5722; 
-                color: white; 
-                padding: 12px 8px; 
-                font-size: 14px; 
-                border: none; 
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QPushButton:hover {
-                background-color: #E64A19;
-            }
-        ''')
-        budget_btn.setMinimumWidth(140)
-        buttons_layout.addWidget(budget_btn)
-        
-        view_btn = QPushButton('View All Transactions')
-        view_btn.clicked.connect(self.view_transactions)
-        view_btn.setStyleSheet('''
-            QPushButton {
-                background-color: #4CAF50; 
-                color: white; 
-                padding: 12px 8px; 
-                font-size: 14px; 
-                border: none; 
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QPushButton:hover {
-                background-color: #388E3C;
-            }
-        ''')
-        view_btn.setMinimumWidth(140)
-        buttons_layout.addWidget(view_btn)
-
-        account_view_btn = QPushButton('Account Perspective')
-        account_view_btn.clicked.connect(self.view_account_perspective)
-        account_view_btn.setStyleSheet('''
-            QPushButton {
-                background-color: #9C27B0; 
-                color: white; 
-                padding: 12px 8px; 
-                font-size: 14px; 
-                border: none; 
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QPushButton:hover {
-                background-color: #7B1FA2;
-            }
-        ''')
-        account_view_btn.setMinimumWidth(140)
-        buttons_layout.addWidget(account_view_btn)
-
-        accounts_btn = QPushButton('Manage Accounts')
-        accounts_btn.clicked.connect(self.manage_accounts)
-        accounts_btn.setStyleSheet('''
-            QPushButton {
-                background-color: #FF9800; 
-                color: white; 
-                padding: 12px 8px; 
-                font-size: 14px; 
-                border: none; 
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QPushButton:hover {
-                background-color: #F57C00;
-            }
-        ''')
-        accounts_btn.setMinimumWidth(140)
-        buttons_layout.addWidget(accounts_btn)
-
-        categories_btn = QPushButton('Manage Categories')
-        categories_btn.clicked.connect(self.manage_categories)
-        categories_btn.setStyleSheet('''
-            QPushButton {
-                background-color: #795548; 
-                color: white; 
-                padding: 12px 8px; 
-                font-size: 14px; 
-                border: none; 
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QPushButton:hover {
-                background-color: #5D4037;
-            }
-        ''')
-        categories_btn.setMinimumWidth(140)
-        buttons_layout.addWidget(categories_btn)
-        
         buttons_layout.addStretch()
         main_layout.addLayout(buttons_layout)
         main_layout.addStretch(1)
-        self.adjustSize()
-
-
-    def view_balances(self):
-        dialog = BalanceDialog(self.budget_app, self)
-        dialog.exec()
-
+        
+        self.tab_widget.addTab(tab, "➕ Add Transaction")
+    
+    def create_balance_tab(self):
+        """Create the Balance tab - lazy loaded"""
+        from balance_tab import BalanceTab
+        self.balance_tab_widget = BalanceTab(self.budget_app, self)
+        self.tab_widget.addTab(self.balance_tab_widget, "💰 Balances")
+    
+    def create_transactions_tab(self):
+        """Create the Transactions tab"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        tab.setLayout(layout)
+        
+        # Import and embed transactions dialog content
+        from transactions_dialog import TransactionsDialog
+        self.transactions_dialog_ref = TransactionsDialog(self.budget_app, self)
+        
+        # Extract the dialog's layout content
+        dialog_layout = self.transactions_dialog_ref.layout()
+        if dialog_layout:
+            while dialog_layout.count():
+                item = dialog_layout.takeAt(0)
+                if item.widget():
+                    layout.addWidget(item.widget())
+                elif item.layout():
+                    layout.addLayout(item.layout())
+        
+        self.tab_widget.addTab(tab, "📋 Transactions")
+    
+    def create_account_perspective_tab(self):
+        """Create the Account Perspective tab"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        tab.setLayout(layout)
+        
+        from account_perspective import AccountPerspectiveDialog
+        self.account_perspective_dialog_ref = AccountPerspectiveDialog(self.budget_app, self)
+        
+        dialog_layout = self.account_perspective_dialog_ref.layout()
+        if dialog_layout:
+            while dialog_layout.count():
+                item = dialog_layout.takeAt(0)
+                if item.widget():
+                    layout.addWidget(item.widget())
+                elif item.layout():
+                    layout.addLayout(item.layout())
+        
+        self.tab_widget.addTab(tab, "📊 Account View")
+    
+    def create_budget_tab(self):
+        """Create the Budget tab"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        tab.setLayout(layout)
+        
+        from budget_dialog import BudgetDialog
+        self.budget_dialog_ref = BudgetDialog(self.budget_app, self)
+        
+        dialog_layout = self.budget_dialog_ref.layout()
+        if dialog_layout:
+            while dialog_layout.count():
+                item = dialog_layout.takeAt(0)
+                if item.widget():
+                    layout.addWidget(item.widget())
+                elif item.layout():
+                    layout.addLayout(item.layout())
+        
+        self.tab_widget.addTab(tab, "💵 Budget")
+    
+    def create_accounts_tab(self):
+        """Create the Accounts tab"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        tab.setLayout(layout)
+        
+        from accounts_dialog import AccountsDialog
+        self.accounts_dialog_ref = AccountsDialog(self.budget_app, self)
+        
+        dialog_layout = self.accounts_dialog_ref.layout()
+        if dialog_layout:
+            while dialog_layout.count():
+                item = dialog_layout.takeAt(0)
+                if item.widget():
+                    layout.addWidget(item.widget())
+                elif item.layout():
+                    layout.addLayout(item.layout())
+        
+        self.tab_widget.addTab(tab, "🏦 Accounts")
+    
+    def create_categories_tab(self):
+        """Create the Categories tab"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        tab.setLayout(layout)
+        
+        from categories_dialog import CategoriesDialog
+        self.categories_dialog_ref = CategoriesDialog(self.budget_app, self)
+        
+        dialog_layout = self.categories_dialog_ref.layout()
+        if dialog_layout:
+            while dialog_layout.count():
+                item = dialog_layout.takeAt(0)
+                if item.widget():
+                    layout.addWidget(item.widget())
+                elif item.layout():
+                    layout.addLayout(item.layout())
+        
+        self.tab_widget.addTab(tab, "📁 Categories")
+    
+    def on_tab_changed(self, index):
+        """Called when user switches tabs"""
+        # Refresh data when switching to certain tabs
+        if index == 1:  # Balance tab
+            self.balance_tab_widget.refresh_data()
+        elif index == 2:  # Transactions tab
+            if hasattr(self, 'transactions_dialog_ref'):
+                self.transactions_dialog_ref.load_transactions()
+        elif index == 3:  # Account Perspective tab
+            if hasattr(self, 'account_perspective_dialog_ref'):
+                self.account_perspective_dialog_ref.refresh_data()
+        elif index == 4:  # Budget tab
+            if hasattr(self, 'budget_dialog_ref'):
+                self.budget_dialog_ref.load_budget_data()
+        elif index == 5:  # Accounts tab
+            if hasattr(self, 'accounts_dialog_ref'):
+                self.accounts_dialog_ref.load_accounts()
+        elif index == 6:  # Categories tab
+            if hasattr(self, 'categories_dialog_ref'):
+                self.categories_dialog_ref.load_categories()
+    
+    # Include all the helper methods from the original main_window.py
+    # (update_account_combo, update_payee_combo, add_transaction, etc.)
+    
     def update_account_combo(self):
         self.account_combo.clear()
         accounts = self.budget_app.get_all_accounts()
-        
         accounts_sorted = sorted(accounts, 
                                key=lambda x: self.transaction_counts['accounts'].get(x.id, 0), 
                                reverse=True)
-        
         for account in accounts_sorted:
             if account.id == 0:
                 continue
@@ -375,11 +443,9 @@ class BudgetTrackerWindow(QMainWindow):
     def update_to_account_combo(self):
         self.to_account_combo.clear()
         accounts = self.budget_app.get_all_accounts()
-        
         accounts_sorted = sorted(accounts, 
                                key=lambda x: self.transaction_counts['accounts'].get(x.id, 0), 
                                reverse=True)
-        
         for account in accounts_sorted:
             if account.id == 0:
                 continue
@@ -390,17 +456,12 @@ class BudgetTrackerWindow(QMainWindow):
         self.to_account_combo.adjustSize()
     
     def update_payee_combo(self):
-        """Update payee dropdown with most used payees first"""
         payee_counts = self.transaction_counts['payees']
-        
         sorted_payees = sorted(payee_counts.items(), key=lambda x: x[1], reverse=True)
-        
         current_text = self.payee_input.currentText()
         self.payee_input.clear()
-        
         for payee, count in sorted_payees:
             self.payee_input.addItem(payee)
-        
         index = self.payee_input.findText(current_text)
         if index >= 0:
             self.payee_input.setCurrentIndex(index)
@@ -414,7 +475,6 @@ class BudgetTrackerWindow(QMainWindow):
     def update_currency_labels(self):
         from_account_id = self.account_combo.currentData()
         to_account_id = self.to_account_combo.currentData()
-        
         is_starting_balance = self.starting_balance_checkbox.isChecked()
         
         if is_starting_balance:
@@ -437,7 +497,6 @@ class BudgetTrackerWindow(QMainWindow):
         if from_account_id and to_account_id:
             from_currency = self.get_currency_for_account(from_account_id)
             to_currency = self.get_currency_for_account(to_account_id)
-            
             different_currencies = from_currency != to_currency
             
             self.to_amount_layout.itemAt(0).widget().setVisible(different_currencies)
@@ -455,7 +514,6 @@ class BudgetTrackerWindow(QMainWindow):
         is_starting_balance = self.starting_balance_checkbox.isChecked()
         
         self.starting_balance_layout.itemAt(0).widget().setVisible(is_transfer)
-        
         self.parent_category_layout.itemAt(0).widget().setVisible(not is_transfer and not is_starting_balance)
         self.parent_category_combo.setVisible(not is_transfer and not is_starting_balance)
         self.sub_category_layout.itemAt(0).widget().setVisible(not is_transfer and not is_starting_balance)
@@ -509,7 +567,7 @@ class BudgetTrackerWindow(QMainWindow):
             self.amount_input.setPlaceholderText('Enter amount')
         
         self.update_currency_labels()
-
+    
     def calculate_exchange_rate(self):
         try:
             from_amount = safe_eval_math(self.amount_input.text())
@@ -525,7 +583,7 @@ class BudgetTrackerWindow(QMainWindow):
                 self.to_amount_input.setText(str(from_amount))
         except (ValueError, ZeroDivisionError):
             self.exchange_rate_label.setText('Exchange Rate: -')
-
+    
     def calculate_exchange_rate_from_to(self):
         try:
             to_amount = float(self.to_amount_input.text())
@@ -538,19 +596,17 @@ class BudgetTrackerWindow(QMainWindow):
                     self.exchange_rate_label.setText(f'Exchange Rate: {exchange_rate:.4f}')
         except (ValueError, ZeroDivisionError):
             self.exchange_rate_label.setText('Exchange Rate: -')
-
+    
     def on_parent_category_changed(self, parent_category):
         self.update_sub_categories()
-
+    
     def update_sub_categories(self):
         self.sub_category_combo.clear()
-        
         parent_category = self.parent_category_combo.currentText()
         if not parent_category:
             return
             
         categories = self.budget_app.get_all_categories()
-        
         is_income = self.income_radio.isChecked()
         expected_category_type = 'Income' if is_income else 'Expense'
         
@@ -562,22 +618,19 @@ class BudgetTrackerWindow(QMainWindow):
                 sub_categories.append((category.sub_category, count))
         
         sorted_subs = sorted(sub_categories, key=lambda x: x[1], reverse=True)
-        
         for sub, count in sorted_subs:
             self.sub_category_combo.addItem(sub)
         
         self.sub_category_combo.adjustSize()
-        
         if self.sub_category_combo.count() > 0:
             self.sub_category_combo.setCurrentIndex(0)
-
+    
     def update_parent_categories(self, trans_type):
         self.parent_category_combo.clear()
         categories = self.budget_app.get_all_categories()
         
         parent_categories = set()
         category_counts = {}
-        
         expected_category_type = 'Income' if trans_type == 'income' else 'Expense'
         
         for category in categories:
@@ -595,54 +648,21 @@ class BudgetTrackerWindow(QMainWindow):
             self.parent_category_combo.addItem(parent)
         
         self.parent_category_combo.adjustSize()
-        
         if self.parent_category_combo.count() > 0:
             self.parent_category_combo.setCurrentIndex(0)
             self.update_sub_categories()
-
-    def update_sub_categories(self):
-        self.sub_category_combo.clear()
-        
-        parent_category = self.parent_category_combo.currentText()
-        if not parent_category:
-            return
-            
-        categories = self.budget_app.get_all_categories()
-        
-        is_income = self.income_radio.isChecked()
-        expected_category_type = 'Income' if is_income else 'Expense'
-        
-        sub_categories = []
-        for category in categories:
-            if (category.category == parent_category and 
-                category.category_type == expected_category_type):
-                count = self.transaction_counts['categories'].get(category.sub_category, 0)
-                sub_categories.append((category.sub_category, count))
-        
-        sorted_subs = sorted(sub_categories, key=lambda x: x[1], reverse=True)
-        
-        for sub, count in sorted_subs:
-            self.sub_category_combo.addItem(sub)
-        
-        self.sub_category_combo.adjustSize()
-        
-        if self.sub_category_combo.count() > 0:
-            self.sub_category_combo.setCurrentIndex(0)
-
+    
     def get_currency_for_account(self, account_id):
-        accounts = self.budget_app.get_all_accounts()
-        for account in accounts:
-            if account.id == account_id:
-                return account.currency
-        return 'CHF'
-
+        account = self.get_account_by_id(account_id)
+        return account.currency if account else 'CHF'
+    
     def get_account_by_id(self, account_id):
         accounts = self.budget_app.get_all_accounts()
         for account in accounts:
             if account.id == account_id:
                 return account
         return None
-
+    
     def add_transaction(self):
         try:
             amount = safe_eval_math(self.amount_input.text())
@@ -671,7 +691,6 @@ class BudgetTrackerWindow(QMainWindow):
         
         if is_starting_balance:
             to_account_id = self.to_account_combo.currentData()
-            
             from_account_id = 0
             from_amount = amount
             to_amount = amount
@@ -720,7 +739,6 @@ class BudgetTrackerWindow(QMainWindow):
             
         elif self.income_radio.isChecked():
             sub_category = self.sub_category_combo.currentText()
-            
             success = self.budget_app.add_income(
                 date=date,
                 amount=amount,
@@ -732,7 +750,6 @@ class BudgetTrackerWindow(QMainWindow):
             
         else:
             sub_category = self.sub_category_combo.currentText()
-            
             success = self.budget_app.add_expense(
                 date=date,
                 amount=amount,
@@ -748,112 +765,19 @@ class BudgetTrackerWindow(QMainWindow):
             self.to_amount_input.clear()
             self.qty_input.clear()
             self.notes_input.clear()
-            # Account, Payee, and Categories are intentionally NOT cleared to allow rapid entry
             self.starting_balance_checkbox.setChecked(False)
             self.transaction_counts = self.budget_app.get_transaction_counts()
             self.update_payee_combo()
-            self.update_balance_display()
+            
+            # Refresh other tabs
+            if hasattr(self, 'balance_tab_widget'):
+                self.balance_tab_widget.refresh_data()
         else:
             self.show_status('Error adding transaction', error=True)
-
+    
     def show_status(self, message, error=False):
         self.status_label.setText(message)
         if error:
             self.status_label.setStyleSheet('color: #f44336; padding: 5px; font-weight: bold;')
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px; font-weight: bold;')
-        
-        QTimer.singleShot(5000, lambda: self.status_label.setText(''))
-
-    def view_transactions(self):
-        try:
-            if hasattr(self, 'transactions_dialog') and self.transactions_dialog is not None:
-                try:
-                    if self.transactions_dialog.isVisible():
-                        self.transactions_dialog.raise_()
-                        self.transactions_dialog.activateWindow()
-                        return
-                except:
-                    pass
-            
-            dialog = TransactionsDialog(self.budget_app, self)
-            self.transactions_dialog = dialog
-            dialog.show()
-            dialog.raise_()
-            dialog.activateWindow()
-            
-        except Exception as e:
-            print(f"Error in view_transactions: {e}")
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(self, 'Error', f'Error opening transactions view:\n{str(e)}')
-            self.show_status('Error opening transactions view', error=True)
-
-    def view_account_perspective(self):
-        try:
-            if hasattr(self, 'account_perspective_dialog') and self.account_perspective_dialog is not None:
-                try:
-                    if self.account_perspective_dialog.isVisible():
-                        self.account_perspective_dialog.raise_()
-                        self.account_perspective_dialog.activateWindow()
-                        return
-                except:
-                    pass
-            
-            dialog = AccountPerspectiveDialog(self.budget_app, self)
-            self.account_perspective_dialog = dialog
-            dialog.show()
-            dialog.raise_()
-            dialog.activateWindow()
-            
-        except Exception as e:
-            print(f"Error in view_account_perspective: {e}")
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(self, 'Error', f'Error opening account perspective:\n{str(e)}')
-            self.show_status('Error opening account perspective', error=True)
-
-    def view_budget(self):
-        try:
-            if hasattr(self, 'budget_dialog') and self.budget_dialog is not None:
-                try:
-                    if self.budget_dialog.isVisible():
-                        self.budget_dialog.raise_()
-                        self.budget_dialog.activateWindow()
-                        return
-                except:
-                    pass
-            
-            dialog = BudgetDialog(self.budget_app, self)
-            self.budget_dialog = dialog
-            dialog.show()
-            dialog.raise_()
-            dialog.activateWindow()
-            
-        except Exception as e:
-            print(f"Error in view_budget: {e}")
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(self, 'Error', f'Error opening budget view:\n{str(e)}')
-            self.show_status('Error opening budget view', error=True)
-
-    def manage_accounts(self):
-        dialog = AccountsDialog(self.budget_app, self)
-        dialog.exec()
-        self.update_account_combo()
-        self.update_to_account_combo()
-
-    def manage_categories(self):
-        dialog = CategoriesDialog(self.budget_app, self)
-        dialog.exec()
-        self.transaction_counts = self.budget_app.get_transaction_counts()
-        self.update_ui_for_type()
-
-    def update_balance_display(self):
-        self.load_balances_async()
-
-    def format_with_thousand_separators(self, number):
-        if abs(number) < 0.001:
-            return "0.00"
-        formatted = f"{number:,.2f}"
-        return formatted.replace(",", "'")

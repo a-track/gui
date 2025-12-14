@@ -1,6 +1,6 @@
 import sys
 from PyQt6.QtWidgets import QApplication
-from main_window import BudgetTrackerWindow
+from main_window_tabbed import BudgetTrackerWindow
 
 def main():
     def exception_hook(exctype, value, tb):

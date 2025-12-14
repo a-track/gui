@@ -230,6 +230,8 @@ class AccountPerspectiveDialog(QDialog):
         self.year_combo.addItems([str(year) for year in years])
     
     def populate_months(self):
+        # Add 'All' option first
+        self.month_combo.addItem('All')
         months = [
             'January', 'February', 'March', 'April', 'May', 'June',
             'July', 'August', 'September', 'October', 'November', 'December'
@@ -239,15 +241,14 @@ class AccountPerspectiveDialog(QDialog):
     def set_current_month_year(self):
         now = datetime.datetime.now()
         current_year = str(now.year)
-        current_month = now.strftime('%B')
         
+        # Set current year
         index = self.year_combo.findText(current_year)
         if index >= 0:
             self.year_combo.setCurrentIndex(index)
         
-        index = self.month_combo.findText(current_month)
-        if index >= 0:
-            self.month_combo.setCurrentIndex(index)
+        # Set month to 'All' to show full year
+        self.month_combo.setCurrentIndex(0)  # 'All' is at index 0
     
     def format_swiss_number(self, number):
         try:
@@ -363,24 +364,43 @@ class AccountPerspectiveDialog(QDialog):
             filter_info = "all transactions"
         else:
             selected_year = int(self.year_combo.currentText())
-            selected_month = self.month_combo.currentIndex() + 1
+            selected_month_text = self.month_combo.currentText()
             
             transactions_to_display = []
-            for trans in self.all_transactions_for_account:
-                try:
-                    if hasattr(trans, 'date') and trans.date:
-                        trans_date = trans.date
-                        if isinstance(trans_date, str):
-                            trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
-                        
-                        if trans_date.year == selected_year and trans_date.month == selected_month:
-                            transactions_to_display.append(trans)
-                except (ValueError, AttributeError) as e:
-                    print(f"Error parsing date for transaction {trans.id}: {e}")
-                    continue
             
-            month_name = self.month_combo.currentText()
-            filter_info = f"{month_name} {selected_year}"
+            # If 'All' is selected, show all transactions for the year
+            if selected_month_text == 'All':
+                for trans in self.all_transactions_for_account:
+                    try:
+                        if hasattr(trans, 'date') and trans.date:
+                            trans_date = trans.date
+                            if isinstance(trans_date, str):
+                                trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
+                            
+                            if trans_date.year == selected_year:
+                                transactions_to_display.append(trans)
+                    except (ValueError, AttributeError) as e:
+                        print(f"Error parsing date for transaction {trans.id}: {e}")
+                        continue
+                filter_info = f"All months {selected_year}"
+            else:
+                # Specific month selected (index is offset by 1 because 'All' is at index 0)
+                selected_month = self.month_combo.currentIndex()
+                
+                for trans in self.all_transactions_for_account:
+                    try:
+                        if hasattr(trans, 'date') and trans.date:
+                            trans_date = trans.date
+                            if isinstance(trans_date, str):
+                                trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
+                            
+                            if trans_date.year == selected_year and trans_date.month == selected_month:
+                                transactions_to_display.append(trans)
+                    except (ValueError, AttributeError) as e:
+                        print(f"Error parsing date for transaction {trans.id}: {e}")
+                        continue
+                
+                filter_info = f"{selected_month_text} {selected_year}"
         
         transactions_to_display = sorted(transactions_to_display, key=lambda x: (x.date, x.id), reverse=True)
         
@@ -653,10 +673,17 @@ class AccountPerspectiveDialog(QDialog):
         if transaction_history:
             self.table.scrollToTop()
             
-        # Autosize window width
-        total_width = self.table.horizontalHeader().length() + 80
-        if total_width > self.width():
-            self.resize(total_width, self.height())
+        # Autosize window width to show all columns properly
+        # Calculate total width needed: sum of all column widths + margins
+        total_width = self.table.horizontalHeader().length() + 50  # Add margin for scrollbar and padding
+        
+        # Get the parent window (could be the dialog itself or the main tabbed window)
+        parent_window = self.window()
+        if parent_window:
+            # Ensure minimum width to display all columns
+            min_width = total_width + 100  # Extra padding for window chrome
+            if parent_window.width() < min_width:
+                parent_window.resize(min_width, parent_window.height())
 
 
 
