@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+*.spec
+
+# Logs
+*.log
+
+# Database
+*.duckdb
+*.db
+*.sqlite
+budget_sample.duckdb
+budget_sample*.duckdb
+debug_budget.duckdb
+migration_test.duckdb
+test_*.duckdb
+
+# Backups
+backups/
+*.backup*
+*.backup
+
+# Dev Tools & Tests (Excluded as requested)
+scripts/
+tests/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Build
+build/
+dist/
+*.exe
+
+# Executables to Include
+!BudgetTracker_V3.8.exe
