@@ -5,7 +5,7 @@ __pycache__/
 .venv/
 env/
 venv/
-*.spec
+
 
 # Logs
 *.log
@@ -44,4 +44,4 @@ dist/
 *.exe
 
 # Executables to Include
-!BudgetTracker_V3.9.exe
+!BudgetTracker.exe

@@ -46,6 +46,14 @@ def main():
     
     sys.excepthook = exception_hook
     
+    # Ensure taskbar icon works on Windows
+    try:
+        import ctypes
+        myappid = 'antigravity.budgettracker.app.3.9'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception:
+        pass
+    
     app = QApplication(sys.argv)
     app.setApplicationName("BudgetTracker")
     app.setOrganizationName("BudgetTools") 
