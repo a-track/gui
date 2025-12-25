@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QLineEdit, QComboBox, 
                              QRadioButton, QButtonGroup, QDateEdit, QGroupBox,
                              QScrollArea, QCheckBox, QTabWidget, QMessageBox,
-                             QMenu)
+                             QMenu, QWidgetAction, QToolButton, QSizePolicy)
 from PyQt6.QtCore import Qt, QDate, QSettings, QEvent
 from PyQt6.QtGui import QFont, QIcon, QAction
 from investment_tab import InvestmentTab
@@ -26,7 +26,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.init_ui()
     
     def init_ui(self):
-        title = 'Budget Tracker 3.8'
+        title = 'Budget Tracker 3.9'
         if self.db_path:
             title += f' - [{self.db_path}]'
         self.setWindowTitle(title)
@@ -44,17 +44,15 @@ class BudgetTrackerWindow(QMainWindow):
         
         # Create tab widget
         self.tab_widget = QTabWidget()
-        self.tab_widget.setMovable(True)
-        self.tab_widget.setDocumentMode(False) # Ensure styling looks right
+        self.tab_widget.setMovable(False) # Robustness: Move via context menu only
+        self.tab_widget.setDocumentMode(True) # Lighter visual style, potentially faster
         self.tab_widget.tabBar().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tab_widget.tabBar().customContextMenuRequested.connect(self.show_tab_context_menu)
         
         self.tab_widget.setStyleSheet("""
             QTabWidget::pane {
                 border: 1px solid #d0d0d0;
-                border-radius: 4px;
                 background-color: white;
-                top: -1px;
             }
             QTabBar::tab {
                 background-color: #f5f5f5;
@@ -107,9 +105,64 @@ class BudgetTrackerWindow(QMainWindow):
         main_layout.addWidget(self.tab_widget)
 
     def show_tab_context_menu(self, point):
+        # Identify which tab was clicked
+        tab_index = self.tab_widget.tabBar().tabAt(point)
+        
         menu = QMenu(self)
         
-        # "Show/Hide Tabs" Section
+        # Move Actions (Persistent Menu)
+        if tab_index != -1:
+            target_widget = self.tab_widget.widget(tab_index)
+            
+            # Create a container widget with 4 buttons
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(4, 4, 4, 4)
+            layout.setSpacing(5)
+            
+            # Button Style: Icons or text? Text is clearer for directions.
+            
+            # << Move to Start
+            btn_start = QToolButton()
+            btn_start.setText("I<<") 
+            btn_start.setToolTip("Move tab to the start")
+            btn_start.setAutoRaise(True)
+            btn_start.clicked.connect(lambda: self.move_tab_to_extreme(target_widget, 'start'))
+            
+            # < Move Left
+            btn_left = QToolButton()
+            btn_left.setText("< Left") 
+            btn_left.setToolTip("Move tab to the left")
+            btn_left.setAutoRaise(True)
+            btn_left.clicked.connect(lambda: self.move_tab(target_widget, -1))
+            
+            # > Move Right
+            btn_right = QToolButton()
+            btn_right.setText("Right >")
+            btn_right.setToolTip("Move tab to the right")
+            btn_right.setAutoRaise(True)
+            btn_right.clicked.connect(lambda: self.move_tab(target_widget, 1))
+            
+            # >> Move to End
+            btn_end = QToolButton()
+            btn_end.setText(">>I") 
+            btn_end.setToolTip("Move tab to the end")
+            btn_end.setAutoRaise(True)
+            btn_end.clicked.connect(lambda: self.move_tab_to_extreme(target_widget, 'end'))
+            
+            layout.addWidget(btn_start)
+            layout.addWidget(btn_left)
+            layout.addWidget(btn_right)
+            layout.addWidget(btn_end)
+            
+            # Add as a QWidgetAction so it doesn't close on click
+            action = QWidgetAction(menu)
+            action.setDefaultWidget(container)
+            menu.addAction(action)
+            
+            menu.addSeparator()
+        
+        # "Show/Hide Tabs" Section (Persistent with Checkboxes)
         label_action = QAction("Visible Tabs:", self)
         label_action.setEnabled(False)
         menu.addAction(label_action)
@@ -124,20 +177,164 @@ class BudgetTrackerWindow(QMainWindow):
                          'balance_report', 'cash_flow', 'investments', 'currencies', 
                          'manage_accounts', 'manage_categories', 'data_management']
                          
+        # Keep track of checkboxes to update them if "Show All" is clicked
+        local_checkboxes = []
+        
+        # Identify the tab that was right-clicked to prevent hiding it
+        target_tab_index = self.tab_widget.tabBar().tabAt(point)
+        target_widget = self.tab_widget.widget(target_tab_index) if target_tab_index != -1 else None
+
         for key in default_order:
             if key not in self.tab_defs: continue
             
             widget, title, tip = self.tab_defs[key]
             is_visible = widget in visible_widgets
             
-            action = QAction(title, self)
-            action.setCheckable(True)
-            action.setChecked(is_visible)
+            # Create container for checkbox
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(24, 2, 10, 2) # Indent to align with other items potentially
+            
+            cb = QCheckBox(title)
+            cb.setChecked(is_visible)
+            
+            # Prevent hiding the tab we opened the menu on
+            if widget == target_widget:
+                cb.setEnabled(False)
+                f = cb.font()
+                f.setBold(True)
+                cb.setFont(f)
+                cb.setToolTip("Cannot hide the tab you are currently interacting with.")
+            
             # Use closure to capture key
-            action.triggered.connect(lambda checked, k=key: self.toggle_tab(k, checked))
+            cb.toggled.connect(lambda checked, k=key: self.toggle_tab(k, checked))
+            
+            local_checkboxes.append(cb)
+            
+            layout.addWidget(cb)
+            
+            action = QWidgetAction(menu)
+            action.setDefaultWidget(container)
             menu.addAction(action)
             
+        menu.addSeparator()
+        
+        # Persistent Buttons for Show All / Reset
+        btn_container = QWidget()
+        btn_layout = QVBoxLayout(btn_container)
+        btn_layout.setContentsMargins(4, 4, 4, 4)
+        btn_layout.setSpacing(2)
+        
+        def local_show_all():
+            """Wrapper to update checkboxes visually and call show_all_tabs"""
+            # Block signals to prevent redundant toggle calls (optimization)
+            for cb in local_checkboxes:
+                cb.blockSignals(True)
+                cb.setChecked(True)
+                cb.blockSignals(False)
+            self.show_all_tabs()
+
+        btn_show_all = QToolButton()
+        btn_show_all.setText("Show All Tabs")
+        btn_show_all.setAutoRaise(True)
+        btn_show_all.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        btn_show_all.setStyleSheet("text-align: left; padding-left: 10px; width: 100%;") 
+        btn_show_all.clicked.connect(local_show_all)
+        
+        btn_reset = QToolButton()
+        btn_reset.setText("Reset Default Layout")
+        btn_reset.setAutoRaise(True)
+        btn_reset.setStyleSheet("text-align: left; padding-left: 10px;")
+        btn_reset.clicked.connect(self.reset_tab_layout)
+        
+        btn_layout.addWidget(btn_show_all)
+        btn_layout.addWidget(btn_reset)
+        
+        action_btns = QWidgetAction(menu)
+        action_btns.setDefaultWidget(btn_container)
+        menu.addAction(action_btns)
+            
         menu.exec(self.tab_widget.tabBar().mapToGlobal(point))
+
+    def move_tab(self, target_widget, direction):
+        """
+        Move tab safely without triggering reloads.
+        Accepts widget reference so it works even if index changes.
+        """
+        # Find current index dynamically
+        current_index = self.tab_widget.indexOf(target_widget)
+        if current_index == -1: 
+            return
+
+        new_index = current_index + direction
+        if new_index < 0 or new_index >= self.tab_widget.count():
+            return
+            
+        self._perform_safe_move(current_index, new_index, target_widget)
+
+    def move_tab_to_extreme(self, target_widget, place):
+        """Move tab to start or end"""
+        current_index = self.tab_widget.indexOf(target_widget)
+        if current_index == -1: return
+        
+        new_index = 0 if place == 'start' else self.tab_widget.count() - 1
+        
+        if current_index == new_index: return
+        
+        self._perform_safe_move(current_index, new_index, target_widget)
+
+    def _perform_safe_move(self, current_index, new_index, target_widget):
+        """Helper to perform the move with signal blocking"""
+        # Capture which widget is currently active so we can preserve focus
+        active_widget = self.tab_widget.currentWidget()
+        
+        # BLOCK SIGNALS to prevent invalid index errors or data reloads/crashes
+        self.tab_widget.blockSignals(True)
+        try:
+            text = self.tab_widget.tabText(current_index)
+            icon = self.tab_widget.tabIcon(current_index)
+            tooltip = self.tab_widget.tabToolTip(current_index)
+            
+            self.tab_widget.removeTab(current_index)
+            self.tab_widget.insertTab(new_index, target_widget, icon, text)
+            self.tab_widget.setTabToolTip(new_index, tooltip)
+            
+            # Restore the previously active widget (preserves view)
+            if active_widget:
+                self.tab_widget.setCurrentWidget(active_widget)
+            
+        except Exception as e:
+            print(f"Error moving tab: {e}")
+            
+        finally:
+            self.tab_widget.blockSignals(False)
+
+    def show_all_tabs(self):
+        """Unhide all tabs"""
+        for key in self.tab_defs:
+            self.toggle_tab(key, True)
+
+    def reset_tab_layout(self):
+        """Restore default tab order and visibility"""
+        # Clear all tabs
+        self.tab_widget.clear()
+        
+        # Default order
+        default_order = ['add_transaction', 'overview', 'expenses_dashboard', 'performance', 'transactions', 'account_entries', 'budget', 
+                         'balance_report', 'cash_flow', 'investments', 'currencies', 
+                         'manage_accounts', 'manage_categories', 'data_management']
+        
+        # Add tabs in default order
+        for key in default_order:
+            if key in self.tab_defs:
+                widget, title, tip = self.tab_defs[key]
+                self.tab_widget.addTab(widget, title)
+                self.tab_widget.setTabToolTip(self.tab_widget.count()-1, tip)
+        
+        # Also clear hidden_tabs setting so it doesn't persist
+        settings = QSettings("BudgetTracker", "MainWindow")
+        settings.remove("hidden_tabs")
+        settings.remove("tab_order") # Clear saved order too
 
     def toggle_tab(self, key, checked):
         if key not in self.tab_defs: return
@@ -183,19 +380,27 @@ class BudgetTrackerWindow(QMainWindow):
                      self.tab_widget.setTabToolTip(self.tab_widget.count()-1, tip)
         
         # 2. Add any new tabs that weren't in saved order (e.g. upgrades)
-        # We append them at the end
+        # We append them at the end, UNLESS they were explicitly hidden.
+        hidden_tabs = settings.value("hidden_tabs", [])
+        if not isinstance(hidden_tabs, list):
+            hidden_tabs = []
+            
         for key in default_order:
             if key in self.tab_defs:
+                # If it's already there (restored above), skip
                 widget, title, tip = self.tab_defs[key]
                 if self.tab_widget.indexOf(widget) == -1:
-                    # Check if it was explicitly hidden?
-                    # For simplicity, if not in saved order, we assume it's NEW and show it.
-                    # Use a separate "hidden_tabs" list if we want to distinguish "hidden" from "new".
-                    # But "tab_order" usually contains only visible tabs.
-                    # Let's check "all_known_tabs" setting to mitigate reappearing closed tabs?
-                    # For now, simple: Append missing tabs.
-                     self.tab_widget.addTab(widget, title)
-                     self.tab_widget.setTabToolTip(self.tab_widget.count()-1, tip)
+                    # If it was marked as hidden, do NOT add it
+                    if key in hidden_tabs:
+                        continue
+                        
+                    self.tab_widget.addTab(widget, title)
+                    self.tab_widget.setTabToolTip(self.tab_widget.count()-1, tip)
+
+        # Safeguard: If no tabs are visible (count == 0), reset to default layout
+        if self.tab_widget.count() == 0:
+            print("No visible tabs found in settings. Resetting to defaults.")
+            self.reset_tab_layout()
 
     def save_state(self):
         settings = QSettings("BudgetTracker", "MainWindow")
@@ -203,8 +408,10 @@ class BudgetTrackerWindow(QMainWindow):
         
         # Save visible tabs order
         current_order = []
+        visible_widgets = set()
         for i in range(self.tab_widget.count()):
             widget = self.tab_widget.widget(i)
+            visible_widgets.add(widget)
             # Find key for this widget
             for key, (w, t, tip) in self.tab_defs.items():
                 if w == widget:
@@ -212,10 +419,52 @@ class BudgetTrackerWindow(QMainWindow):
                     break
         
         settings.setValue("tab_order", current_order)
+        
+        # Save hidden tabs
+        hidden_tabs = []
+        for key, (w, t, tip) in self.tab_defs.items():
+            if w not in visible_widgets:
+                hidden_tabs.append(key)
+        
+        settings.setValue("hidden_tabs", hidden_tabs)
 
     def closeEvent(self, event):
         """Cleanup when window is closed"""
         self.save_state()
+        
+        # Cleanup all tabs
+        for i in range(self.tab_widget.count()):
+            widget = self.tab_widget.widget(i)
+            if hasattr(widget, 'cleanup'):
+                try:
+                    widget.cleanup()
+                except Exception as e:
+                    print(f"Error cleaning up tab {i}: {e}")
+
+        # Explicitly cleanup detached dialog references that might have threads
+        # (These are not always in the tab hierarchy if layout was stolen)
+        detached_refs = [
+            'transactions_dialog_ref',
+            'account_perspective_dialog_ref', 
+            'budget_dialog_ref',
+            'accounts_dialog_ref',
+            'categories_dialog_ref',
+            'exchange_rates_tab_ref',
+            'report_tab_ref',
+            'savings_tab_ref',
+            'investment_performance_tab_ref',
+            'investment_tab_ref'
+        ]
+        
+        for ref_name in detached_refs:
+            if hasattr(self, ref_name):
+                try:
+                    widget = getattr(self, ref_name)
+                    if hasattr(widget, 'cleanup'):
+                        widget.cleanup()
+                except Exception as e:
+                    print(f"Error cleaning up {ref_name}: {e}")
+
         try:
             if hasattr(self, 'budget_app'):
                 self.budget_app.close()
@@ -282,14 +531,7 @@ class BudgetTrackerWindow(QMainWindow):
         type_layout.addStretch()
         form_layout.addLayout(type_layout)
         
-        # Starting Balance Checkbox
-        self.starting_balance_layout = QHBoxLayout()
-        self.starting_balance_checkbox = QCheckBox('This is a starting balance transaction')
-        self.starting_balance_checkbox.setToolTip("Use this for the very first transaction of an account to set its initial value.")
-        self.starting_balance_checkbox.toggled.connect(self.update_ui_for_type)
-        self.starting_balance_layout.addWidget(self.starting_balance_checkbox)
-        self.starting_balance_layout.addStretch()
-        form_layout.addLayout(self.starting_balance_layout)
+
         
         # Date
         date_layout = QHBoxLayout()
@@ -419,6 +661,15 @@ class BudgetTrackerWindow(QMainWindow):
         notes_layout.addWidget(self.notes_input)
         notes_layout.addStretch()
         form_layout.addLayout(notes_layout)
+        
+        # Starting Balance Checkbox
+        self.starting_balance_layout = QHBoxLayout()
+        self.starting_balance_checkbox = QCheckBox('Starting Balance')
+        self.starting_balance_checkbox.setToolTip("Use this for the very first transaction of an account to set its initial value.")
+        self.starting_balance_checkbox.toggled.connect(self.update_ui_for_type)
+        self.starting_balance_layout.addWidget(self.starting_balance_checkbox)
+        self.starting_balance_layout.addStretch()
+        form_layout.addLayout(self.starting_balance_layout)
         
         form_group.setLayout(form_layout)
         main_layout.addWidget(form_group)
@@ -680,38 +931,46 @@ class BudgetTrackerWindow(QMainWindow):
     
     def on_tab_changed(self, index):
         """Called when user switches tabs - Refactored for movability"""
-        current_widget = self.tab_widget.widget(index)
-        
-        # Refresh data when switching to certain tabs based on Widget Identity
-        if current_widget == self.balance_tab_widget:
-            self.balance_tab_widget.refresh_data()
-        elif hasattr(self, 'transactions_tab_widget') and current_widget == self.transactions_tab_widget:
-            if hasattr(self, 'transactions_dialog_ref'):
-                self.transactions_dialog_ref.load_transactions()
-        elif hasattr(self, 'account_perspective_tab_widget') and current_widget == self.account_perspective_tab_widget:
-            if hasattr(self, 'account_perspective_dialog_ref'):
-                self.account_perspective_dialog_ref.refresh_data()
-        elif hasattr(self, 'budget_tab_widget') and current_widget == self.budget_tab_widget:
-            if hasattr(self, 'budget_dialog_ref'):
-                self.budget_dialog_ref.load_budget_data()
-        elif hasattr(self, 'accounts_tab_widget') and current_widget == self.accounts_tab_widget:
-            if hasattr(self, 'accounts_dialog_ref'):
-                self.accounts_dialog_ref.load_accounts()
-        elif hasattr(self, 'categories_tab_widget') and current_widget == self.categories_tab_widget:
-            if hasattr(self, 'categories_dialog_ref'):
-                self.categories_dialog_ref.load_categories()
-        elif hasattr(self, 'exchange_rates_tab_widget') and current_widget == self.exchange_rates_tab_widget:
-            if hasattr(self, 'exchange_rates_tab_ref'):
-                self.exchange_rates_tab_ref.refresh_data()
-        elif hasattr(self, 'report_tab_widget') and current_widget == self.report_tab_widget:
-            if hasattr(self, 'report_tab_ref'):
-                self.report_tab_ref.refresh_data()
-        elif hasattr(self, 'savings_tab_widget') and current_widget == self.savings_tab_widget:
-            if hasattr(self, 'savings_tab_ref'):
-                self.savings_tab_ref.refresh_data()
-        elif hasattr(self, 'investment_performance_tab_widget') and current_widget == self.investment_performance_tab_widget:
-            if hasattr(self, 'investment_performance_tab_ref'):
-                self.investment_performance_tab_ref.refresh_data()
+        # Safety check for invalid index (can happen during moves/clears)
+        if index < 0 or index >= self.tab_widget.count():
+            return
+
+        try:
+            current_widget = self.tab_widget.widget(index)
+            
+            # Refresh data when switching to certain tabs based on Widget Identity
+            if hasattr(self, 'balance_tab_widget') and current_widget == self.balance_tab_widget:
+                self.balance_tab_widget.refresh_data()
+            elif hasattr(self, 'transactions_tab_widget') and current_widget == self.transactions_tab_widget:
+                if hasattr(self, 'transactions_dialog_ref'):
+                    self.transactions_dialog_ref.load_transactions()
+            elif hasattr(self, 'account_perspective_tab_widget') and current_widget == self.account_perspective_tab_widget:
+                if hasattr(self, 'account_perspective_dialog_ref'):
+                    self.account_perspective_dialog_ref.refresh_data()
+            elif hasattr(self, 'budget_tab_widget') and current_widget == self.budget_tab_widget:
+                if hasattr(self, 'budget_dialog_ref'):
+                    self.budget_dialog_ref.load_budget_data()
+            elif hasattr(self, 'accounts_tab_widget') and current_widget == self.accounts_tab_widget:
+                if hasattr(self, 'accounts_dialog_ref'):
+                    self.accounts_dialog_ref.load_accounts()
+            elif hasattr(self, 'categories_tab_widget') and current_widget == self.categories_tab_widget:
+                if hasattr(self, 'categories_dialog_ref'):
+                    self.categories_dialog_ref.load_categories()
+            elif hasattr(self, 'exchange_rates_tab_widget') and current_widget == self.exchange_rates_tab_widget:
+                if hasattr(self, 'exchange_rates_tab_ref'):
+                    self.exchange_rates_tab_ref.refresh_data()
+            elif hasattr(self, 'report_tab_widget') and current_widget == self.report_tab_widget:
+                if hasattr(self, 'report_tab_ref'):
+                    self.report_tab_ref.refresh_data()
+            elif hasattr(self, 'savings_tab_widget') and current_widget == self.savings_tab_widget:
+                if hasattr(self, 'savings_tab_ref'):
+                    self.savings_tab_ref.refresh_data()
+            elif hasattr(self, 'investment_performance_tab_widget') and current_widget == self.investment_performance_tab_widget:
+                if hasattr(self, 'investment_performance_tab_ref'):
+                    self.investment_performance_tab_ref.refresh_data()
+
+        except Exception as e:
+            print(f"Error in on_tab_changed: {e}")
 
     
     # Include all the helper methods from the original main_window.py

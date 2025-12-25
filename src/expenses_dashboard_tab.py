@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 import datetime
+import math
 from custom_widgets import NoScrollComboBox
 
 class CategoryFilterDialog(QDialog):
@@ -413,6 +414,8 @@ class ExpensesDashboardTab(QWidget):
             self.kpi_top.findChildren(QLabel)[1].setText("None")
             self.kpi_top.findChildren(QLabel)[2].setText("CHF 0.00")
 
+
+
     def plot_pie(self, breakdown):
         self.fig_pie.clear()
         
@@ -424,9 +427,6 @@ class ExpensesDashboardTab(QWidget):
         sorted_items = sorted(breakdown.items(), key=lambda x: x[1]['total'], reverse=True)
         # Filter small slices? For now keep all.
         
-        labels = [k for k, v in sorted_items]
-        sizes = [v['total'] for k, v in sorted_items]
-        
         # Helper for tooltip text
         tooltip_texts = []
         
@@ -435,6 +435,9 @@ class ExpensesDashboardTab(QWidget):
         
         for k, v in sorted_items:
             val = v['total']
+            # Sanitize
+            if val is None or not math.isfinite(val): val = 0.0
+            
             if val <= 0: continue # Skip negative/zero slices
             
             filtered_sizes.append(val)
@@ -492,7 +495,13 @@ class ExpensesDashboardTab(QWidget):
         ax = self.fig_line.add_subplot(111)
         
         months = [t['month_str'] for t in trend_data]
-        values = [t['amount'] for t in trend_data]
+        # Sanitize values
+        values = []
+        for t in trend_data:
+            val = t['amount']
+            if val is None or not math.isfinite(val): val = 0.0
+            values.append(val)
+            
         x_indices = range(len(months))
         
         line, = ax.plot(x_indices, values, marker='o', color='#1976D2', linewidth=2)
@@ -537,13 +546,22 @@ class ExpensesDashboardTab(QWidget):
         ax = self.fig_bar.add_subplot(111)
         payees_list.reverse() # Top at top
         
-        names = [p['payee'] for p in payees_list]
-        values = [p['amount'] for p in payees_list]
+        names = [str(p['payee']) for p in payees_list]
+        # Sanitize values
+        values = []
+        for p in payees_list:
+            val = p['amount']
+            if val is None or not math.isfinite(val): val = 0.0
+            values.append(val)
         
         bars = ax.barh(names, values, color='#43A047')
         
         # Dynamic x-limit to fit labels
-        max_val = max(values) if values else 0
+        max_val = max(values) if values else 0.0
+        # Ensure max_val is safe for set_xlim
+        if not math.isfinite(max_val) or max_val <= 0: 
+            max_val = 100.0 # Default fallback
+            
         ax.set_xlim(0, max_val * 1.25) # Give 25% padding for text
         
         for bar in bars:
@@ -560,9 +578,6 @@ class ExpensesDashboardTab(QWidget):
         ax.set_xticks([]) # Remove x ticks
         
         ax.grid(axis='x', linestyle=':', alpha=0.3)
-        
-        # Ensure Y-tick labels (Payee Names) fit
-        # We rely on layout tight_layout mainly
         
         self.fig_bar.tight_layout()
         self.canvas_bar.draw()

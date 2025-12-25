@@ -1,8 +1,19 @@
-# Budget Tracker GUI v3.8
+# Budget Tracker GUI v3.9
 
 A powerful and user-friendly desktop application for personal finance management, built with Python, PyQt6, and DuckDB.
 
 ## Features
+
+### v3.9 Updates
+- **Account Perspective Overhaul**:
+    - **New Layout**: Clear structured header with distinct Filter and Balance sections.
+    - **Balance Cards**: Split view for "Period End Balance" (balance at selected date) vs "Total Balance" (current actual balance).
+    - **Precision**: Fixed Swiss Franc rounding logic for exact balance matching.
+- **Show All Dates**: New checkbox to toggle off date filters and view complete history instantly.
+- **Tab Management**:
+    - **Persistent Context Menu**: Easier tab organization.
+    - **Safety**: Prevents closing the last tab or accidental hiding of active tabs.
+- **Stability**: Fixed crashes related to empty charts and zero-tab states.
 
 ### v3.8 Updates
 - **Expenses Dashboard 2.0**: Completely redesigned for deeper insights.
