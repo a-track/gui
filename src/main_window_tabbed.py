@@ -1,16 +1,14 @@
 import sys
+import os
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QLineEdit, QComboBox, 
                              QRadioButton, QButtonGroup, QDateEdit, QGroupBox,
                              QScrollArea, QCheckBox, QTabWidget, QMessageBox,
                              QMenu, QWidgetAction, QToolButton, QSizePolicy)
 from PyQt6.QtCore import Qt, QDate, QSettings, QEvent
-from PyQt6.QtGui import QFont, QIcon, QAction
+from PyQt6.QtGui import QFont, QIcon, QAction, QKeySequence
 from investment_tab import InvestmentTab
 
-from models import BudgetApp
-from models import BudgetApp
-from utils import safe_eval_math, resource_path
 from models import BudgetApp
 from utils import safe_eval_math, resource_path
 from custom_widgets import NoScrollComboBox
@@ -30,6 +28,16 @@ class BudgetTrackerWindow(QMainWindow):
         if self.db_path:
             title += f' - [{self.db_path}]'
         self.setWindowTitle(title)
+
+        # Set Window Icon
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        
+        icon_path = os.path.join(base_path, 'hamster.ico')
+        if os.path.exists(icon_path):
+             self.setWindowIcon(QIcon(icon_path))
 
         self.setMinimumSize(800, 600)
         
