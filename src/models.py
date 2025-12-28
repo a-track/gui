@@ -860,7 +860,7 @@ class BudgetApp:
             conn.close()
 
     def add_expense(self, date: str, amount: float, account_id: int,
-                    sub_category: str, payee: str = "", notes: str = ""):
+                    sub_category: str, payee: str = "", notes: str = "", invest_account_id: int = None):
         trans_id = self._get_next_id('transactions')
         conn = self._get_connection()
         try:
@@ -871,9 +871,9 @@ class BudgetApp:
 
             conn.execute("""
                 INSERT INTO transactions
-                (id, date, type, amount, account_id, category_id, payee, notes)
-                VALUES (?, ?, 'expense', ?, ?, ?, ?, ?)
-            """, [trans_id, date, amount, account_id, category_id, payee, notes])
+                (id, date, type, amount, account_id, category_id, payee, notes, invest_account_id)
+                VALUES (?, ?, 'expense', ?, ?, ?, ?, ?, ?)
+            """, [trans_id, date, amount, account_id, category_id, payee, notes, invest_account_id])
             conn.commit()
             return True
         except Exception as e:
@@ -889,7 +889,7 @@ class BudgetApp:
         if type.lower() == 'income':
             return self.add_income(date, amount, account_id, payee, sub_category, notes, invest_account_id)
         elif type.lower() == 'expense':
-            return self.add_expense(date, amount, account_id, sub_category, payee, notes)
+            return self.add_expense(date, amount, account_id, sub_category, payee, notes, invest_account_id)
         elif type.lower() == 'transfer':
             return self.add_transfer(date, account_id, to_account_id, amount, to_amount, qty, notes)
         else:

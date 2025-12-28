@@ -1107,9 +1107,16 @@ class BudgetTrackerWindow(QMainWindow):
             self.exchange_rate_label.setVisible(False)
 
         self.invest_account_layout.itemAt(0).widget().setVisible(
-            is_income and not is_starting_balance)
+            (is_income or not is_transfer) and not is_starting_balance)
         self.invest_account_combo.setVisible(
-            is_income and not is_starting_balance)
+            (is_income or not is_transfer) and not is_starting_balance)
+
+        if is_income:
+            self.invest_account_combo.setPlaceholderText(
+                'Optional - select if dividend')
+        else:
+            self.invest_account_combo.setPlaceholderText(
+                'Optional - select if broker fees')
 
         if not is_transfer and not is_starting_balance:
             trans_type = 'income' if is_income else 'expense'
@@ -1319,13 +1326,18 @@ class BudgetTrackerWindow(QMainWindow):
 
         else:
             sub_category = self.sub_category_combo.currentText()
+            invest_account_id = self.invest_account_combo.currentData()
+            if self.invest_account_combo.currentIndex() == -1:
+                invest_account_id = None
+            
             success = self.budget_app.add_expense(
                 date=date,
                 amount=amount,
                 account_id=account_id,
                 sub_category=sub_category,
                 payee=payee,
-                notes=notes
+                notes=notes,
+                invest_account_id=invest_account_id
             )
 
         if success:
