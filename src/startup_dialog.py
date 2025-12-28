@@ -1,11 +1,9 @@
 
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton, 
-                             QFileDialog, QHBoxLayout, QRadioButton, QButtonGroup, 
-                             QLineEdit, QCheckBox)
-from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton,
+                             QFileDialog, QHBoxLayout, QRadioButton, QLineEdit)
 from PyQt6.QtCore import Qt
 import os
-from utils import resource_path
+
 
 class StartupDialog(QDialog):
     def __init__(self):
@@ -21,7 +19,8 @@ class StartupDialog(QDialog):
         self.setLayout(layout)
 
         header = QLabel("Welcome! Let's get started.")
-        header.setStyleSheet("font-size: 18px; font-weight: bold; margin-bottom: 10px;")
+        header.setStyleSheet(
+            "font-size: 18px; font-weight: bold; margin-bottom: 10px;")
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(header)
 
@@ -44,11 +43,11 @@ class StartupDialog(QDialog):
         self.path_input.setPlaceholderText("Select location...")
         self.browse_btn = QPushButton("Browse...")
         self.browse_btn.clicked.connect(self.browse_path)
-        
+
         path_layout.addWidget(self.path_input)
         path_layout.addWidget(self.browse_btn)
         layout.addLayout(path_layout)
-        
+
         self.radio_new.toggled.connect(self.update_ui)
         self.radio_sample.toggled.connect(self.update_ui)
         self.radio_existing.toggled.connect(self.update_ui)
@@ -57,13 +56,13 @@ class StartupDialog(QDialog):
         self.ok_btn = QPushButton("Start")
         self.ok_btn.clicked.connect(self.validate_and_accept)
         self.ok_btn.setStyleSheet("""
-            background-color: #4CAF50; 
-            color: white; 
-            font-weight: bold; 
+            background-color: #4CAF50;
+            color: white;
+            font-weight: bold;
             padding: 8px 16px;
             border-radius: 4px;
         """)
-        
+
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
 
@@ -71,21 +70,24 @@ class StartupDialog(QDialog):
         btn_layout.addWidget(cancel_btn)
         btn_layout.addWidget(self.ok_btn)
         layout.addLayout(btn_layout)
-        
+
         self.update_ui()
 
     def update_ui(self):
         if self.radio_new.isChecked():
             self.mode = 'new'
-            self.path_input.setPlaceholderText("Select folder to create 'budget.duckdb'...")
+            self.path_input.setPlaceholderText(
+                "Select folder to create 'budget.duckdb'...")
             self.browse_btn.setText("Select Folder...")
         elif self.radio_sample.isChecked():
             self.mode = 'sample'
-            self.path_input.setPlaceholderText("Select folder to create 'budget_sample.duckdb'...")
+            self.path_input.setPlaceholderText(
+                "Select folder to create 'budget_sample.duckdb'...")
             self.browse_btn.setText("Select Folder...")
         else:
             self.mode = 'existing'
-            self.path_input.setPlaceholderText("Select existing .duckdb file...")
+            self.path_input.setPlaceholderText(
+                "Select existing .duckdb file...")
             self.browse_btn.setText("Select File...")
 
     def browse_path(self):
@@ -96,24 +98,24 @@ class StartupDialog(QDialog):
         elif self.radio_sample.isChecked():
             folder = QFileDialog.getExistingDirectory(self, "Select Folder")
             if folder:
-                self.path_input.setText(os.path.join(folder, "budget_sample.duckdb"))
+                self.path_input.setText(os.path.join(
+                    folder, "budget_sample.duckdb"))
         else:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Select Database", "", "DuckDB Files (*.duckdb);;All Files (*)")
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, "Select Database", "", "DuckDB Files (*.duckdb);;All Files (*)")
             if file_path:
                 self.path_input.setText(file_path)
 
     def validate_and_accept(self):
         path = self.path_input.text().strip()
         if not path:
-            # If empty and "Start Fresh", propose default in current dir?
-            # Or enforce selection.
-            # Let's propose default if empty on "New"
-             if self.radio_new.isChecked():
-                 path = os.path.abspath("budget.duckdb")
-             elif self.radio_sample.isChecked():
-                 path = os.path.abspath("budget_sample.duckdb")
-             else:
-                 return # Must select for existing
-        
+
+            if self.radio_new.isChecked():
+                path = os.path.abspath("budget.duckdb")
+            elif self.radio_sample.isChecked():
+                path = os.path.abspath("budget_sample.duckdb")
+            else:
+                return
+
         self.result_path = path
         self.accept()

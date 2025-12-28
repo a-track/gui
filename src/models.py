@@ -2,16 +2,16 @@ import sys
 import os
 import duckdb
 from datetime import datetime, date, timedelta
-import os # moved/kept
+
 
 
 class Transaction:
-    def __init__(self, trans_id: int, date: str, type: str, 
-                sub_category: str = None, amount: float = None, 
-                account_id: int = None, payee: str = None, 
-                notes: str = None, invest_account_id: int = None,
-                qty: float = None, to_account_id: int = None, 
-                to_amount: float = None, confirmed: bool = False):
+    def __init__(self, trans_id: int, date: str, type: str,
+                 sub_category: str = None, amount: float = None,
+                 account_id: int = None, payee: str = None,
+                 notes: str = None, invest_account_id: int = None,
+                 qty: float = None, to_account_id: int = None,
+                 to_amount: float = None, confirmed: bool = False):
         self.id = trans_id
         self.date = date
         self.type = type
@@ -55,13 +55,11 @@ class BudgetApp:
                 application_path = os.path.dirname(sys.executable)
             else:
                 application_path = os.path.dirname(os.path.abspath(__file__))
-            
+
             db_path = os.path.join(application_path, 'budget.duckdb')
-        
+
         self.db_path = db_path
-        
-        # Open a persistent connection to lock the file against deletion/external modification
-        # internal connections can still be made.
+
         try:
             self._anchor_conn = duckdb.connect(self.db_path)
         except Exception as e:
@@ -113,7 +111,7 @@ class BudgetApp:
                 """)
             except Exception as e:
                 print(f"Error creating categories table: {e}")
-                
+
             try:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS transactions (
@@ -131,7 +129,7 @@ class BudgetApp:
                         to_amount DECIMAL(10, 2),
                         confirmed BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        
+
                         FOREIGN KEY (account_id) REFERENCES accounts(id),
                         FOREIGN KEY (to_account_id) REFERENCES accounts(id),
                         FOREIGN KEY (invest_account_id) REFERENCES accounts(id),
@@ -139,9 +137,9 @@ class BudgetApp:
                     )
                 """)
             except Exception as e:
-                # Expected during migration if categories table is old schema
+
                 pass
-            
+
             try:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS budgets (
@@ -151,9 +149,9 @@ class BudgetApp:
                     )
                 """)
             except Exception as e:
-                # Expected during migration if categories table is old schema
+
                 pass
-                
+
             try:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS exchange_rates (
@@ -180,7 +178,7 @@ class BudgetApp:
                 """)
             except Exception as e:
                 print(f"Error creating investment_valuations table: {e}")
-            
+
             conn.close()
         except Exception as e:
             print(f"Database initialization error: {e}")
@@ -206,36 +204,24 @@ class BudgetApp:
         """
         conn = self._get_connection()
         try:
-            # Get max ID once
-            new_id_res = conn.execute("SELECT COALESCE(MAX(id), 0) FROM exchange_rates").fetchone()
+
+            new_id_res = conn.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM exchange_rates").fetchone()
             current_max_id = new_id_res[0] if new_id_res else 0
-            
-            # Prepare data with new IDs
-            # Note: This crude ID generation might race if multiple threads, but we are single GUI thread effectively.
-            
+
             for i, (date, currency, rate) in enumerate(rates_data):
-                # ID check logic is tricky for bulk since we don't know which will actually insert vs update.
-                # DuckDB ON CONFLICT doesn't consume ID if update happens? 
-                # Let's just pass ID. If it's an update, ID is ignored. If insert, it uses it.
-                # Wait, if we pass ID in INSERT, and it CONFLICTS on (date, currency), it UPDATES.
-                # Does the ID in the table change? No.
-                # So we just need to provide unique IDs for the *potential* new rows.
+
                 pass
-            
-            # Use executemany? Or just loop inside transaction?
-            # DuckDB python client might not support executemany with complex logic easily? 
-            # Simple loop is fine inside one connection commit.
-            
+
             for i, (date, currency, rate) in enumerate(rates_data):
-                # Increment ID for each attempt. If it turns out to be an update, this ID is "wasted" (skipped), 
-                # but that's fine for integer key.
-                current_max_id += 1 
+
+                current_max_id += 1
                 conn.execute("""
                     INSERT INTO exchange_rates (id, date, currency, rate)
                     VALUES (?, ?, ?, ?)
                     ON CONFLICT (date, currency) DO UPDATE SET rate = excluded.rate
                 """, (current_max_id, date, currency, rate))
-                
+
             conn.commit()
             return True
         except Exception as e:
@@ -243,7 +229,7 @@ class BudgetApp:
             return False
         finally:
             conn.close()
-            
+
     def delete_exchange_rate(self, rate_id: int):
         conn = self._get_connection()
         try:
@@ -261,12 +247,14 @@ class BudgetApp:
         Bulk delete exchange rates.
         rates_data: list of tuples (date, currency)
         """
-        if not rates_data: return True
-        
+        if not rates_data:
+            return True
+
         conn = self._get_connection()
         try:
             for date, currency in rates_data:
-                conn.execute("DELETE FROM exchange_rates WHERE date = ? AND currency = ?", (date, currency))
+                conn.execute(
+                    "DELETE FROM exchange_rates WHERE date = ? AND currency = ?", (date, currency))
             conn.commit()
             return True
         except Exception as e:
@@ -282,37 +270,34 @@ class BudgetApp:
         """
         if currency == 'CHF':
             return 1.0
-            
+
         if target_date is None:
             target_date = datetime.now().strftime('%Y-%m-%d')
-            
+
         conn = self._get_connection()
         try:
-            # 1. Try to find the valid rate on or before date
+
             result = conn.execute("""
-                SELECT rate FROM exchange_rates 
+                SELECT rate FROM exchange_rates
                 WHERE currency = ? AND date <= ?
                 ORDER BY date DESC
                 LIMIT 1
             """, (currency, target_date)).fetchone()
-            
+
             if result:
                 return float(result[0])
-            
-            # 2. Key requirement: "if it is the first date it should be always valid for all history"
-            # So if we didn't find anything <= target_date (target_date is OLDER than first record),
-            # we should fetch the earliest available rate.
+
             result = conn.execute("""
-                SELECT rate FROM exchange_rates 
+                SELECT rate FROM exchange_rates
                 WHERE currency = ?
                 ORDER BY date ASC
                 LIMIT 1
             """, (currency,)).fetchone()
-            
+
             if result:
                 return float(result[0])
-                
-            return 1.0 # Default fallback if no rate exists at all
+
+            return 1.0
         finally:
             conn.close()
 
@@ -325,44 +310,45 @@ class BudgetApp:
         if target_date is None:
             today = datetime.now().date()
             target_date_str = today.strftime('%Y-%m-%d')
-            # For "now", strict comparison to tomorrow is safe
+
             next_day_str = (today + timedelta(days=1)).strftime('%Y-%m-%d')
         else:
             target_date_str = target_date
-            # Convert to date and add 1 day
+
             try:
                 t_date = datetime.strptime(target_date, '%Y-%m-%d').date()
                 next_day = t_date + timedelta(days=1)
                 next_day_str = next_day.strftime('%Y-%m-%d')
             except ValueError:
-                # Fallback if weird format
+
                 next_day_str = target_date_str
 
         conn = self._get_connection()
         try:
-            # Get all unique currencies
-            currencies = conn.execute("SELECT DISTINCT currency FROM exchange_rates").fetchall()
+
+            currencies = conn.execute(
+                "SELECT DISTINCT currency FROM exchange_rates").fetchall()
             currencies = [c[0] for c in currencies]
-            
+
             rates_map = {'CHF': 1.0}
-            
+
             for curr in currencies:
-                if curr == 'CHF': continue
-                
-                # Logic: Finds the latest rate strictly before the start of the next day
+                if curr == 'CHF':
+                    continue
+
                 res = conn.execute("""
-                    SELECT rate FROM exchange_rates 
+                    SELECT rate FROM exchange_rates
                     WHERE currency = ? AND date < ?
                     ORDER BY date DESC
                     LIMIT 1
                 """, (curr, next_day_str)).fetchone()
-                
+
                 if res:
                     rates_map[curr] = float(res[0])
                 else:
-                    # Fallback to earliest if nothing found before date
+
                     res = conn.execute("""
-                        SELECT rate FROM exchange_rates 
+                        SELECT rate FROM exchange_rates
                         WHERE currency = ?
                         ORDER BY date ASC
                         LIMIT 1
@@ -371,7 +357,7 @@ class BudgetApp:
                         rates_map[curr] = float(res[0])
                     else:
                         rates_map[curr] = 1.0
-            
+
             return rates_map
         finally:
             conn.close()
@@ -384,8 +370,8 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             return conn.execute("""
-                SELECT strftime(date, '%Y-%m-%d') as date_str, currency, rate 
-                FROM exchange_rates 
+                SELECT strftime(date, '%Y-%m-%d') as date_str, currency, rate
+                FROM exchange_rates
                 ORDER BY date DESC, currency ASC
             """).fetchall()
         except Exception as e:
@@ -397,54 +383,54 @@ class BudgetApp:
     def update_database_schema(self):
         conn = self._get_connection()
         try:
-            # Emergency Recovery: Restore tables if migration crashed previously
-            # This prevents dropping the backup tables which contain the user's data
+
             try:
-                tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+                tables = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'").fetchall()
                 table_names = [t[0] for t in tables]
-                
-                # Recover Categories
+
                 if 'categories' not in table_names and 'categories_new' in table_names:
                     print("Recovering categories table...")
-                    conn.execute("ALTER TABLE categories_new RENAME TO categories")
-                    
-                # Recover Transactions
-                # Check transactions_new first as it holds the data during migration
+                    conn.execute(
+                        "ALTER TABLE categories_new RENAME TO categories")
+
                 if 'transactions' not in table_names and 'transactions_new' in table_names:
                     print("Recovering transactions table...")
-                    conn.execute("ALTER TABLE transactions_new RENAME TO transactions")
-                    
-                # Recover Budgets
+                    conn.execute(
+                        "ALTER TABLE transactions_new RENAME TO transactions")
+
                 if 'budgets' not in table_names and 'budgets_new_schema' in table_names:
                     print("Recovering budgets table...")
-                    conn.execute("ALTER TABLE budgets_new_schema RENAME TO budgets")
-                
-                # Check for 'budgets_new' if 'budgets_new_schema' not found (legacy artifact name possibility)
+                    conn.execute(
+                        "ALTER TABLE budgets_new_schema RENAME TO budgets")
+
                 if 'budgets' not in table_names and 'budgets_new' in table_names:
-                     print("Recovering budgets table (from budgets_new)...")
-                     conn.execute("ALTER TABLE budgets_new RENAME TO budgets")
-                     
+                    print("Recovering budgets table (from budgets_new)...")
+                    conn.execute("ALTER TABLE budgets_new RENAME TO budgets")
+
             except Exception as e:
                 print(f"Recovery check failed: {e}")
 
-            # Cleanup potential leftovers from failed migrations
             conn.execute("DROP TABLE IF EXISTS budgets_new_schema")
             conn.execute("DROP TABLE IF EXISTS transactions_new")
             conn.execute("DROP TABLE IF EXISTS categories_new")
-            
-            conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_in_balance BOOLEAN DEFAULT TRUE")
-            conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
-            conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS valuation_strategy VARCHAR DEFAULT NULL")
-            conn.execute("ALTER TABLE categories ADD COLUMN IF NOT EXISTS category_type VARCHAR DEFAULT 'Expense'")
-            
-            # Check if categories table needs migration to ID based PK
-            columns_result = conn.execute("PRAGMA table_info(categories)").fetchall()
+
+            conn.execute(
+                "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_in_balance BOOLEAN DEFAULT TRUE")
+            conn.execute(
+                "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
+            conn.execute(
+                "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS valuation_strategy VARCHAR DEFAULT NULL")
+            conn.execute(
+                "ALTER TABLE categories ADD COLUMN IF NOT EXISTS category_type VARCHAR DEFAULT 'Expense'")
+
+            columns_result = conn.execute(
+                "PRAGMA table_info(categories)").fetchall()
             has_id = any(col[1] == 'id' for col in columns_result)
-            
+
             if not has_id:
                 print("Migrating categories to use ID as Primary Key...")
-                
-                # 1. Create new categories table
+
                 conn.execute("""
                     CREATE TABLE categories_new (
                         id INTEGER PRIMARY KEY,
@@ -454,14 +440,12 @@ class BudgetApp:
                         UNIQUE(sub_category, category, category_type)
                     )
                 """)
-                
-                # 2. Populate new categories table (auto-increment id will be generated via row_number)
+
                 conn.execute("""
                     INSERT INTO categories_new (id, sub_category, category, category_type)
                     SELECT row_number() OVER (), sub_category, category, category_type FROM categories
                 """)
-                
-                # 3. Migrate Transactions
+
                 conn.execute("""
                     CREATE TABLE transactions_new (
                         id INTEGER PRIMARY KEY,
@@ -478,28 +462,26 @@ class BudgetApp:
                         to_amount DECIMAL(10, 2),
                         confirmed BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        
+
                         FOREIGN KEY (account_id) REFERENCES accounts(id),
                         FOREIGN KEY (to_account_id) REFERENCES accounts(id),
                         FOREIGN KEY (invest_account_id) REFERENCES accounts(id),
                         FOREIGN KEY (category_id) REFERENCES categories_new(id)
                     )
                 """)
-                
-                # Copy data mapping sub_category string to category_id
+
                 conn.execute("""
                     INSERT INTO transactions_new (
-                        id, date, type, amount, account_id, category_id, payee, notes, 
+                        id, date, type, amount, account_id, category_id, payee, notes,
                         invest_account_id, qty, to_account_id, to_amount, confirmed, created_at
                     )
-                    SELECT 
+                    SELECT
                         t.id, t.date, t.type, t.amount, t.account_id, c.id, t.payee, t.notes,
                         t.invest_account_id, t.qty, t.to_account_id, t.to_amount, t.confirmed, t.created_at
                     FROM transactions t
                     LEFT JOIN categories_new c ON t.sub_category = c.sub_category
                 """)
-                
-                # 4. Migrate Budgets
+
                 conn.execute("""
                     CREATE TABLE budgets_new_schema (
                         category_id INTEGER PRIMARY KEY,
@@ -507,42 +489,37 @@ class BudgetApp:
                         FOREIGN KEY (category_id) REFERENCES categories_new(id)
                     )
                 """)
-                
+
                 conn.execute("""
                     INSERT INTO budgets_new_schema (category_id, budget_amount)
                     SELECT c.id, b.budget_amount
                     FROM budgets b
                     JOIN categories_new c ON b.sub_category = c.sub_category
                 """)
-                
-                # 5. Drop old tables and rename new ones
+
                 print("Clearing data...")
                 conn.execute("DELETE FROM budgets")
                 conn.execute("DELETE FROM transactions")
-                # conn.execute("DELETE FROM categories") 
 
                 print("Dropping budgets...")
                 conn.execute("DROP TABLE IF EXISTS budgets CASCADE")
                 conn.commit()
-                
+
                 print("Dropping transactions...")
                 conn.execute("DROP TABLE IF EXISTS transactions CASCADE")
                 conn.commit()
-                
+
                 print("Dropping categories...")
                 try:
                     conn.execute("DROP TABLE IF EXISTS categories CASCADE")
                     conn.commit()
                 except Exception as e:
                     print(f"WARNING: Could not drop categories table: {e}")
-                
-                # Cleanup artifacts
-                conn.execute("DROP TABLE IF EXISTS budgets_new") 
-                
-                # Recreate final tables (avoiding RENAME dependency issues)
+
+                conn.execute("DROP TABLE IF EXISTS budgets_new")
+
                 print("Recreating final tables...")
-                
-                # 1. Categories
+
                 conn.execute("""
                     CREATE TABLE categories (
                         id INTEGER PRIMARY KEY,
@@ -552,9 +529,9 @@ class BudgetApp:
                         UNIQUE(sub_category, category, category_type)
                     )
                 """)
-                conn.execute("INSERT INTO categories SELECT * FROM categories_new")
-                
-                # 2. Budgets
+                conn.execute(
+                    "INSERT INTO categories SELECT * FROM categories_new")
+
                 conn.execute("""
                     CREATE TABLE budgets (
                         category_id INTEGER PRIMARY KEY,
@@ -562,9 +539,9 @@ class BudgetApp:
                         FOREIGN KEY (category_id) REFERENCES categories(id)
                     )
                 """)
-                conn.execute("INSERT INTO budgets SELECT * FROM budgets_new_schema")
-                
-                # 3. Transactions
+                conn.execute(
+                    "INSERT INTO budgets SELECT * FROM budgets_new_schema")
+
                 conn.execute("""
                     CREATE TABLE transactions (
                         id INTEGER PRIMARY KEY,
@@ -581,16 +558,16 @@ class BudgetApp:
                         to_amount DECIMAL(10, 2),
                         confirmed BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        
+
                         FOREIGN KEY (account_id) REFERENCES accounts(id),
                         FOREIGN KEY (to_account_id) REFERENCES accounts(id),
                         FOREIGN KEY (invest_account_id) REFERENCES accounts(id),
                         FOREIGN KEY (category_id) REFERENCES categories(id)
                     )
                 """)
-                conn.execute("INSERT INTO transactions SELECT * FROM transactions_new")
-                
-                # 4. Exchange Rates (New)
+                conn.execute(
+                    "INSERT INTO transactions SELECT * FROM transactions_new")
+
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS exchange_rates (
                         id INTEGER PRIMARY KEY,
@@ -600,24 +577,21 @@ class BudgetApp:
                         UNIQUE(date, currency)
                     )
                 """)
-                
-                # Cleanup temp tables
-                # Must drop dependent tables first!
+
                 conn.execute("DROP TABLE IF EXISTS budgets_new_schema")
                 conn.execute("DROP TABLE IF EXISTS transactions_new")
                 conn.execute("DROP TABLE IF EXISTS categories_new")
-                
+
                 print("Categories migration completed!")
 
-            # Ensure budgets table is correct in all cases
             result = conn.execute("""
-                SELECT name FROM sqlite_master 
+                SELECT name FROM sqlite_master
                 WHERE type='table' AND name='budgets'
             """).fetchone()
-             
+
             if not result:
                 pass
-            
+
             conn.commit()
         except Exception as e:
             print(f"Error updating database schema: {e}")
@@ -629,7 +603,8 @@ class BudgetApp:
     def _get_next_id(self, table_name: str) -> int:
         conn = self._get_connection()
         try:
-            result = conn.execute(f"SELECT MAX(id) FROM {table_name}").fetchone()
+            result = conn.execute(
+                f"SELECT MAX(id) FROM {table_name}").fetchone()
             return 1 if result[0] is None else result[0] + 1
         finally:
             conn.close()
@@ -637,34 +612,23 @@ class BudgetApp:
     def get_all_accounts(self):
         conn = self._get_connection()
         try:
-            # Note: is_investment might be missing in older schemas if not migrated properly, 
-            # but update_database_schema doesn't add it explicitly? 
-            # Wait, init_database has it. Let's assume it's there or added by alter table if missing logic was better.
-            # Actually, I should add the ALTER for is_investment too to be safe in update_database_schema, 
-            # but let's query safely.
-            
-            # Let's verify columns first or just use "SELECT *" roughly or explicit cols
-            # explicit is better.
-            
-            # Check if columns exist to avoid error on old DBs before migration runs fully?
-            # update_database_schema runs on init. So we are safe.
-            
-            # Check if columns exist in runtime to be 100% sure if migration just added them?
-            # Let's assume update_database_schema did its job.
-            
+
             result = conn.execute("""
                 SELECT id, account, type, company, currency, show_in_balance, is_active, is_investment, valuation_strategy
-                FROM accounts 
+                FROM accounts
                 ORDER BY id
             """).fetchall()
-            
+
             accounts = []
             for row in result:
-                # row structure: 0:id, 1:name, 2:type, 3:company, 4:curr, 5:show, 6:active, 7:invest, 8:strat
+
                 account = Account(row[0], row[1], row[2], row[3], row[4])
-                account.show_in_balance = bool(row[5]) if row[5] is not None else True
-                account.is_active = bool(row[6]) if row[6] is not None else True
-                account.is_investment = bool(row[7]) if len(row) > 7 and row[7] is not None else False
+                account.show_in_balance = bool(
+                    row[5]) if row[5] is not None else True
+                account.is_active = bool(
+                    row[6]) if row[6] is not None else True
+                account.is_investment = bool(row[7]) if len(
+                    row) > 7 and row[7] is not None else False
                 account.valuation_strategy = row[8] if len(row) > 8 else None
                 accounts.append(account)
             return accounts
@@ -678,15 +642,15 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             existing_account = conn.execute("""
-                SELECT id FROM accounts 
+                SELECT id FROM accounts
                 WHERE account = ? AND currency = ? AND id != 0
             """, [account_name, currency]).fetchone()
-            
+
             if existing_account:
                 return False, f"Account '{account_name}' with currency '{currency}' already exists"
-            
+
             next_id = self._get_next_id('accounts')
-            
+
             conn.execute("""
                 INSERT INTO accounts (id, account, type, company, currency, show_in_balance, is_active, is_investment, valuation_strategy)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -699,12 +663,12 @@ class BudgetApp:
         finally:
             conn.close()
 
-    def update_account(self, account_id: int, account: str, type: str, 
-                      company: str = None, currency: str = 'CHF', is_investment: bool = False, valuation_strategy: str = None):
+    def update_account(self, account_id: int, account: str, type: str,
+                       company: str = None, currency: str = 'CHF', is_investment: bool = False, valuation_strategy: str = None):
         conn = self._get_connection()
         try:
             conn.execute("""
-                UPDATE accounts 
+                UPDATE accounts
                 SET account = ?, type = ?, company = ?, currency = ?, is_investment = ?, valuation_strategy = ?
                 WHERE id = ?
             """, [account, type, company, currency, is_investment, valuation_strategy, account_id])
@@ -720,8 +684,8 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             conn.execute("""
-                UPDATE accounts 
-                SET show_in_balance = ? 
+                UPDATE accounts
+                SET show_in_balance = ?
                 WHERE id = ?
             """, [show_in_balance, account_id])
             conn.commit()
@@ -736,8 +700,8 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             conn.execute("""
-                UPDATE accounts 
-                SET is_active = ? 
+                UPDATE accounts
+                SET is_active = ?
                 WHERE id = ?
             """, [is_active, account_id])
             conn.commit()
@@ -752,13 +716,13 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT COUNT(*) FROM transactions 
+                SELECT COUNT(*) FROM transactions
                 WHERE account_id = ? OR to_account_id = ? OR invest_account_id = ?
             """, [account_id, account_id, account_id]).fetchone()
-            
+
             if result[0] > 0:
                 return False, "Account is used in transactions and cannot be deleted"
-            
+
             conn.execute("DELETE FROM accounts WHERE id = ?", [account_id])
             conn.commit()
             return True, "Account deleted successfully"
@@ -773,7 +737,7 @@ class BudgetApp:
         try:
             result = conn.execute("""
                 SELECT id, sub_category, category, category_type
-                FROM categories 
+                FROM categories
                 ORDER BY category, sub_category
             """).fetchall()
             return [Category(*row) for row in result]
@@ -783,25 +747,18 @@ class BudgetApp:
         finally:
             conn.close()
 
-
-
     def delete_category(self, cat_id: int):
         conn = self._get_connection()
         try:
             result = conn.execute("""
                 SELECT COUNT(*) FROM transactions WHERE category_id = ?
             """, [cat_id]).fetchone()
-            
+
             if result[0] > 0:
-                 return False, "Category is used in transactions and cannot be deleted"
-                 
-            # Also check budgets? 
-            # Cascading delete might handle budgets if FK set to CASCADE? 
-            # Budgets: FOREIGN KEY (category_id) REFERENCES categories(id)
-            # Schema doesn't specify CASCADE. So we should delete from budgets first.
-            
+                return False, "Category is used in transactions and cannot be deleted"
+
             conn.execute("DELETE FROM budgets WHERE category_id = ?", [cat_id])
-            
+
             conn.execute("DELETE FROM categories WHERE id = ?", [cat_id])
             conn.commit()
             return True, "Category deleted successfully"
@@ -815,10 +772,11 @@ class BudgetApp:
         cat_id = self._get_next_id('categories')
         conn = self._get_connection()
         try:
-            # Check existence
-            exists = conn.execute("SELECT 1 FROM categories WHERE sub_category = ?", [sub_category]).fetchone()
+
+            exists = conn.execute("SELECT 1 FROM categories WHERE sub_category = ?", [
+                                  sub_category]).fetchone()
             if exists:
-                return False # Already exists (unique constraint)
+                return False
 
             conn.execute("""
                 INSERT INTO categories (id, sub_category, category, category_type)
@@ -835,42 +793,40 @@ class BudgetApp:
     def update_category(self, cat_id: int, new_category: str = None, new_type: str = None, new_sub_category: str = None):
         conn = self._get_connection()
         try:
-            # 1. Fetch existing
-            row = conn.execute("SELECT sub_category, category, category_type FROM categories WHERE id = ?", [cat_id]).fetchone()
+
+            row = conn.execute("SELECT sub_category, category, category_type FROM categories WHERE id = ?", [
+                               cat_id]).fetchone()
             if not row:
                 return False
             current_sub, current_cat, current_type = row
-            
-            # 2. Determine new values
+
             final_sub = new_sub_category if new_sub_category is not None else current_sub
             final_cat = new_category if new_category is not None else current_cat
             final_type = new_type if new_type is not None else current_type
-            
-            # Check if no changes
+
             if final_sub == current_sub and final_cat == current_cat and final_type == current_type:
                 return True
 
-            # 3. Create new category
-            # Get next ID manually 
             res = conn.execute("SELECT MAX(id) FROM categories").fetchone()
             next_id = (res[0] if res and res[0] is not None else 0) + 1
-            
-            conn.execute("INSERT INTO categories (id, sub_category, category, category_type) VALUES (?, ?, ?, ?)", 
+
+            conn.execute("INSERT INTO categories (id, sub_category, category, category_type) VALUES (?, ?, ?, ?)",
                          (next_id, final_sub, final_cat, final_type))
-                         
-            # 4. Repoint Transactions
-            conn.execute("UPDATE transactions SET category_id = ? WHERE category_id = ?", (next_id, cat_id))
-            
-            # 5. Repoint Budgets
-            budget_row = conn.execute("SELECT budget_amount FROM budgets WHERE category_id = ?", [cat_id]).fetchone()
+
+            conn.execute(
+                "UPDATE transactions SET category_id = ? WHERE category_id = ?", (next_id, cat_id))
+
+            budget_row = conn.execute(
+                "SELECT budget_amount FROM budgets WHERE category_id = ?", [cat_id]).fetchone()
             if budget_row:
                 amt = budget_row[0]
-                conn.execute("INSERT INTO budgets (category_id, budget_amount) VALUES (?, ?)", (next_id, amt))
-                conn.execute("DELETE FROM budgets WHERE category_id = ?", [cat_id])
-                
-            # 6. Delete Old Category
+                conn.execute(
+                    "INSERT INTO budgets (category_id, budget_amount) VALUES (?, ?)", (next_id, amt))
+                conn.execute(
+                    "DELETE FROM budgets WHERE category_id = ?", [cat_id])
+
             conn.execute("DELETE FROM categories WHERE id = ?", [cat_id])
-            
+
             conn.commit()
             return True
         except Exception as e:
@@ -879,19 +835,19 @@ class BudgetApp:
         finally:
             conn.close()
 
-
-    def add_income(self, date: str, amount: float, account_id: int, 
-                   payee: str = "", sub_category: str = "", 
+    def add_income(self, date: str, amount: float, account_id: int,
+                   payee: str = "", sub_category: str = "",
                    notes: str = "", invest_account_id: int = None):
         trans_id = self._get_next_id('transactions')
         conn = self._get_connection()
         try:
-            # Lookup category ID
-            cat_row = conn.execute("SELECT id FROM categories WHERE sub_category = ?", [sub_category]).fetchone()
+
+            cat_row = conn.execute("SELECT id FROM categories WHERE sub_category = ?", [
+                                   sub_category]).fetchone()
             category_id = cat_row[0] if cat_row else None
 
             conn.execute("""
-                INSERT INTO transactions 
+                INSERT INTO transactions
                 (id, date, type, amount, account_id, payee, category_id, notes, invest_account_id)
                 VALUES (?, ?, 'income', ?, ?, ?, ?, ?, ?)
             """, [trans_id, date, amount, account_id, payee, category_id, notes, invest_account_id])
@@ -908,12 +864,13 @@ class BudgetApp:
         trans_id = self._get_next_id('transactions')
         conn = self._get_connection()
         try:
-            # Lookup category ID
-            cat_row = conn.execute("SELECT id FROM categories WHERE sub_category = ?", [sub_category]).fetchone()
+
+            cat_row = conn.execute("SELECT id FROM categories WHERE sub_category = ?", [
+                                   sub_category]).fetchone()
             category_id = cat_row[0] if cat_row else None
 
             conn.execute("""
-                INSERT INTO transactions 
+                INSERT INTO transactions
                 (id, date, type, amount, account_id, category_id, payee, notes)
                 VALUES (?, ?, 'expense', ?, ?, ?, ?, ?)
             """, [trans_id, date, amount, account_id, category_id, payee, notes])
@@ -926,9 +883,9 @@ class BudgetApp:
             conn.close()
 
     def add_transaction(self, date: str, type: str, sub_category: str, amount: float,
-                       account_id: int, payee: str = "", notes: str = "",
-                       invest_account_id: int = None, qty: float = None,
-                       to_account_id: int = None, to_amount: float = None):
+                        account_id: int, payee: str = "", notes: str = "",
+                        invest_account_id: int = None, qty: float = None,
+                        to_account_id: int = None, to_amount: float = None):
         if type.lower() == 'income':
             return self.add_income(date, amount, account_id, payee, sub_category, notes, invest_account_id)
         elif type.lower() == 'expense':
@@ -939,19 +896,19 @@ class BudgetApp:
             return False
 
     def add_transfer(self, date: str, from_account_id: int, to_account_id: int,
-                    from_amount: float, to_amount: float = None,
-                    qty: float = None, notes: str = ""):
+                     from_amount: float, to_amount: float = None,
+                     qty: float = None, notes: str = ""):
         if to_amount is None:
             to_amount = from_amount
-            
+
         trans_id = self._get_next_id('transactions')
         conn = self._get_connection()
         try:
             if from_account_id == 0 or to_account_id == 0:
                 self.get_or_create_starting_balance_account()
-                
+
             conn.execute("""
-                INSERT INTO transactions 
+                INSERT INTO transactions
                 (id, date, type, account_id, to_account_id, amount, to_amount, qty, notes)
                 VALUES (?, ?, 'transfer', ?, ?, ?, ?, ?, ?)
             """, [trans_id, date, from_account_id, to_account_id, from_amount, to_amount, qty, notes])
@@ -963,7 +920,6 @@ class BudgetApp:
         finally:
             conn.close()
 
- 
     def get_or_create_starting_balance_account(self):
         conn = self._get_connection()
         try:
@@ -971,7 +927,7 @@ class BudgetApp:
                 SELECT id, account, type, company, currency, show_in_balance
                 FROM accounts WHERE id = 0
             """).fetchone()
-            
+
             if result:
                 return Account(*result)
             else:
@@ -991,14 +947,14 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT t.id, t.date, t.type, c.sub_category, t.amount, t.account_id, 
-                    t.payee, t.notes, t.invest_account_id, t.qty, t.to_account_id, 
+                SELECT t.id, t.date, t.type, c.sub_category, t.amount, t.account_id,
+                    t.payee, t.notes, t.invest_account_id, t.qty, t.to_account_id,
                     t.to_amount, t.confirmed
                 FROM transactions t
                 LEFT JOIN categories c ON t.category_id = c.id
                 ORDER BY t.date DESC, t.id DESC
             """).fetchall()
-            
+
             transactions = []
             for row in result:
                 trans = Transaction(
@@ -1009,7 +965,7 @@ class BudgetApp:
                     confirmed=row[12]
                 )
                 transactions.append(trans)
-            
+
             return transactions
         except Exception as e:
             print(f"Error getting transactions: {e}")
@@ -1024,13 +980,13 @@ class BudgetApp:
         try:
             set_clause = []
             values = []
-            
+
             for key, value in kwargs.items():
                 set_clause.append(f"{key} = ?")
                 values.append(value)
-            
+
             values.append(trans_id)
-            
+
             query = f"UPDATE transactions SET {', '.join(set_clause)} WHERE id = ?"
             conn.execute(query, values)
             conn.commit()
@@ -1053,7 +1009,7 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             conn.execute("""
-                UPDATE transactions 
+                UPDATE transactions
                 SET confirmed = NOT confirmed
                 WHERE id = ?
             """, [trans_id])
@@ -1066,8 +1022,7 @@ class BudgetApp:
         try:
             balances = {}
             accounts = self.get_all_accounts()
-            
-            # Initialize with 0
+
             for account in accounts:
                 balances[account.id] = {
                     'account_name': account.account,
@@ -1076,97 +1031,63 @@ class BudgetApp:
                     'count': 0,
                     'is_investment': getattr(account, 'is_investment', False)
                 }
-            
-            # Aggregation via SQL is much faster than iterating in Python
-            # 1. Income (add to account_id)
+
             incomes = conn.execute("""
-                SELECT account_id, SUM(amount) 
-                FROM transactions 
-                WHERE type = 'income' AND account_id IS NOT NULL 
+                SELECT account_id, SUM(amount)
+                FROM transactions
+                WHERE type = 'income' AND account_id IS NOT NULL
                 GROUP BY account_id
             """).fetchall()
-            
+
             for acc_id, amount in incomes:
                 if acc_id in balances:
                     balances[acc_id]['balance'] += float(amount)
 
-            # 2. Expenses (subtract from account_id)
             expenses = conn.execute("""
-                SELECT account_id, SUM(amount) 
-                FROM transactions 
-                WHERE type = 'expense' AND account_id IS NOT NULL 
+                SELECT account_id, SUM(amount)
+                FROM transactions
+                WHERE type = 'expense' AND account_id IS NOT NULL
                 GROUP BY account_id
             """).fetchall()
-            
+
             for acc_id, amount in expenses:
                 if acc_id in balances:
                     balances[acc_id]['balance'] -= float(amount)
-            
-            # 3. Transfers Out (subtract from account_id)
+
             transfers_out = conn.execute("""
-                SELECT account_id, SUM(amount) 
-                FROM transactions 
-                WHERE type = 'transfer' AND account_id IS NOT NULL 
+                SELECT account_id, SUM(amount)
+                FROM transactions
+                WHERE type = 'transfer' AND account_id IS NOT NULL
                 GROUP BY account_id
             """).fetchall()
-            
+
             for acc_id, amount in transfers_out:
                 if acc_id in balances:
                     balances[acc_id]['balance'] -= float(amount)
-            
-            # 4. Transfers In (add to to_account_id)
+
             transfers_in = conn.execute("""
-                SELECT to_account_id, SUM(to_amount) 
-                FROM transactions 
-                WHERE type = 'transfer' AND to_account_id IS NOT NULL 
+                SELECT to_account_id, SUM(to_amount)
+                FROM transactions
+                WHERE type = 'transfer' AND to_account_id IS NOT NULL
                 GROUP BY to_account_id
             """).fetchall()
-            
+
             for acc_id, amount in transfers_in:
                 if acc_id in balances:
                     balances[acc_id]['balance'] += float(amount)
-            
-            # 5. Count transactions and Quantity (account_id)
-            # Incoming transfers (to_account_id) ADD to qty? No, usually qty is only on the asset account side.
-            # But if I transfer FROM asset TO asset?
-            # Let's assume:
-            # - Expense/Income: qty is usually None or irrelevant for balance (unless stock dividend?)
-            # - Transfer:
-            #   - Source: balance decreases. Qty? If it's a sell/transfer out.
-            #   - Dest: balance increases. Qty? If it's a buy/transfer in.
-            
-            # Simple Logic:
-            # Iterate all transactions once (slower but safer) OR add more aggregations.
-            # Let's add aggregations for qty.
-            
-            # 5. Count transactions and Quantity (account_id)
-            # Incoming transfers (to_account_id) ADD to qty? No, usually qty is only on the asset account side.
-            # But if I transfer FROM asset TO asset?
-            # Let's assume:
-            # - Expense/Income: qty is usually None or irrelevant for balance (unless stock dividend?)
-            # - Transfer:
-            #   - Source: balance decreases. Qty? If it's a sell/transfer out.
-            #   - Dest: balance increases. Qty? If it's a buy/transfer in.
-            
-            # Expanded Logic for Qty:
-            # 1. Transfer In (to_account_id): Add Qty
-            # 2. Income (account_id): Add Qty (e.g. Stock Grant/Dividend)
-            # 3. Transfer Out (account_id): Subtract Qty
-            # 4. Expense (account_id): Subtract Qty (e.g. Sell/Remove)
 
-            # Qty In (Transfers)
             qty_transfer_in = conn.execute("""
                 SELECT to_account_id, SUM(qty)
                 FROM transactions
                 WHERE type = 'transfer' AND to_account_id IS NOT NULL AND qty IS NOT NULL
                 GROUP BY to_account_id
             """).fetchall()
-            
+
             for acc_id, q in qty_transfer_in:
                 if acc_id in balances:
-                     balances[acc_id]['qty'] = balances[acc_id].get('qty', 0.0) + float(q)
+                    balances[acc_id]['qty'] = balances[acc_id].get(
+                        'qty', 0.0) + float(q)
 
-            # Qty In (Income)
             qty_income = conn.execute("""
                 SELECT account_id, SUM(qty)
                 FROM transactions
@@ -1175,11 +1096,9 @@ class BudgetApp:
             """).fetchall()
             for acc_id, q in qty_income:
                 if acc_id in balances:
-                    balances[acc_id]['qty'] = balances[acc_id].get('qty', 0.0) + float(q)
+                    balances[acc_id]['qty'] = balances[acc_id].get(
+                        'qty', 0.0) + float(q)
 
-            # Qty Out (Transfers)
-            # Only subtract if it's an investment account (e.g. Selling Stock).
-            # If it's a Bank Account (Buying Stock), we don't subtract stock quantity from it.
             qty_transfer_out = conn.execute("""
                 SELECT account_id, SUM(qty)
                 FROM transactions
@@ -1188,9 +1107,9 @@ class BudgetApp:
             """).fetchall()
             for acc_id, q in qty_transfer_out:
                 if acc_id in balances and balances[acc_id]['is_investment']:
-                     balances[acc_id]['qty'] = balances[acc_id].get('qty', 0.0) - float(q)
+                    balances[acc_id]['qty'] = balances[acc_id].get(
+                        'qty', 0.0) - float(q)
 
-            # Qty Out (Expense)
             qty_expense = conn.execute("""
                 SELECT account_id, SUM(qty)
                 FROM transactions
@@ -1199,17 +1118,21 @@ class BudgetApp:
             """).fetchall()
             for acc_id, q in qty_expense:
                 if acc_id in balances and balances[acc_id]['is_investment']:
-                     balances[acc_id]['qty'] = balances[acc_id].get('qty', 0.0) - float(q)
+                    balances[acc_id]['qty'] = balances[acc_id].get(
+                        'qty', 0.0) - float(q)
 
-            # Counts
-            counts_1 = conn.execute("SELECT account_id, COUNT(*) FROM transactions WHERE account_id IS NOT NULL GROUP BY account_id").fetchall()
+            counts_1 = conn.execute(
+                "SELECT account_id, COUNT(*) FROM transactions WHERE account_id IS NOT NULL GROUP BY account_id").fetchall()
             for acc_id, count in counts_1:
-                 if acc_id in balances: balances[acc_id]['count'] += count
-            
-            counts_2 = conn.execute("SELECT to_account_id, COUNT(*) FROM transactions WHERE to_account_id IS NOT NULL GROUP BY to_account_id").fetchall()
+                if acc_id in balances:
+                    balances[acc_id]['count'] += count
+
+            counts_2 = conn.execute(
+                "SELECT to_account_id, COUNT(*) FROM transactions WHERE to_account_id IS NOT NULL GROUP BY to_account_id").fetchall()
             for acc_id, count in counts_2:
-                 if acc_id in balances: balances[acc_id]['count'] += count
-            
+                if acc_id in balances:
+                    balances[acc_id]['count'] += count
+
             return balances
         finally:
             conn.close()
@@ -1218,27 +1141,27 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             if month is None or month == 0:
-                # Get all for the year
+
                 start_date = f"{year}-01-01"
                 end_date = f"{year+1}-01-01"
             else:
-                # Calculate start and end date for better index usage
+
                 start_date = f"{year}-{month:02d}-01"
                 if month == 12:
                     end_date = f"{year+1}-01-01"
                 else:
                     end_date = f"{year}-{month+1:02d}-01"
-            
+
             result = conn.execute("""
-                SELECT t.id, t.date, t.type, c.sub_category, t.amount, t.account_id, 
-                    t.payee, t.notes, t.invest_account_id, t.qty, t.to_account_id, 
+                SELECT t.id, t.date, t.type, c.sub_category, t.amount, t.account_id,
+                    t.payee, t.notes, t.invest_account_id, t.qty, t.to_account_id,
                     t.to_amount, t.confirmed
                 FROM transactions t
                 LEFT JOIN categories c ON t.category_id = c.id
                 WHERE t.date >= ? AND t.date < ?
                 ORDER BY t.date DESC, t.id DESC
             """, [start_date, end_date]).fetchall()
-            
+
             transactions = []
             for row in result:
                 trans = Transaction(
@@ -1249,7 +1172,7 @@ class BudgetApp:
                     confirmed=row[12]
                 )
                 transactions.append(trans)
-            
+
             return transactions
         except Exception as e:
             print(f"Error getting transactions by month: {e}")
@@ -1272,14 +1195,17 @@ class BudgetApp:
         try:
             result = conn.execute("""
                 SELECT id, account, type, company, currency, show_in_balance, is_active
-                FROM accounts 
+                FROM accounts
                 WHERE account = ? AND currency = ?
             """, [account_name, currency]).fetchone()
-            
+
             if result:
-                account = Account(result[0], result[1], result[2], result[3], result[4])
-                account.show_in_balance = bool(result[5]) if result[5] is not None else True
-                account.is_active = bool(result[6]) if len(result) > 6 and result[6] is not None else True
+                account = Account(result[0], result[1],
+                                  result[2], result[3], result[4])
+                account.show_in_balance = bool(
+                    result[5]) if result[5] is not None else True
+                account.is_active = bool(result[6]) if len(
+                    result) > 6 and result[6] is not None else True
                 return account
             return None
         finally:
@@ -1290,15 +1216,19 @@ class BudgetApp:
         try:
             result = conn.execute("""
                 SELECT id, account, type, company, currency, show_in_balance, is_active, is_investment
-                FROM accounts 
+                FROM accounts
                 WHERE id = ?
             """, [account_id]).fetchone()
-            
+
             if result:
-                account = Account(result[0], result[1], result[2], result[3], result[4])
-                account.show_in_balance = bool(result[5]) if result[5] is not None else True
-                account.is_active = bool(result[6]) if result[6] is not None else True
-                account.is_investment = bool(result[7]) if len(result) > 7 and result[7] is not None else False
+                account = Account(result[0], result[1],
+                                  result[2], result[3], result[4])
+                account.show_in_balance = bool(
+                    result[5]) if result[5] is not None else True
+                account.is_active = bool(
+                    result[6]) if result[6] is not None else True
+                account.is_investment = bool(result[7]) if len(
+                    result) > 7 and result[7] is not None else False
                 return account
             return None
         except Exception as e:
@@ -1311,32 +1241,26 @@ class BudgetApp:
         """Helper to get account ID from 'Name Currency' string format"""
         conn = self._get_connection()
         try:
-            # First try exact match
-            # The format in the table is "Name Currency" (e.g. "Main CHF")
-            # But account name could contain spaces.
-            # We know currency is usually 3 chars at the end? Not essentially.
-            # Let's try to match against all accounts
+
             accounts = self.get_all_accounts()
             for account in accounts:
                 if f"{account.account} {account.currency}" == account_str:
                     return account.id
-            
-            # Fallback: try to find by name only if currency matches default or is omitted
-            # This is ambiguous, so sticking to exact match first is safer.
+
             return None
         finally:
             conn.close()
-    
+
     def count_transactions_for_account(self, account_id):
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT COUNT(*) FROM transactions 
+                SELECT COUNT(*) FROM transactions
                 WHERE account_id = ? OR to_account_id = ?
             """, (account_id, account_id)).fetchone()
-            
+
             return result[0] if result else 0
-            
+
         except Exception as e:
             print(f"Error counting transactions for account {account_id}: {e}")
             return 0
@@ -1349,42 +1273,42 @@ class BudgetApp:
         try:
             account_counts = {}
             result = conn.execute("""
-                SELECT account_id, COUNT(*) FROM transactions 
-                WHERE account_id IS NOT NULL 
+                SELECT account_id, COUNT(*) FROM transactions
+                WHERE account_id IS NOT NULL
                 GROUP BY account_id
                 UNION ALL
-                SELECT to_account_id, COUNT(*) FROM transactions 
-                WHERE to_account_id IS NOT NULL 
+                SELECT to_account_id, COUNT(*) FROM transactions
+                WHERE to_account_id IS NOT NULL
                 GROUP BY to_account_id
             """).fetchall()
-            
+
             for account_id, count in result:
                 if account_id not in account_counts:
                     account_counts[account_id] = 0
                 account_counts[account_id] += count
-            
+
             category_counts = {}
             result = conn.execute("""
-                SELECT c.sub_category, COUNT(*) 
+                SELECT c.sub_category, COUNT(*)
                 FROM transactions t
                 JOIN categories c ON t.category_id = c.id
-                WHERE t.category_id IS NOT NULL 
+                WHERE t.category_id IS NOT NULL
                 GROUP BY c.sub_category
             """).fetchall()
-            
+
             for sub_category, count in result:
                 category_counts[sub_category] = count
-            
+
             payee_counts = {}
             result = conn.execute("""
-                SELECT payee, COUNT(*) FROM transactions 
-                WHERE payee IS NOT NULL AND payee != '' 
+                SELECT payee, COUNT(*) FROM transactions
+                WHERE payee IS NOT NULL AND payee != ''
                 GROUP BY payee
             """).fetchall()
-            
+
             for payee, count in result:
                 payee_counts[payee] = count
-                
+
             return {
                 'accounts': account_counts,
                 'categories': category_counts,
@@ -1400,8 +1324,7 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             start_date, end_date = self._get_date_range(year, month)
-            
-            # Group by Main Category
+
             result_main = conn.execute("""
                 SELECT c.category, COALESCE(SUM(t.amount), 0)
                 FROM transactions t
@@ -1410,10 +1333,9 @@ class BudgetApp:
                 GROUP BY c.category
                 ORDER BY SUM(t.amount) DESC
             """, [start_date, end_date]).fetchall()
-            
+
             main_breakdown = {row[0]: (row[1] or 0.0) for row in result_main}
 
-            # Group by Sub Category (for top lists or detailed view)
             result_sub = conn.execute("""
                 SELECT c.sub_category, c.category, COALESCE(SUM(t.amount), 0)
                 FROM transactions t
@@ -1422,9 +1344,10 @@ class BudgetApp:
                 GROUP BY c.sub_category, c.category
                 ORDER BY SUM(t.amount) DESC
             """, [start_date, end_date]).fetchall()
-            
-            sub_breakdown = [{'sub': row[0], 'main': row[1], 'amount': (row[2] or 0.0)} for row in result_sub]
-            
+
+            sub_breakdown = [{'sub': row[0], 'main': row[1],
+                              'amount': (row[2] or 0.0)} for row in result_sub]
+
             return {'main': main_breakdown, 'sub': sub_breakdown}
         except Exception as e:
             print(f"Error getting expenses breakdown: {e}")
@@ -1440,16 +1363,13 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             start_date, end_date = self._get_date_range(year, month)
-            
-            # Helper to calculate end date (start of next month) if month is strictly provided
+
             if month is not None:
                 if month == 12:
                     end_date = f"{year + 1}-01-01"
                 else:
                     end_date = f"{year}-{month + 1:02d}-01"
-            # If month is None, _get_date_range already returned full year range or appropriate range
-            
-            # Dynamic Filter
+
             filter_clause = ""
             params = [start_date, end_date]
             if category_ids:
@@ -1457,12 +1377,11 @@ class BudgetApp:
                 filter_clause = f"AND t.category_id IN ({placeholders})"
                 params.extend(category_ids)
 
-            # Query grouped by Category and Subcategory
             result = conn.execute(f"""
-                SELECT c.category, c.sub_category, 
+                SELECT c.category, c.sub_category,
                     COALESCE(SUM(
-                        CASE 
-                            WHEN a.currency = 'CHF' THEN t.amount 
+                        CASE
+                            WHEN a.currency = 'CHF' THEN t.amount
                             ELSE t.amount * COALESCE(
                                 (SELECT rate FROM exchange_rates er WHERE er.currency = a.currency AND er.date <= t.date ORDER BY er.date DESC LIMIT 1),
                                 (SELECT rate FROM exchange_rates er WHERE er.currency = a.currency ORDER BY er.date ASC LIMIT 1),
@@ -1477,24 +1396,25 @@ class BudgetApp:
                 GROUP BY c.category, c.sub_category
                 ORDER BY c.category, 3 DESC
             """, params).fetchall()
-            
-            # Structure: { 'Category': {'total': X, 'subs': {'Sub': Y}} }
+
             breakdown = {}
-            
+
             for cat, sub, amount in result:
-                if not amount: continue
-                
-                amount = float(amount) # Ensure float
-                
+                if not amount:
+                    continue
+
+                amount = float(amount)
+
                 if cat not in breakdown:
                     breakdown[cat] = {'total': 0.0, 'subs': {}}
-                
+
                 breakdown[cat]['total'] += amount
                 if sub:
-                    breakdown[cat]['subs'][sub] = breakdown[cat]['subs'].get(sub, 0.0) + amount
-            
+                    breakdown[cat]['subs'][sub] = breakdown[cat]['subs'].get(
+                        sub, 0.0) + amount
+
             return breakdown
-            
+
         except Exception as e:
             print(f"Error getting expenses breakdown: {e}")
             return {}
@@ -1508,47 +1428,29 @@ class BudgetApp:
         """
         conn = self._get_connection()
         try:
-            # Calculate start date (11 months prior to the 1st of the end_month)
-            # End date strictly is 1st of next month after end_month
-            
-            ref_date = date(end_year, end_month, 1)
-            
-            # We want 12 months including current. So start is 11 months back.
-            # Example: Dec 2024. Start: Jan 2024.
-            # If end_month is 12, start month is 1. (12-11 = 1)
-            # If end_month is 5 (May), start month is Jun (6) of prev year.
-            
-            # Logic: subtract 11 months from ref_date
-            # Simple month math:
-            # total_months = year * 12 + (month - 1)
-            # start_total_months = end_total_months - 11
-            
+
+            date(end_year, end_month, 1)
+
             months_list = []
-            for i in range(11, -1, -1): # 11 down to 0
-                 # Subtract i months from ref_date
-                 # Using dateutil would be easier but let's do manual to avoid dependency check issues if possible
-                 # Or use simple math since we iterate
-                 
-                 curr_m = end_month - i
-                 curr_y = end_year
-                 
-                 while curr_m <= 0:
-                     curr_m += 12
-                     curr_y -= 1
-                 
-                 months_list.append((curr_y, curr_m))
-            
-            # Determine query range
+            for i in range(11, -1, -1):
+
+                curr_m = end_month - i
+                curr_y = end_year
+
+                while curr_m <= 0:
+                    curr_m += 12
+                    curr_y -= 1
+
+                months_list.append((curr_y, curr_m))
+
             start_y, start_m = months_list[0]
             start_date_str = f"{start_y}-{start_m:02d}-01"
-            
-            # End date limit (start of month AFTER end_month)
+
             if end_month == 12:
                 limit_date_str = f"{end_year + 1}-01-01"
             else:
                 limit_date_str = f"{end_year}-{end_month + 1:02d}-01"
 
-            # Dynamic Filter
             filter_clause = ""
             params = [start_date_str, limit_date_str]
             if category_ids:
@@ -1557,10 +1459,10 @@ class BudgetApp:
                 params.extend(category_ids)
 
             result = conn.execute(f"""
-                SELECT strftime('%Y', date), strftime('%m', date), 
+                SELECT strftime('%Y', date), strftime('%m', date),
                     COALESCE(SUM(
-                        CASE 
-                            WHEN a.currency = 'CHF' THEN t.amount 
+                        CASE
+                            WHEN a.currency = 'CHF' THEN t.amount
                             ELSE t.amount * COALESCE(
                                 (SELECT rate FROM exchange_rates er WHERE er.currency = a.currency AND er.date <= t.date ORDER BY er.date DESC LIMIT 1),
                                 (SELECT rate FROM exchange_rates er WHERE er.currency = a.currency ORDER BY er.date ASC LIMIT 1),
@@ -1573,16 +1475,15 @@ class BudgetApp:
                 WHERE t.type = 'expense' AND t.date >= ? AND t.date < ? {filter_clause}
                 GROUP BY strftime('%Y', date), strftime('%m', date)
             """, params).fetchall()
-            
-            # Map results to lookup dict { (year, month): amount }
+
             data_map = {}
             for r_y, r_m, val in result:
                 data_map[(int(r_y), int(r_m))] = float(val)
-                
-            # Build ordered result
+
             trend_data = []
-            month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-            
+            month_names = ["", "Jan", "Feb", "Mar", "Apr", "May",
+                           "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
             for y, m in months_list:
                 amt = data_map.get((y, m), 0.0)
                 label = f"{month_names[m]} {y}"
@@ -1592,9 +1493,9 @@ class BudgetApp:
                     'year': y,
                     'month': m
                 })
-                
+
             return trend_data
-            
+
         except Exception as e:
             print(f"Error getting monthly expense trend: {e}")
             import traceback
@@ -1607,22 +1508,21 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             start_date, end_date = self._get_date_range(year, month)
-            
-            # Dynamic Filter
+
             filter_clause = ""
             params = [start_date, end_date]
             if category_ids:
                 placeholders = ','.join(['?'] * len(category_ids))
                 filter_clause = f"AND category_id IN ({placeholders})"
                 params.extend(category_ids)
-            
+
             params.append(limit)
 
             result = conn.execute(f"""
-                SELECT t.payee, 
+                SELECT t.payee,
                     COALESCE(SUM(
-                        CASE 
-                            WHEN a.currency = 'CHF' THEN t.amount 
+                        CASE
+                            WHEN a.currency = 'CHF' THEN t.amount
                             ELSE t.amount * COALESCE(
                                 (SELECT rate FROM exchange_rates er WHERE er.currency = a.currency AND er.date <= t.date ORDER BY er.date DESC LIMIT 1),
                                 (SELECT rate FROM exchange_rates er WHERE er.currency = a.currency ORDER BY er.date ASC LIMIT 1),
@@ -1637,7 +1537,7 @@ class BudgetApp:
                 ORDER BY 2 DESC
                 LIMIT ?
             """, params).fetchall()
-            
+
             return [{'payee': row[0], 'amount': float(row[1] or 0.0)} for row in result]
         except Exception as e:
             print(f"Error getting top payees: {e}")
@@ -1651,13 +1551,12 @@ class BudgetApp:
             end_date = f"{year+1}-01-01"
         else:
             if isinstance(month, str):
-                 # Convert month name to number if necessary, but UI usually sends int or 'All'
-                 # If 'January', etc. we need mapping. Assuming int for now based on usage.
-                 try:
-                     month = int(month)
-                 except:
-                     pass
-            
+
+                try:
+                    month = int(month)
+                except:
+                    pass
+
             if isinstance(month, int):
                 start_date = f"{year}-{month:02d}-01"
                 if month == 12:
@@ -1665,9 +1564,9 @@ class BudgetApp:
                 else:
                     end_date = f"{year}-{month+1:02d}-01"
             else:
-                 # Fallback
-                 start_date = f"{year}-01-01"
-                 end_date = f"{year+1}-01-01"
+
+                start_date = f"{year}-01-01"
+                end_date = f"{year+1}-01-01"
         return start_date, end_date
 
     def get_accumulated_dividends(self):
@@ -1677,11 +1576,9 @@ class BudgetApp:
         """
         conn = self._get_connection()
         try:
-            # 1. Get current exchange rates for normalization
+
             rates = self.get_exchange_rates_map()
-            
-            # 2. Query all dividend transactions
-            # We need the amount, the currency, the category, and the YEAR
+
             result = conn.execute("""
                 SELECT t.invest_account_id, t.amount, a.currency, c.sub_category, strftime('%Y', t.date) as year
                 FROM transactions t
@@ -1689,47 +1586,36 @@ class BudgetApp:
                 LEFT JOIN categories c ON t.category_id = c.id
                 WHERE t.type = 'income' AND t.invest_account_id IS NOT NULL
             """).fetchall()
-            
-            # Structure: 
-            # { 
-            #   invest_account_id: { 
-            #       'total': 0.0, 
-            #       'years': { 
-            #           '2024': { 'total': 0.0, 'breakdown': {'Dividend': 0.0} },
-            #           '2023': ...
-            #       }
-            #   } 
-            # }
+
             income_summary = {}
-            
+
             for invest_acc_id, amount, currency, category_name, year in result:
                 if invest_acc_id not in income_summary:
                     income_summary[invest_acc_id] = {'total': 0.0, 'years': {}}
-                
-                # Convert to CHF
+
                 rate = rates.get(currency, 1.0)
-                
+
                 if amount:
                     val_chf = float(amount) * rate
                     income_summary[invest_acc_id]['total'] += val_chf
-                    
-                    # Year Breakdown
+
                     if year not in income_summary[invest_acc_id]['years']:
-                        income_summary[invest_acc_id]['years'][year] = {'total': 0.0, 'breakdown': {}}
-                    
+                        income_summary[invest_acc_id]['years'][year] = {
+                            'total': 0.0, 'breakdown': {}}
+
                     year_data = income_summary[invest_acc_id]['years'][year]
                     year_data['total'] += val_chf
-                    
+
                     cat_key = category_name if category_name else "Uncategorized"
-                    year_data['breakdown'][cat_key] = year_data['breakdown'].get(cat_key, 0.0) + val_chf
-            
+                    year_data['breakdown'][cat_key] = year_data['breakdown'].get(
+                        cat_key, 0.0) + val_chf
+
             return income_summary
 
-            
         except Exception as e:
             print(f"Error calculating accumulated dividends: {e}")
             return {}
-            
+
     def get_accumulated_expenses(self):
         """
         Calculate total expenses (fees/taxes attributed to investment account) per investment account.
@@ -1737,10 +1623,9 @@ class BudgetApp:
         """
         conn = self._get_connection()
         try:
-            # 1. Get current exchange rates for normalization
+
             rates = self.get_exchange_rates_map()
-            
-            # 2. Query all expense transactions linked to an investment account
+
             result = conn.execute("""
                 SELECT t.invest_account_id, t.amount, a.currency, c.sub_category, strftime('%Y', t.date) as year
                 FROM transactions t
@@ -1748,30 +1633,31 @@ class BudgetApp:
                 LEFT JOIN categories c ON t.category_id = c.id
                 WHERE t.type = 'expense' AND t.invest_account_id IS NOT NULL
             """).fetchall()
-            
+
             expense_summary = {}
-            
+
             for invest_acc_id, amount, currency, category_name, year in result:
                 if invest_acc_id not in expense_summary:
-                    expense_summary[invest_acc_id] = {'total': 0.0, 'years': {}}
-                
-                # Convert to CHF
+                    expense_summary[invest_acc_id] = {
+                        'total': 0.0, 'years': {}}
+
                 rate = rates.get(currency, 1.0)
-                
+
                 if amount:
                     val_chf = float(amount) * rate
                     expense_summary[invest_acc_id]['total'] += val_chf
-                    
-                    # Year Breakdown
+
                     if year not in expense_summary[invest_acc_id]['years']:
-                        expense_summary[invest_acc_id]['years'][year] = {'total': 0.0, 'breakdown': {}}
-                    
+                        expense_summary[invest_acc_id]['years'][year] = {
+                            'total': 0.0, 'breakdown': {}}
+
                     year_data = expense_summary[invest_acc_id]['years'][year]
                     year_data['total'] += val_chf
-                    
+
                     cat_key = category_name if category_name else "Uncategorized"
-                    year_data['breakdown'][cat_key] = year_data['breakdown'].get(cat_key, 0.0) + val_chf
-            
+                    year_data['breakdown'][cat_key] = year_data['breakdown'].get(
+                        cat_key, 0.0) + val_chf
+
             return expense_summary
 
         except Exception as e:
@@ -1780,15 +1666,15 @@ class BudgetApp:
         finally:
             conn.close()
 
-
     def add_or_update_budget(self, sub_category: str, budget_amount: float):
         """Add or update a monthly budget for a subcategory"""
         conn = self._get_connection()
         try:
-            # Get ID
-            cat_row = conn.execute("SELECT id FROM categories WHERE sub_category = ?", [sub_category]).fetchone()
+
+            cat_row = conn.execute("SELECT id FROM categories WHERE sub_category = ?", [
+                                   sub_category]).fetchone()
             if not cat_row:
-                 return False
+                return False
             category_id = cat_row[0]
 
             conn.execute("""
@@ -1808,7 +1694,7 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT c.sub_category, b.budget_amount 
+                SELECT c.sub_category, b.budget_amount
                 FROM budgets b
                 JOIN categories c ON b.category_id = c.id
                 ORDER BY c.sub_category
@@ -1827,14 +1713,15 @@ class BudgetApp:
         """Delete a budget"""
         conn = self._get_connection()
         try:
-            # Get ID
-            cat_row = conn.execute("SELECT id FROM categories WHERE sub_category = ?", [sub_category]).fetchone()
+
+            cat_row = conn.execute("SELECT id FROM categories WHERE sub_category = ?", [
+                                   sub_category]).fetchone()
             if not cat_row:
-                 return False
+                return False
             category_id = cat_row[0]
 
             conn.execute("""
-                DELETE FROM budgets 
+                DELETE FROM budgets
                 WHERE category_id = ?
             """, [category_id])
             conn.commit()
@@ -1849,15 +1736,16 @@ class BudgetApp:
         """Get budget vs actual expenses for a given month"""
         budgets = self.get_all_budgets()
         all_transactions = self.get_all_transactions()
-        
+
         expenses = {}
         for trans in all_transactions:
             if trans.type == 'expense' and trans.date:
                 try:
                     trans_date = trans.date
                     if isinstance(trans_date, str):
-                        trans_date = datetime.datetime.strptime(trans_date, '%Y-%m-%d').date()
-                    
+                        trans_date = datetime.datetime.strptime(
+                            trans_date, '%Y-%m-%d').date()
+
                     if trans_date.year == year and trans_date.month == month:
                         sub_category = trans.sub_category or 'Uncategorized'
                         amount = float(trans.amount or 0)
@@ -1867,16 +1755,16 @@ class BudgetApp:
                             expenses[sub_category] = amount
                 except (ValueError, AttributeError):
                     continue
-        
+
         result = {}
         categories = self.get_all_categories()
         category_map = {cat.sub_category: cat.category for cat in categories}
-        
+
         for sub_category, budget_amount in budgets.items():
             category = category_map.get(sub_category, 'Other')
             actual_amount = expenses.get(sub_category, 0.0)
             remaining = budget_amount - actual_amount
-            
+
             result[sub_category] = {
                 'category': category,
                 'budget': budget_amount,
@@ -1884,7 +1772,7 @@ class BudgetApp:
                 'remaining': remaining,
                 'percentage': (actual_amount / budget_amount * 100) if budget_amount > 0 else 0
             }
-        
+
         for sub_category, actual_amount in expenses.items():
             if sub_category not in result:
                 category = category_map.get(sub_category, 'Other')
@@ -1895,7 +1783,7 @@ class BudgetApp:
                     'remaining': -actual_amount,
                     'percentage': 0.0
                 }
-        
+
         return result
 
     def get_investment_history_matrix_data(self):
@@ -1906,8 +1794,8 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             return conn.execute("""
-                SELECT strftime(date, '%Y-%m-%d') as date_str, account_id, value 
-                FROM investment_valuations 
+                SELECT strftime(date, '%Y-%m-%d') as date_str, account_id, value
+                FROM investment_valuations
                 ORDER BY date DESC, account_id ASC
             """).fetchall()
         except Exception as e:
@@ -1923,18 +1811,19 @@ class BudgetApp:
         """
         conn = self._get_connection()
         try:
-            # Get max ID once
-            new_id_res = conn.execute("SELECT COALESCE(MAX(id), 0) FROM investment_valuations").fetchone()
+
+            new_id_res = conn.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM investment_valuations").fetchone()
             current_max_id = new_id_res[0] if new_id_res else 0
-            
+
             for i, (date, account_id, value) in enumerate(valuations_data):
-                current_max_id += 1 
+                current_max_id += 1
                 conn.execute("""
                     INSERT INTO investment_valuations (id, date, account_id, value)
                     VALUES (?, ?, ?, ?)
                     ON CONFLICT (date, account_id) DO UPDATE SET value = excluded.value
                 """, (current_max_id, date, account_id, value))
-                
+
             conn.commit()
             return True
         except Exception as e:
@@ -1948,12 +1837,14 @@ class BudgetApp:
         Bulk delete investment valuations.
         valuations_data: list of tuples (date, account_id)
         """
-        if not valuations_data: return True
+        if not valuations_data:
+            return True
 
         conn = self._get_connection()
         try:
             for date, account_id in valuations_data:
-                conn.execute("DELETE FROM investment_valuations WHERE date = ? AND account_id = ?", (date, account_id))
+                conn.execute(
+                    "DELETE FROM investment_valuations WHERE date = ? AND account_id = ?", (date, account_id))
             conn.commit()
             return True
         except Exception as e:
@@ -1970,7 +1861,7 @@ class BudgetApp:
         """
         if target_date is None:
             today = datetime.now().date()
-            # target_date = today.strftime('%Y-%m-%d')
+
             next_day_str = (today + timedelta(days=1)).strftime('%Y-%m-%d')
         else:
             try:
@@ -1979,35 +1870,34 @@ class BudgetApp:
                 next_day_str = next_day.strftime('%Y-%m-%d')
             except ValueError:
                 next_day_str = target_date
-        
+
         conn = self._get_connection()
         try:
-            # 1. Try to find the valid value strictly before start of next day
+
             result = conn.execute("""
-                SELECT value FROM investment_valuations 
+                SELECT value FROM investment_valuations
                 WHERE account_id = ? AND date < ?
                 ORDER BY date DESC
                 LIMIT 1
             """, (account_id, next_day_str)).fetchone()
-            
+
             if result:
                 return float(result[0])
-            
-            # 2. Fallback to earliest
+
             result = conn.execute("""
-                SELECT value FROM investment_valuations 
+                SELECT value FROM investment_valuations
                 WHERE account_id = ?
                 ORDER BY date ASC
                 LIMIT 1
             """, (account_id,)).fetchone()
-            
+
             if result:
                 return float(result[0])
-            
+
             return 0.0
         finally:
             conn.close()
-    
+
     def get_subcategories_by_category(self):
         """Get all subcategories grouped by category"""
         categories = self.get_all_categories()
@@ -2023,18 +1913,17 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             result = conn.execute("""
-                SELECT DISTINCT strftime(date, '%Y') as year 
-                FROM transactions 
+                SELECT DISTINCT strftime(date, '%Y') as year
+                FROM transactions
                 WHERE date IS NOT NULL
                 ORDER BY year DESC
             """).fetchall()
             years = [int(r[0]) for r in result if r[0] is not None]
-            
-            # Ensure current year is always available
+
             current_year = datetime.now().year
             if current_year not in years:
                 years.insert(0, current_year)
-                
+
             return sorted(years, reverse=True)
         except Exception as e:
             print(f"Error getting available years: {e}")
@@ -2044,23 +1933,22 @@ class BudgetApp:
 
     def get_monthly_balances(self, year: int) -> dict:
         """
-        Calculate the total net worth (of show_in_balance accounts) 
+        Calculate the total net worth (of show_in_balance accounts)
         at the end of each month for the given year.
         Returns: {month_int: total_balance_float}
         """
         conn = self._get_connection()
         try:
-            # 1. Get relevant accounts
+
             accounts = conn.execute("""
-                SELECT id, currency, is_investment, valuation_strategy, account 
-                FROM accounts 
+                SELECT id, currency, is_investment, valuation_strategy, account
+                FROM accounts
                 WHERE show_in_balance = TRUE AND id != 0
             """).fetchall()
-            
+
             if not accounts:
                 return {m: 0.0 for m in range(1, 13)}
 
-            # account_map: id -> {data}
             account_map = {}
             for row in accounts:
                 account_map[row[0]] = {
@@ -2071,106 +1959,103 @@ class BudgetApp:
                     'balance': 0.0,
                     'qty': 0.0
                 }
-            
-            # 2. Fetch all transactions up to end of year
+
             end_of_year = f"{year}-12-31"
-            
+
             all_tx = conn.execute("""
-                SELECT 
-                    date, type, amount, account_id, 
-                    to_account_id, to_amount, 
-                    qty, invest_account_id 
-                FROM transactions 
+                SELECT
+                    date, type, amount, account_id,
+                    to_account_id, to_amount,
+                    qty, invest_account_id
+                FROM transactions
                 WHERE date <= ?
                 ORDER BY date ASC
             """, [end_of_year]).fetchall()
-            
-            # 3. Process Logic
-            monthly_data = {} 
+
+            monthly_data = {}
             current_tx_idx = 0
             num_tx = len(all_tx)
-            
+
             for month in range(1, 13):
-                # Calculate start of NEXT month to use as strict upper bound (< next_month_start)
+
                 if month == 12:
                     current_month_end_date = date(year, 12, 31)
-                    next_bound = date(year + 1, 1, 1) # Jan 1st of next year
+                    next_bound = date(year + 1, 1, 1)
                 else:
                     next_bound = date(year, month + 1, 1)
                     current_month_end_date = next_bound - timedelta(days=1)
-                # Replay transactions until date (strictly less than next bound)
-                # Note: `all_tx` are sorted by date. We check if tx_date < next_bound
+
                 next_bound_str = next_bound.strftime('%Y-%m-%d')
-                
+
                 while current_tx_idx < num_tx:
                     row = all_tx[current_tx_idx]
-                    t_date = row[0] # String YYYY-MM-DD
+                    t_date = row[0]
                     t_date_str = str(t_date)
-                    
-                    # Check if t_date >= next_bound_str (Stop processing if we reached the next period)
+
                     if t_date_str >= next_bound_str:
                         break
-                    
+
                     t_type = row[1]
                     amount = float(row[2]) if row[2] else 0.0
                     acc_id = row[3]
                     to_acc_id = row[4]
                     to_amount = float(row[5]) if row[5] else 0.0
                     qty = float(row[6]) if row[6] else 0.0
-                    
+
                     if t_type == 'income':
                         if acc_id in account_map:
                             account_map[acc_id]['balance'] += amount
-                            if qty: account_map[acc_id]['qty'] += qty
-                            
+                            if qty:
+                                account_map[acc_id]['qty'] += qty
+
                     elif t_type == 'expense':
                         if acc_id in account_map:
                             account_map[acc_id]['balance'] -= amount
                             if qty and account_map[acc_id]['is_invest']:
                                 account_map[acc_id]['qty'] -= qty
-                                
+
                     elif t_type == 'transfer':
                         if acc_id in account_map:
                             account_map[acc_id]['balance'] -= amount
                             if qty and account_map[acc_id]['is_invest']:
                                 account_map[acc_id]['qty'] -= qty
-                        
+
                         if to_acc_id in account_map:
                             account_map[to_acc_id]['balance'] += to_amount
-                            if qty: account_map[to_acc_id]['qty'] += qty
-                            
+                            if qty:
+                                account_map[to_acc_id]['qty'] += qty
+
                     current_tx_idx += 1
-                
-                # Snapshot
+
                 month_total_chf = 0.0
-                # Use current_month_end_date formatted string for helpers which now support strict logic?
-                # Actually helpers use < next_day logic internally if we pass the date string.
-                # If we pass '2024-01-31', helper calculates next day '2024-02-01' and uses < '2024-02-01'.
-                # So we just pass the date string of the last day of the month.
-                curr_month_end_str = current_month_end_date.strftime('%Y-%m-%d')
-                
+
+                curr_month_end_str = current_month_end_date.strftime(
+                    '%Y-%m-%d')
+
                 rates_map = self.get_exchange_rates_map(curr_month_end_str)
-                
+
                 for aid, adata in account_map.items():
                     currency = adata['currency']
                     market_val = adata['balance']
-                    
-                    if adata['is_invest']: 
-                        # Apply investment valuation
+
+                    if adata['is_invest']:
+
                         if adata['strategy'] == 'Price/Qty':
-                            price = self.get_investment_valuation_for_date(aid, curr_month_end_str)
+                            price = self.get_investment_valuation_for_date(
+                                aid, curr_month_end_str)
                             market_val = adata['qty'] * price
                         else:
-                             # Default or Total Value strategy: Use raw valuation if > 0, else balance
-                             val = self.get_investment_valuation_for_date(aid, curr_month_end_str)
-                             if val > 0:
-                                 market_val = val
-                    
+
+                            val = self.get_investment_valuation_for_date(
+                                aid, curr_month_end_str)
+                            if val > 0:
+                                market_val = val
+
                     rate = rates_map.get(currency, 1.0)
                     month_total_chf += (market_val * rate)
-                    
+
                 monthly_data[month] = month_total_chf
-            
+
             return monthly_data
 
         except Exception as e:
@@ -2186,12 +2071,12 @@ class BudgetApp:
         Calculate total monthly cashflow (Income vs Expenses) in CHF.
         Returns {
             month_int: {
-                'income': float, 
-                'expense': float, 
+                'income': float,
+                'expense': float,
                 'details': {
-                    'income': { 
-                        'CategoryName': {'total': float, 'subs': {'SubCat': float, ...}} 
-                    }, 
+                    'income': {
+                        'CategoryName': {'total': float, 'subs': {'SubCat': float, ...}}
+                    },
                     'expense': { ... }
                 }
             }
@@ -2199,50 +2084,50 @@ class BudgetApp:
         """
         conn = self._get_connection()
         try:
-            # 1. Fetch all Income/Expense transactions for the year with currency and category
-            # We join with accounts to get the currency and categories to get the category name
+
             start_date = f"{year}-01-01"
             end_date = f"{year}-12-31"
-            
-            # Note: We include boundary dates.
+
             tx_query = """
                 SELECT t.date, t.type, t.amount, a.currency, c.category, c.sub_category
                 FROM transactions t
                 JOIN accounts a ON t.account_id = a.id
                 LEFT JOIN categories c ON t.category_id = c.id
-                WHERE t.type IN ('income', 'expense') 
+                WHERE t.type IN ('income', 'expense')
                   AND t.date >= ? AND t.date <= ?
                 ORDER BY t.date ASC
             """
-            transactions = conn.execute(tx_query, [start_date, end_date]).fetchall()
-            
-            # 2. Fetch all exchange rates to build a lookup cache
-            all_rates = conn.execute("SELECT date, currency, rate FROM exchange_rates ORDER BY date ASC").fetchall()
-            
-            # Organize rates by currency: { 'USD': [(date_str, rate), ...] }
+            transactions = conn.execute(
+                tx_query, [start_date, end_date]).fetchall()
+
+            all_rates = conn.execute(
+                "SELECT date, currency, rate FROM exchange_rates ORDER BY date ASC").fetchall()
+
             rates_history = {}
             for r_date, r_curr, r_rate in all_rates:
                 if r_curr not in rates_history:
                     rates_history[r_curr] = []
                 rates_history[r_curr].append((str(r_date), float(r_rate)))
-            
-            # Helper to find rate
+
             import bisect
+
             def get_rate_at(date_str, currency):
-                if currency == 'CHF': return 1.0
-                history = rates_history.get(currency) # slight optimization: get once
-                if not history: return 1.0
-                
-                # Binary search for performance
+                if currency == 'CHF':
+                    return 1.0
+                history = rates_history.get(currency)
+                if not history:
+                    return 1.0
+
                 idx = bisect.bisect_right(history, (date_str, float('inf')))
-                
+
                 if idx > 0:
                     return history[idx-1][1]
-                
+
                 return history[0][1]
 
-            monthly_data = {m: {'income': 0.0, 'expense': 0.0, 'details': {'income': {}, 'expense': {}}} for m in range(1, 13)}
-            
+            monthly_data = {m: {'income': 0.0, 'expense': 0.0, 'details': {
+                'income': {}, 'expense': {}}} for m in range(1, 13)}
+
             for row in transactions:
                 t_date_str = str(row[0])
                 t_type = row[1]
@@ -2250,15 +2135,15 @@ class BudgetApp:
                 currency = row[3]
                 category_name = row[4] if row[4] else "Uncategorized"
                 sub_category_name = row[5] if row[5] else "General"
-                
+
                 try:
                     month = int(t_date_str.split('-')[1])
                 except:
-                    continue 
+                    continue
 
                 rate = get_rate_at(t_date_str, currency)
                 val_chf = amount * rate
-                
+
                 if t_type == 'income':
                     data_ptr = monthly_data[month]
                     data_ptr['income'] += val_chf
@@ -2270,16 +2155,16 @@ class BudgetApp:
                 else:
                     continue
 
-                # Add to hierarchical details
                 if category_name not in details_ptr:
                     details_ptr[category_name] = {'total': 0.0, 'subs': {}}
-                
+
                 details_ptr[category_name]['total'] += val_chf
-                
-                existing_sub_val = details_ptr[category_name]['subs'].get(sub_category_name, 0.0)
+
+                existing_sub_val = details_ptr[category_name]['subs'].get(
+                    sub_category_name, 0.0)
                 details_ptr[category_name]['subs'][sub_category_name] = existing_sub_val + val_chf
-                    
+
             return monthly_data
-            
+
         finally:
             conn.close()
