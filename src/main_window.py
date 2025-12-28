@@ -117,7 +117,7 @@ class BudgetTrackerWindow(QMainWindow):
         form_layout.addLayout(self.from_account_layout)
 
         self.parent_category_layout = QHBoxLayout()
-        self.parent_category_layout.addWidget(QLabel('Category:'))
+        self.parent_category_layout.addWidget(QLabel('Main Category:'))
         self.parent_category_combo = QComboBox()
         self.parent_category_combo.setMinimumWidth(200)
         self.parent_category_combo.currentTextChanged.connect(
@@ -127,7 +127,7 @@ class BudgetTrackerWindow(QMainWindow):
         form_layout.addLayout(self.parent_category_layout)
 
         self.sub_category_layout = QHBoxLayout()
-        self.sub_category_layout.addWidget(QLabel('Sub Category:'))
+        self.sub_category_layout.addWidget(QLabel('Category:'))
         self.sub_category_combo = QComboBox()
         self.sub_category_combo.setMinimumWidth(200)
         self.sub_category_layout.addWidget(self.sub_category_combo)

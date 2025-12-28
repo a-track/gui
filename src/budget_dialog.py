@@ -60,11 +60,11 @@ class BudgetDialog(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
-            ['Category', 'Sub Category', 'Monthly Budget', 'Current Month Expenses', 'Remaining', 'Usage %'])
+            ['Main Category', 'Category', 'Monthly Budget', 'Current Month Expenses', 'Remaining', 'Usage %'])
 
         header_tooltips = [
             "Main Category",
-            "Sub Category",
+            "Category",
             "Target Monthly Limit",
             "Actual Spending this Month",
             "Budget - Expenses (Green = Under, Red = Over)",

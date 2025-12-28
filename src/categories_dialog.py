@@ -30,7 +30,7 @@ class CategoriesDialog(QDialog):
             self.on_category_type_changed)
         type_parent_layout.addWidget(self.category_type_combo)
 
-        type_parent_layout.addWidget(QLabel('Category:'))
+        type_parent_layout.addWidget(QLabel('Main Category:'))
         self.parent_category_combo = NoScrollComboBox()
         self.parent_category_combo.setEditable(True)
         self.parent_category_combo.setInsertPolicy(
@@ -43,9 +43,9 @@ class CategoriesDialog(QDialog):
         layout.addLayout(type_parent_layout)
 
         sub_category_layout = QHBoxLayout()
-        sub_category_layout.addWidget(QLabel('Sub Category:'))
+        sub_category_layout.addWidget(QLabel('Category:'))
         self.sub_category_input = QLineEdit()
-        self.sub_category_input.setPlaceholderText('Enter sub category name')
+        self.sub_category_input.setPlaceholderText('Enter Category name')
         sub_category_layout.addWidget(self.sub_category_input)
 
         sub_category_layout.addStretch()
@@ -61,13 +61,13 @@ class CategoriesDialog(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(
-            ['ID', 'Category Type', 'Category', 'Sub Category', 'Delete'])
+            ['ID', 'Category Type', 'Main Category', 'Category', 'Delete'])
 
         header_tooltips = [
             "System ID",
             "Income or Expense",
             "Main grouping",
-            "Specific item (Sub Category)",
+            "Specific item (Category)",
             "Delete Category"
         ]
         for col, tooltip in enumerate(header_tooltips):
@@ -370,7 +370,7 @@ class CategoriesDialog(QDialog):
 
         if not parent_category or not sub_category:
             self.show_status(
-                'Please enter both category and sub category', error=True)
+                'Please enter both main category and category', error=True)
             return
 
         success = self.budget_app.add_category(
