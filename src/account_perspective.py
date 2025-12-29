@@ -519,7 +519,7 @@ class AccountPerspectiveDialog(QDialog):
 
         transaction_history = []
 
-        accounts = self.budget_app.get_all_accounts()
+        accounts = self.budget_app.get_all_accounts(show_inactive=True)
         accounts_map = {acc.id: f'{acc.account}' for acc in accounts}
 
         for trans in transactions_to_display:

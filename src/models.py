@@ -609,15 +609,21 @@ class BudgetApp:
         finally:
             conn.close()
 
-    def get_all_accounts(self):
+    def get_all_accounts(self, show_inactive=False):
         conn = self._get_connection()
         try:
 
-            result = conn.execute("""
+            query = """
                 SELECT id, account, type, company, currency, show_in_balance, is_active, is_investment, valuation_strategy
                 FROM accounts
-                ORDER BY id
-            """).fetchall()
+            """
+            
+            if not show_inactive:
+                query += " WHERE is_active = 1"
+            
+            query += " ORDER BY id"
+
+            result = conn.execute(query).fetchall()
 
             accounts = []
             for row in result:
@@ -709,6 +715,53 @@ class BudgetApp:
         except Exception as e:
             print(f"Error updating is_active: {e}")
             return False
+        finally:
+            conn.close()
+
+    def update_account_id(self, old_id: int, new_id: int):
+        conn = self._get_connection()
+        try:
+            # Check if new_id already exists
+            exists = conn.execute(
+                "SELECT 1 FROM accounts WHERE id = ?", [new_id]).fetchone()
+            if exists:
+                return False, f"Account ID {new_id} already exists."
+
+            # Get old account details
+            old_account = conn.execute(
+                "SELECT account, type, company, currency, show_in_balance, is_active, is_investment, valuation_strategy FROM accounts WHERE id = ?",
+                [old_id]
+            ).fetchone()
+
+            if not old_account:
+                return False, "Old account not found."
+
+            # Insert new account with same details but new ID
+            conn.execute("""
+                INSERT INTO accounts (id, account, type, company, currency, show_in_balance, is_active, is_investment, valuation_strategy)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [new_id, *old_account])
+
+            # Update all references in transactions
+            conn.execute(
+                "UPDATE transactions SET account_id = ? WHERE account_id = ?", (new_id, old_id))
+            conn.execute(
+                "UPDATE transactions SET to_account_id = ? WHERE to_account_id = ?", (new_id, old_id))
+            conn.execute(
+                "UPDATE transactions SET invest_account_id = ? WHERE invest_account_id = ?", (new_id, old_id))
+
+            # Delete old account
+            conn.execute("DELETE FROM accounts WHERE id = ?", [old_id])
+
+            conn.commit()
+            return True, "Account ID updated successfully."
+
+        except Exception as e:
+            print(f"Error updating account ID: {e}")
+            import traceback
+            traceback.print_exc()
+            conn.rollback()
+            return False, str(e)
         finally:
             conn.close()
 
@@ -1317,6 +1370,262 @@ class BudgetApp:
         except Exception as e:
             print(f"Error getting transaction counts: {e}")
             return {'accounts': {}, 'categories': {}, 'payees': {}}
+        finally:
+            conn.close()
+
+    def update_category_id(self, old_id: int, new_id: int):
+        conn = self._get_connection()
+        try:
+            # PHASE 1: PRE-CLEANUP (Outside Transaction)
+            # We explicitly drop the 'api_*' export tables to remove any locks/constraints.
+            try:
+                tables = [t[0] for t in conn.execute("SHOW TABLES").fetchall()]
+                api_tables = [t for t in tables if t.startswith('api_')]
+                for tbl in api_tables:
+                    try:
+                        conn.execute(f"DROP TABLE IF EXISTS {tbl} CASCADE")
+                    except Exception as e:
+                        print(f"Failed to drop {tbl}: {e}")
+                
+                # Also clean other potential zombies
+                other_zombies = [t for t in tables if t not in api_tables and t not in ['transactions', 'budgets', 'categories', 'accounts', 'exchange_rates']]
+                for tbl in other_zombies:
+                    try:
+                        desc = conn.execute(f"DESCRIBE {tbl}").fetchall()
+                        int_cols = [c[0] for c in desc if 'INT' in c[1].upper() or 'DECIMAL' in c[1].upper()]
+                        for col in int_cols:
+                            conn.execute(f"DELETE FROM {tbl} WHERE {col} = ?", [old_id])
+                    except:
+                        pass
+                        
+            except Exception as e:
+                print(f"Cleanup warning: {e}")
+
+            # PHASE 2: TRANSACTIONAL UPDATE (Split into steps to avoid locking issues)
+            
+            # 1. Archive dependencies
+            trans_ids = [row[0] for row in conn.execute(
+                "SELECT id FROM transactions WHERE category_id = ?", [old_id]).fetchall()]
+            
+            budget_row = conn.execute(
+                "SELECT budget_amount FROM budgets WHERE category_id = ?", [old_id]).fetchone()
+
+            # STEP 1: DECOUPLE & COMMIT
+            try:
+                conn.execute("BEGIN TRANSACTION")
+                # A. Init verify
+                check = conn.execute("SELECT count(*) FROM transactions WHERE category_id = ?", [old_id]).fetchone()[0]
+                if check != len(trans_ids):
+                    print(f"Warning: Transaction count mismatch {check} vs {len(trans_ids)}")
+
+                # B. Decouple
+                if trans_ids:
+                    conn.execute("UPDATE transactions SET category_id = NULL WHERE category_id = ?", [old_id])
+                
+                if budget_row:
+                    conn.execute("DELETE FROM budgets WHERE category_id = ?", [old_id])
+                
+                # C. Verify Decoupling
+                still_bound = conn.execute("SELECT count(*) FROM transactions WHERE category_id = ?", [old_id]).fetchone()[0]
+                if still_bound > 0:
+                    raise Exception(f"Decoupling failed! {still_bound} transactions still reference old ID.")
+                
+                conn.execute("COMMIT")
+            except Exception as e:
+                conn.execute("ROLLBACK")
+                return False, f"Step 1 (Decouple) Failed: {e}"
+
+            # STEP 2: UPDATE CATEGORY ID & COMMIT
+            try:
+                conn.execute("UPDATE categories SET id = ? WHERE id = ?", (new_id, old_id))
+            except Exception as e:
+                # MANUAL ROLLBACK OF STEP 1
+                try:
+                    print(f"Update failed ({e}), Reverting Step 1...")
+                    conn.execute("BEGIN TRANSACTION")
+                    if budget_row:
+                        conn.execute("INSERT INTO budgets (category_id, budget_amount) VALUES (?, ?)", (old_id, budget_row[0]))
+                    if trans_ids:
+                        id_list = ",".join(map(str, trans_ids))
+                        conn.execute(f"UPDATE transactions SET category_id = ? WHERE id IN ({id_list})", [old_id])
+                    conn.execute("COMMIT")
+                except Exception as rollback_err:
+                    return False, f"CRITICAL: Update failed AND Rollback failed. DB may be inconsistent. Update Error: {e}, Rollback Error: {rollback_err}"
+                
+                return False, f"Update Category Failed: {e}"
+
+            # STEP 3: RESTORE DEPENDENCIES & COMMIT
+            try:
+                conn.execute("BEGIN TRANSACTION")
+                # A. Re-target transactions
+                if trans_ids:
+                    id_list = ",".join(map(str, trans_ids))
+                    conn.execute(f"UPDATE transactions SET category_id = ? WHERE id IN ({id_list})", [new_id])
+                
+                # B. Restore Budget
+                if budget_row:
+                    conn.execute("INSERT INTO budgets (category_id, budget_amount) VALUES (?, ?)", (new_id, budget_row[0]))
+                
+                conn.execute("COMMIT")
+                return True, "Category ID updated successfully."
+            except Exception as e:
+                # Partial failure: Category Updated, but transactions orphaned.
+                return False, f"Category Updated, but failed to re-link transactions (IDs: {trans_ids}). Error: {e}"
+
+        except Exception as e:
+            return False, f"Unexpected Global Error: {e}"
+        finally:
+            conn.close()
+
+    def get_account_cash_flows(self, account_id: int):
+        """
+        Get all external cash flows for an account for XIRR calculation.
+        Returns list of (date_obj, amount).
+        Perspective: EXTERNAL view.
+        - Money causing Account Value to rise (Deposit) = NEGATIVE flow (Investment).
+        - Money leaving Account (Withdrawal) = POSITIVE flow (Return).
+        """
+        conn = self._get_connection()
+        try:
+            flows = []
+            
+            # 1. Transfers IN (Deposit -> Negative flow)
+            # from another account TO this account
+            rows_in = conn.execute("""
+                SELECT date, to_amount 
+                FROM transactions 
+                WHERE type = 'transfer' AND to_account_id = ?
+            """, [account_id]).fetchall()
+            for d, amt in rows_in:
+                if isinstance(d, str):
+                    d = datetime.strptime(d, '%Y-%m-%d').date()
+                flows.append((d, -1.0 * float(amt)))
+
+            # 2. Transfers OUT (Withdrawal -> Positive flow)
+            # from this account TO another
+            rows_out = conn.execute("""
+                SELECT date, amount 
+                FROM transactions 
+                WHERE type = 'transfer' AND account_id = ?
+            """, [account_id]).fetchall()
+            for d, amt in rows_out:
+                if isinstance(d, str):
+                    d = datetime.strptime(d, '%Y-%m-%d').date()
+                flows.append((d, float(amt)))
+                
+            # 3. Direct Income/Expense? 
+            # If an investment account receives "Income" (e.g. Salary deposited directly? Unlikely for investment but possible)
+            # Or "Dividend" recorded as Income?
+            # If "Dividend" is internal (increases cash balance), it is NOT an external flow. It just increases Final Value.
+            # HOWEVER, if the user records "Deposit" as "Income Transaction", then it is a flow.
+            # We assume "Income" transaction on Investment Account = Dividend/Interest (Internal).
+            # We assume "Expense" transaction on Investment Account = Fees (Internal).
+            # So generally, only TRANSFERS are external flows.
+
+            # Special Case: "Starting Balance" (if modeled as transaction?)
+            # Usually users use "Transfer from Opening Balance" or similar.
+            
+            return flows
+        except Exception as e:
+            print(f"Error getting cash flows: {e}")
+            return []
+        finally:
+            conn.close()
+    def get_investment_valuation_history(self, account_id: int):
+        """
+        Get all valuation history for an account.
+        Returns list of (date_obj, value).
+        Sorted by date ASC.
+        """
+        conn = self._get_connection()
+        try:
+            rows = conn.execute("""
+                SELECT date, value 
+                FROM investment_valuations 
+                WHERE account_id = ?
+                ORDER BY date ASC
+            """, [account_id]).fetchall()
+            
+            history = []
+            for d, val in rows:
+                if isinstance(d, str):
+                    d = datetime.strptime(d, '%Y-%m-%d').date()
+                history.append((d, float(val)))
+            return history
+        except Exception as e:
+            print(f"Error getting valuation history: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def get_qty_changes(self, account_id: int):
+        """
+        Get all quantity changes for an account to reconstruct history.
+        Returns list of (date_obj, qty_delta).
+        """
+        conn = self._get_connection()
+        try:
+            changes = []
+            
+            # 1. Transfers IN (Add Qty) & Expense (Buy -> Add Qty)
+            # Transfer In:
+            rows_in = conn.execute("""
+                SELECT date, qty FROM transactions 
+                WHERE type = 'transfer' AND to_account_id = ? AND qty IS NOT NULL AND qty != 0
+            """, [account_id]).fetchall()
+            for d, q in rows_in:
+                if isinstance(d, str): d = datetime.strptime(d, '%Y-%m-%d').date()
+                changes.append((d, float(q)))
+
+            # Expense (Buy Asset -> Money Out, Asset In):
+            rows_exp = conn.execute("""
+                SELECT date, qty FROM transactions 
+                WHERE type = 'expense' AND account_id = ? AND qty IS NOT NULL AND qty != 0
+            """, [account_id]).fetchall()
+            for d, q in rows_exp:
+                if isinstance(d, str): d = datetime.strptime(d, '%Y-%m-%d').date()
+                changes.append((d, float(q)))
+
+            # 2. Transfers OUT (Subtract Qty) & Income (Sell -> Subtract Qty)
+            # Transfer Out:
+            rows_out = conn.execute("""
+                SELECT date, qty FROM transactions 
+                WHERE type = 'transfer' AND account_id = ? AND qty IS NOT NULL AND qty != 0
+            """, [account_id]).fetchall()
+            for d, q in rows_out:
+                if isinstance(d, str): d = datetime.strptime(d, '%Y-%m-%d').date()
+                changes.append((d, -1.0 * float(q)))
+                
+            # Income (Sell Asset -> Money In, Asset Out):
+            rows_inc = conn.execute("""
+                SELECT date, qty FROM transactions 
+                WHERE type = 'income' AND account_id = ? AND qty IS NOT NULL AND qty != 0
+            """, [account_id]).fetchall()
+            for d, q in rows_inc:
+                if isinstance(d, str): d = datetime.strptime(d, '%Y-%m-%d').date()
+                changes.append((d, -1.0 * float(q)))
+            
+            # Sort by date
+            changes.sort(key=lambda x: x[0])
+            return changes
+            
+        except Exception as e:
+            print(f"Error getting qty changes: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def get_category_by_id(self, category_id):
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT id, sub_category, category, category_type FROM categories WHERE id = ?", [category_id]).fetchone()
+            if row:
+                return Category(*row)
+            return None
+        except Exception as e:
+            print(f"Error getting category by id: {e}")
+            return None
         finally:
             conn.close()
 

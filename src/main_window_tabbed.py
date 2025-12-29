@@ -1357,6 +1357,26 @@ class BudgetTrackerWindow(QMainWindow):
         else:
             self.show_status('Error adding transaction', error=True)
 
+    def refresh_global_state(self):
+        """Refreshes all tabs and dropdowns to reflect global changes (like Account updates)"""
+        self.update_account_combo()
+        self.update_to_account_combo()
+        self.update_invest_account_combo()
+        
+        if hasattr(self, 'balance_tab_widget'):
+            self.balance_tab_widget.refresh_data()
+            
+        if hasattr(self, 'savings_tab_ref'):
+            self.savings_tab_ref.refresh_data()
+            
+        if hasattr(self, 'exchange_rates_tab_ref'):
+            self.exchange_rates_tab_ref.refresh_data()
+
+        # Update category dropdowns in Add Transaction tab
+        if hasattr(self, 'income_radio'):
+            trans_type = 'income' if self.income_radio.isChecked() else 'expense'
+            self.update_parent_categories(trans_type)
+
     def show_status(self, message, error=False):
         self.status_label.setText(message)
         if error:

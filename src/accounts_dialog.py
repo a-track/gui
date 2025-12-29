@@ -170,7 +170,7 @@ class AccountsDialog(QDialog):
 
     def load_accounts(self):
         try:
-            accounts = self.budget_app.get_all_accounts()
+            accounts = self.budget_app.get_all_accounts(show_inactive=True)
 
             accounts = [
                 account for account in accounts
@@ -195,9 +195,11 @@ class AccountsDialog(QDialog):
             try:
 
                 id_item = NumericTableWidgetItem(str(account.id))
-                id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                # Allow editing ID
+                id_item.setFlags(id_item.flags() | Qt.ItemFlag.ItemIsEditable)
                 id_item.setBackground(QColor(240, 240, 240))
                 id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                id_item.setToolTip("Double click to change ID")
                 self.table.setItem(row, 0, id_item)
 
                 self.table.setItem(row, 1, QTableWidgetItem(account.account))
@@ -306,11 +308,75 @@ class AccountsDialog(QDialog):
     def on_cell_changed(self, row, column):
         try:
 
-            if column not in [1, 2, 3, 4]:
+            if column not in [0, 1, 2, 3, 4]:
                 return
 
             item = self.table.item(row, column)
             if not item:
+                return
+
+            # Special handling for ID change (Column 0)
+            if column == 0:
+                # We need the OLD ID to perform the update.
+                # However, since the cell just changed, we can't easily get the old ID from the table directly
+                # unless we stored it. But we can infer it if we assume the user didn't change sorting/filtering
+                # concurrently.
+                # BETTER APPROACH: Use the 'account_id' property we stored on widgtes in this row?
+                # Actually, the buttons/checkboxes have the property.
+                # Let's try to get it from the checkbox in column 5.
+                checkbox_widget = self.table.cellWidget(row, 5)
+                if not checkbox_widget:
+                    return
+                checkbox = checkbox_widget.findChild(QCheckBox)
+                if not checkbox:
+                    return
+                
+                old_id = checkbox.property('account_id')
+                try:
+                    new_id = int(item.text().strip())
+                except ValueError:
+                    self.show_status("Invalid ID format", error=True)
+                except ValueError:
+                    self.show_status("Invalid ID format", error=True)
+                    QTimer.singleShot(0, self.load_accounts) # Revert
+                    return
+                
+                if old_id == new_id:
+                    return
+
+                # Pre-check if ID exists to avoid unnecessary confirmation dialog
+                existing_account = self.budget_app.get_account_by_id(new_id)
+                if existing_account:
+                    self.show_status(f"Account ID {new_id} already exists", error=True)
+                    QMessageBox.warning(self, "ID Exists", f"Account ID {new_id} already exists.\nPlease choose a unique ID.")
+                    self.show_status(f"Account ID {new_id} already exists", error=True)
+                    QMessageBox.warning(self, "ID Exists", f"Account ID {new_id} already exists.\nPlease choose a unique ID.")
+                    QTimer.singleShot(0, self.load_accounts) # Revert
+                    return
+
+                reply = QMessageBox.question(
+                    self, 'Confirm ID Change', 
+                    f'Are you sure you want to change Account ID from {old_id} to {new_id}?\n'
+                    f'This will update all linked transactions.',
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    success, msg = self.budget_app.update_account_id(old_id, new_id)
+                    if success:
+                        self.show_status(f'ID updated from {old_id} to {new_id}')
+                    if success:
+                        self.show_status(f'ID updated from {old_id} to {new_id}')
+                        # Delay reload to avoid commitData warning since we are in the middle of editing
+                        QTimer.singleShot(0, self.load_accounts) 
+                        if hasattr(self.parent_window, 'refresh_global_state'):
+                            self.parent_window.refresh_global_state()
+                    else:
+                        self.show_status(f'Error: {msg}', error=True)
+                        QTimer.singleShot(0, self.load_accounts) # Revert
+                else:
+                    QTimer.singleShot(0, self.load_accounts) # Revert
+                
                 return
 
             id_item = self.table.item(row, 0)
@@ -352,6 +418,8 @@ class AccountsDialog(QDialog):
             self.show_status('Account updated')
             if hasattr(self.parent_window, 'update_balance_display'):
                 self.parent_window.update_balance_display()
+            if hasattr(self.parent_window, 'refresh_global_state'):
+                self.parent_window.refresh_global_state()
         else:
             self.show_status('Failed to update account', error=True)
 
@@ -371,6 +439,9 @@ class AccountsDialog(QDialog):
                 item.setText("")
 
         self.show_status('Updated show in balance')
+
+        if hasattr(self.parent_window, 'refresh_global_state'):
+            self.parent_window.refresh_global_state()
 
     def toggle_active(self, checked):
         sender = self.sender()
@@ -392,6 +463,9 @@ class AccountsDialog(QDialog):
         if hasattr(self.parent_window, 'update_account_combo'):
             self.parent_window.update_account_combo()
             self.parent_window.update_to_account_combo()
+        
+        if hasattr(self.parent_window, 'refresh_global_state'):
+            self.parent_window.refresh_global_state()
 
     def toggle_investment(self, checked):
         sender = self.sender()
@@ -483,6 +557,9 @@ class AccountsDialog(QDialog):
             if hasattr(self.parent_window, 'update_account_combo'):
                 self.parent_window.update_account_combo()
                 self.parent_window.update_to_account_combo()
+            
+            if hasattr(self.parent_window, 'refresh_global_state'):
+                self.parent_window.refresh_global_state()
         else:
             self.show_status(f'Error: {msg}', error=True)
 
@@ -496,6 +573,8 @@ class AccountsDialog(QDialog):
                 if success:
                     self.show_status('Deleted')
                     self.load_accounts()
+                    if hasattr(self.parent_window, 'refresh_global_state'):
+                        self.parent_window.refresh_global_state()
                 else:
                     self.show_status(f'Error: {msg}', error=True)
         except Exception as e:

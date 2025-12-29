@@ -197,7 +197,9 @@ class CategoriesDialog(QDialog):
             try:
 
                 id_item = NumericTableWidgetItem(str(category.id))
-                id_item.setFlags(id_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
+                # Allow editing ID
+                id_item.setFlags(id_item.flags() | Qt.ItemFlag.ItemIsEditable)
+                id_item.setToolTip("Double click to change ID")
                 id_item.setBackground(QColor(240, 240, 240))
                 id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, 0, id_item)
@@ -270,7 +272,7 @@ class CategoriesDialog(QDialog):
     def on_cell_changed(self, row, column):
         try:
 
-            if column not in [1, 2, 3]:
+            if column not in [0, 1, 2, 3]:
                 return
 
             item = self.table.item(row, column)
@@ -284,6 +286,60 @@ class CategoriesDialog(QDialog):
             try:
                 cat_id = int(id_item.text())
             except ValueError:
+                self.show_status("Invalid ID format", error=True)
+                QTimer.singleShot(0, self.load_categories)
+                return
+
+            if column == 0:
+                # Handle ID change
+                delete_btn = self.table.cellWidget(row, 4).findChild(QPushButton)
+                if not delete_btn:
+                     QTimer.singleShot(0, self.load_categories)
+                     return
+
+                old_id = delete_btn.property('cat_id')
+                
+                try:
+                    new_id = int(item.text().strip())
+                except ValueError:
+                    self.show_status("Invalid ID format", error=True)
+                    QTimer.singleShot(0, self.load_categories)
+                    return
+                
+                if old_id == new_id:
+                    return
+
+                # Pre-check existence using full list scan for robustness
+                all_cats = self.budget_app.get_all_categories()
+                existing_cat = next((c for c in all_cats if c.id == new_id), None)
+                
+                if existing_cat:
+                    self.show_status(f"Category ID {new_id} already exists", error=True)
+                    QMessageBox.warning(self, "ID Exists", f"Category ID {new_id} already exists.\nPlease choose a unique ID.")
+                    QTimer.singleShot(0, self.load_categories)
+                    return
+
+                reply = QMessageBox.question(
+                    self, 'Confirm ID Change', 
+                    f'Are you sure you want to change Category ID from {old_id} to {new_id}?\n'
+                    f'This will update all linked transactions and budgets.',
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+
+                if reply == QMessageBox.StandardButton.Yes:
+                    success, msg = self.budget_app.update_category_id(old_id, new_id)
+                    if success:
+                         self.show_status(f'Category ID updated to {new_id}')
+                         # Delay reload to avoid commitData warning
+                         QTimer.singleShot(0, self.load_categories)
+                         if hasattr(self.parent_window, 'refresh_global_state'):
+                            self.parent_window.refresh_global_state()
+                    else:
+                        self.show_status(f'Error: {msg}', error=True)
+                        QTimer.singleShot(0, self.load_categories)
+                else:
+                    QTimer.singleShot(0, self.load_categories)
+
                 return
 
             new_value = item.text().strip()

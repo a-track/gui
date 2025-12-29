@@ -491,7 +491,7 @@ class TransactionsDialog(QDialog):
         self.table.setRowCount(len(transactions))
         self.table.setSortingEnabled(False)
 
-        accounts = self.budget_app.get_all_accounts()
+        accounts = self.budget_app.get_all_accounts(show_inactive=True)
         accounts_map = {
             acc.id: f'{acc.account} {acc.currency}' for acc in accounts}
 

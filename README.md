@@ -1,8 +1,16 @@
-# Budget Tracker GUI v3.10
+# Budget Tracker GUI v3.11
 
 A powerful and user-friendly desktop application for personal finance management, built with Python, PyQt6, and DuckDB.
 
 ## Features
+
+### v3.11 Updates (Investment Perfomance)
+- **Advanced Return Metrics**: Added **IRR** (Internal Rate of Return) and **TWR** (Time-Weighted Return) to the Investment Performance tab.
+    - **IRR**: Calculates your personal money-weighted return (accuracy requires historical cash flow data).
+    - **TWR**: Calculates the asset's true performance independent of your deposits/withdrawals.
+    - **Full Support**: TWR now works for both "Total Value" managed accounts AND "Price/Qty" tracked accounts by reconstructing historical value curves.
+- **Total Portfolio Metrics**: The "Total" row now aggregates all accounts to show a unified Portfolio IRR and TWR (currency adjusted to CHF).
+- **Corrected Logic**: Improved handling of stock purchases/sales in quantity tracking for more accurate performance calculation.
 
 ### v3.10 Updates
 - **Access / Power BI Export**:
