@@ -1,8 +1,15 @@
-# Budget Tracker GUI v3.9
+# Budget Tracker GUI v3.10
 
 A powerful and user-friendly desktop application for personal finance management, built with Python, PyQt6, and DuckDB.
 
 ## Features
+
+### v3.10 Updates
+- **Access / Power BI Export**:
+    - **One-Click Export**: Export your entire financial dataset to a Microsoft Access (`.accdb`) database.
+    - **Ultra-Fast Performance**: Optimized "Bulk Load" engine using Access Automation (imports 100k+ rows in seconds).
+    - **Power BI Ready**: Includes pre-calculated tables (`api_balance`, `api_currency` with historical rates) for instant reporting.
+    - **Data Integrity**: Clean dates (no timestamps), SCD2 exchange rates, and full dependency handling.
 
 ### v3.9 Updates
 - **Account Perspective Overhaul**:

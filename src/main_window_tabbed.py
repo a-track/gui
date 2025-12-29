@@ -23,7 +23,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        title = 'Budget Tracker 3.9'
+        title = 'Budget Tracker 3.10'
         if self.db_path:
             title += f' - [{self.db_path}]'
         self.setWindowTitle(title)

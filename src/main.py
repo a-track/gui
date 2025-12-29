@@ -49,7 +49,7 @@ def main():
 
     try:
         import ctypes
-        myappid = 'antigravity.budgettracker.app.3.9'
+        myappid = 'antigravity.budgettracker.app.3.10'
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except Exception:
         pass

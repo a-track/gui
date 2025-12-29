@@ -3,6 +3,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel,
 from PyQt6.QtCore import QSettings
 import os
 from import_export import DataManager
+import access_writer
+import sys
 from models import BudgetApp
 
 
@@ -180,7 +182,55 @@ class DataManagementTab(QWidget):
         import_layout.addWidget(template_btn)
 
         import_group.setLayout(import_layout)
+        import_group.setLayout(import_layout)
         layout.addWidget(import_group)
+
+        # --- Access / Power BI Export ---
+        access_group = QGroupBox("Power BI / Access Export")
+        access_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 16px;
+                font-weight: bold;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding-top: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        access_layout = QVBoxLayout()
+        access_layout.setSpacing(10)
+
+        access_desc = QLabel(
+            "Export data to a Microsoft Access Database (.accdb) for use in Power BI.\n"
+            "Requires Microsoft Access or Access Database Engine installed."
+        )
+        access_desc.setWordWrap(True)
+        access_layout.addWidget(access_desc)
+
+        access_btn = QPushButton("Export to Access Database (.accdb)")
+        access_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #00796B;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #004D40;
+            }
+        """)
+        access_btn.clicked.connect(self.export_to_access)
+        access_btn.setToolTip("Run SQL scripts and export results to Access.")
+        access_layout.addWidget(access_btn)
+
+        access_group.setLayout(access_layout)
+        layout.addWidget(access_group)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -320,3 +370,76 @@ class DataManagementTab(QWidget):
             settings.remove("db_path")
 
             QApplication.exit(888)
+
+    def export_to_access(self):
+        settings = QSettings()
+        last_dir = settings.value("last_access_export_dir", os.path.expanduser("~/Desktop"))
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export to Access Database",
+            os.path.join(last_dir, "budget_export.accdb"),
+            "Microsoft Access Database (*.accdb)"
+        )
+
+        if not file_path:
+            return
+
+        if not file_path.lower().endswith('.accdb'):
+            file_path += '.accdb'
+            
+        # Save directory for next time
+        settings.setValue("last_access_export_dir", os.path.dirname(file_path))
+
+        # Determine SQL folder path
+        if getattr(sys, 'frozen', False):
+            base_path = os.path.dirname(sys.executable)
+        else:
+            # src/../sql -> resolve absolute
+            base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        
+        sql_path = os.path.join(base_path, 'sql')
+        
+        # Verify SQL folder exists
+        if not os.path.exists(sql_path):
+            QMessageBox.critical(self, "Error", f"SQL folder not found at:\n{sql_path}")
+            return
+
+        self.progress_bar.show()
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("Initializing... %p%")
+        QApplication.processEvents()
+        
+        try:
+            # Define callback for UI updates
+            def update_status(msg):
+                print(f"Status: {msg}") 
+                self.progress_bar.setFormat(f"{msg}")
+                # Simple pulsing
+                val = self.progress_bar.value()
+                if val < 90:
+                    self.progress_bar.setValue(val + 5)
+                QApplication.processEvents()
+
+            success, msg = access_writer.export_to_access(
+                self.budget_app.db_path,
+                file_path,
+                sql_path,
+                progress_callback=update_status
+            )
+            
+            self.progress_bar.setValue(100)
+            self.progress_bar.setFormat("Done")
+            QApplication.processEvents()
+            
+            if success:
+                QMessageBox.information(self, "Export Successful", msg)
+            else:
+                QMessageBox.critical(self, "Export Failed", f"An error occurred:\n{msg}")
+                
+        except Exception as e:
+            self.progress_bar.hide()
+            QMessageBox.critical(self, "Export Error", f"Unexpected error: {str(e)}")
+        finally:
+            self.progress_bar.hide()
+            self.progress_bar.setValue(0)
+            self.progress_bar.setFormat("%p%")
