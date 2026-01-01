@@ -118,7 +118,7 @@ class CategoriesDialog(QDialog):
         header = self.table.horizontalHeader()
         for col in range(5):
             header.setSectionResizeMode(
-                col, QHeaderView.ResizeMode.ResizeToContents)
+                col, QHeaderView.ResizeMode.Interactive)
 
         self.table.verticalHeader().setDefaultSectionSize(35)
         layout.addWidget(self.table)
@@ -184,75 +184,79 @@ class CategoriesDialog(QDialog):
             self.show_status('Error loading categories', error=True)
 
     def populate_table(self, categories):
+        self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
         self.table.setSortingEnabled(False)
-        self.table.setRowCount(0)
+        try:
+            self.table.setRowCount(0)
 
-        valid_categories = [
-            c for c in categories if c.id and c.category and str(c.category).strip()]
+            valid_categories = [
+                c for c in categories if c.id and c.category and str(c.category).strip()]
 
-        self.table.setRowCount(len(valid_categories))
+            self.table.setRowCount(len(valid_categories))
 
-        for row, category in enumerate(valid_categories):
-            try:
+            for row, category in enumerate(valid_categories):
+                try:
 
-                id_item = NumericTableWidgetItem(str(category.id))
-                # Allow editing ID
-                id_item.setFlags(id_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                id_item.setToolTip("Double click to change ID")
-                id_item.setBackground(QColor(240, 240, 240))
-                id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.table.setItem(row, 0, id_item)
+                    id_item = NumericTableWidgetItem(str(category.id))
+                    # Allow editing ID
+                    id_item.setFlags(id_item.flags() | Qt.ItemFlag.ItemIsEditable)
+                    id_item.setToolTip("Double click to change ID")
+                    id_item.setBackground(QColor(240, 240, 240))
+                    id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.table.setItem(row, 0, id_item)
 
-                type_item = QTableWidgetItem(category.category_type or "")
-                self.table.setItem(row, 1, type_item)
+                    type_item = QTableWidgetItem(category.category_type or "")
+                    self.table.setItem(row, 1, type_item)
 
-                parent_item = QTableWidgetItem(category.category or "")
-                self.table.setItem(row, 2, parent_item)
+                    parent_item = QTableWidgetItem(category.category or "")
+                    self.table.setItem(row, 2, parent_item)
 
-                sub_item = QTableWidgetItem(category.sub_category or "")
-                self.table.setItem(row, 3, sub_item)
+                    sub_item = QTableWidgetItem(category.sub_category or "")
+                    self.table.setItem(row, 3, sub_item)
 
-                action_widget = QWidget()
-                action_layout = QHBoxLayout()
-                action_layout.setContentsMargins(1, 1, 1, 1)
-                action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    action_widget = QWidget()
+                    action_layout = QHBoxLayout()
+                    action_layout.setContentsMargins(1, 1, 1, 1)
+                    action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-                delete_btn = QPushButton('✕')
-                delete_btn.setFixedSize(22, 22)
-                delete_btn.setStyleSheet('''
-                    QPushButton {
-                        background-color: #ff4444;
-                        color: white;
-                        border: none;
-                        border-radius: 11px;
-                        font-weight: bold;
-                        font-size: 9px;
-                        margin: 0px;
-                        padding: 0px;
-                    }
-                    QPushButton:hover {
-                        background-color: #cc0000;
-                    }
-                    QPushButton:pressed {
-                        background-color: #990000;
-                    }
-                ''')
-                delete_btn.setProperty('cat_id', category.id)
-                delete_btn.clicked.connect(self.delete_category)
-                delete_btn.setToolTip('Delete category')
+                    delete_btn = QPushButton('✕')
+                    delete_btn.setFixedSize(22, 22)
+                    delete_btn.setStyleSheet('''
+                        QPushButton {
+                            background-color: #ff4444;
+                            color: white;
+                            border: none;
+                            border-radius: 11px;
+                            font-weight: bold;
+                            font-size: 9px;
+                            margin: 0px;
+                            padding: 0px;
+                        }
+                        QPushButton:hover {
+                            background-color: #cc0000;
+                        }
+                        QPushButton:pressed {
+                            background-color: #990000;
+                        }
+                    ''')
+                    delete_btn.setProperty('cat_id', category.id)
+                    delete_btn.clicked.connect(self.delete_category)
+                    delete_btn.setToolTip('Delete category')
 
-                action_layout.addWidget(delete_btn)
-                action_widget.setLayout(action_layout)
+                    action_layout.addWidget(delete_btn)
+                    action_widget.setLayout(action_layout)
 
-                self.table.setCellWidget(row, 4, action_widget)
-            except Exception as e:
-                print(f"Error populating category row {row}: {e}")
+                    self.table.setCellWidget(row, 4, action_widget)
+                except Exception as e:
+                    print(f"Error populating category row {row}: {e}")
 
-        self.table.setColumnWidth(0, 50)
-        self.table.resizeColumnsToContents()
-        self.table.setSortingEnabled(True)
-        self.table.blockSignals(False)
+            self.table.setColumnWidth(0, 50)
+            self.table.resizeColumnsToContents()
+        finally:
+            self.table.setSortingEnabled(True)
+            self.table.blockSignals(False)
+            self.table.setUpdatesEnabled(True)
 
         total_width = self.table.horizontalHeader().length() + 80
         if total_width > self.width():
@@ -473,11 +477,20 @@ class CategoriesDialog(QDialog):
             self.show_status('Error deleting category', error=True)
 
     def show_status(self, message, error=False):
-        self.status_label.setText(message)
-        if error:
-            self.status_label.setStyleSheet(
-                'color: #f44336; padding: 5px; font-weight: bold;')
-        else:
-            self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
+        try:
+            self.status_label.setText(message)
+            if error:
+                self.status_label.setStyleSheet(
+                    'color: #f44336; padding: 5px; font-weight: bold;')
+            else:
+                self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
 
-        QTimer.singleShot(5000, lambda: self.status_label.setText(''))
+            QTimer.singleShot(5000, self._safe_clear_status)
+        except RuntimeError:
+            pass
+
+    def _safe_clear_status(self):
+        try:
+            self.status_label.setText('')
+        except RuntimeError:
+            pass

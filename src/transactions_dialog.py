@@ -312,7 +312,7 @@ class TransactionsDialog(QDialog):
         content_columns = [9, 10, 11]
         for col in content_columns:
             header.setSectionResizeMode(
-                col, QHeaderView.ResizeMode.ResizeToContents)
+                col, QHeaderView.ResizeMode.Interactive)
 
         self.table.verticalHeader().setDefaultSectionSize(35)
 
@@ -487,167 +487,171 @@ class TransactionsDialog(QDialog):
             self.loader_thread.wait()
 
     def populate_table(self, transactions):
+        self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
-        self.table.setRowCount(len(transactions))
-        self.table.setSortingEnabled(False)
+        try:
+            self.table.setRowCount(len(transactions))
+            self.table.setSortingEnabled(False)
 
-        accounts = self.budget_app.get_all_accounts(show_inactive=True)
-        accounts_map = {
-            acc.id: f'{acc.account} {acc.currency}' for acc in accounts}
+            accounts = self.budget_app.get_all_accounts(show_inactive=True)
+            accounts_map = {
+                acc.id: f'{acc.account} {acc.currency}' for acc in accounts}
 
-        for row, trans in enumerate(transactions):
+            for row, trans in enumerate(transactions):
 
-            if not trans.date:
-                continue
+                if not trans.date:
+                    continue
 
-            id_item = NumericTableWidgetItem(str(trans.id))
-            id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            id_item.setBackground(QColor(240, 240, 240))
-            id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.table.setItem(row, 0, id_item)
+                id_item = NumericTableWidgetItem(str(trans.id))
+                id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                id_item.setBackground(QColor(240, 240, 240))
+                id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(row, 0, id_item)
 
-            date_item = QTableWidgetItem(str(trans.date))
-            self.table.setItem(row, 1, date_item)
+                date_item = QTableWidgetItem(str(trans.date))
+                self.table.setItem(row, 1, date_item)
 
-            type_item = QTableWidgetItem(str.title(trans.type))
-            type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 2, type_item)
+                type_item = QTableWidgetItem(str.title(trans.type))
+                type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 2, type_item)
 
-            amount_value = trans.amount
+                amount_value = trans.amount
 
-            amount_item = NumericTableWidgetItem(
-                f"{amount_value:.2f}" if amount_value is not None else "")
-            if amount_value is not None:
-                amount_item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.table.setItem(row, 3, amount_item)
+                amount_item = NumericTableWidgetItem(
+                    f"{amount_value:.2f}" if amount_value is not None else "")
+                if amount_value is not None:
+                    amount_item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.table.setItem(row, 3, amount_item)
 
-            to_amount_value = trans.to_amount
-            to_amount_item = NumericTableWidgetItem(
-                f"{to_amount_value:.2f}" if to_amount_value is not None else "")
-            if to_amount_value is not None:
-                to_amount_item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                to_amount_value = trans.to_amount
+                to_amount_item = NumericTableWidgetItem(
+                    f"{to_amount_value:.2f}" if to_amount_value is not None else "")
+                if to_amount_value is not None:
+                    to_amount_item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
-            if trans.type != 'transfer':
-                to_amount_item.setFlags(
-                    to_amount_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                to_amount_item.setBackground(QColor(245, 245, 245))
+                if trans.type != 'transfer':
+                    to_amount_item.setFlags(
+                        to_amount_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    to_amount_item.setBackground(QColor(245, 245, 245))
 
-            self.table.setItem(row, 4, to_amount_item)
+                self.table.setItem(row, 4, to_amount_item)
 
-            qty_value = trans.qty
-            qty_item = NumericTableWidgetItem(
-                str(qty_value) if qty_value is not None else "")
-            if qty_value is not None:
-                qty_item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.table.setItem(row, 5, qty_item)
+                qty_value = trans.qty
+                qty_item = NumericTableWidgetItem(
+                    str(qty_value) if qty_value is not None else "")
+                if qty_value is not None:
+                    qty_item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.table.setItem(row, 5, qty_item)
 
-            account_name = accounts_map.get(trans.account_id, "")
-            self.table.setItem(row, 6, QTableWidgetItem(account_name))
+                account_name = accounts_map.get(trans.account_id, "")
+                self.table.setItem(row, 6, QTableWidgetItem(account_name))
 
-            to_account_name = accounts_map.get(trans.to_account_id, "")
-            to_account_item = QTableWidgetItem(to_account_name)
-            if trans.type != 'transfer':
-                to_account_item.setFlags(
-                    to_account_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                to_account_item.setBackground(QColor(245, 245, 245))
-            self.table.setItem(row, 7, to_account_item)
+                to_account_name = accounts_map.get(trans.to_account_id, "")
+                to_account_item = QTableWidgetItem(to_account_name)
+                if trans.type != 'transfer':
+                    to_account_item.setFlags(
+                        to_account_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    to_account_item.setBackground(QColor(245, 245, 245))
+                self.table.setItem(row, 7, to_account_item)
 
-            inv_account_name = accounts_map.get(trans.invest_account_id, "")
-            inv_account_item = QTableWidgetItem(inv_account_name)
+                inv_account_name = accounts_map.get(trans.invest_account_id, "")
+                inv_account_item = QTableWidgetItem(inv_account_name)
 
-            if trans.type not in ['investment', 'income', 'expense']:
-                inv_account_item.setFlags(
-                    inv_account_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                inv_account_item.setBackground(QColor(245, 245, 245))
+                if trans.type not in ['investment', 'income', 'expense']:
+                    inv_account_item.setFlags(
+                        inv_account_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    inv_account_item.setBackground(QColor(245, 245, 245))
 
-            self.table.setItem(row, 8, inv_account_item)
+                self.table.setItem(row, 8, inv_account_item)
 
-            payee_item = QTableWidgetItem(trans.payee or "")
-            if trans.type == 'transfer':
-                payee_item.setFlags(payee_item.flags() & ~
-                                    Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 9, payee_item)
+                payee_item = QTableWidgetItem(trans.payee or "")
+                if trans.type == 'transfer':
+                    payee_item.setFlags(payee_item.flags() & ~
+                                        Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 9, payee_item)
 
-            sub_category_item = QTableWidgetItem(trans.sub_category or "")
-            if trans.type == 'transfer':
-                sub_category_item.setFlags(
-                    sub_category_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 10, sub_category_item)
+                sub_category_item = QTableWidgetItem(trans.sub_category or "")
+                if trans.type == 'transfer':
+                    sub_category_item.setFlags(
+                        sub_category_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 10, sub_category_item)
 
-            notes_item = QTableWidgetItem(trans.notes or "")
-            self.table.setItem(row, 11, notes_item)
+                notes_item = QTableWidgetItem(trans.notes or "")
+                self.table.setItem(row, 11, notes_item)
 
-            checkbox_widget = QWidget()
-            checkbox_layout = QHBoxLayout()
-            checkbox_layout.setContentsMargins(0, 0, 0, 0)
-            checkbox_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                checkbox_widget = QWidget()
+                checkbox_layout = QHBoxLayout()
+                checkbox_layout.setContentsMargins(0, 0, 0, 0)
+                checkbox_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            checkbox = QCheckBox()
-            checkbox.setChecked(trans.confirmed)
-            checkbox.setProperty('trans_id', trans.id)
-            checkbox.stateChanged.connect(self.on_checkbox_changed)
+                checkbox = QCheckBox()
+                checkbox.setChecked(trans.confirmed)
+                checkbox.setProperty('trans_id', trans.id)
+                checkbox.stateChanged.connect(self.on_checkbox_changed)
 
-            checkbox_layout.addWidget(checkbox)
-            checkbox_widget.setLayout(checkbox_layout)
+                checkbox_layout.addWidget(checkbox)
+                checkbox_widget.setLayout(checkbox_layout)
 
-            conf_val = "Yes" if trans.confirmed else "No"
-            conf_item = ConfirmedTableWidgetItem(conf_val)
-            conf_item.setFlags(Qt.ItemFlag.ItemIsEnabled |
-                               Qt.ItemFlag.ItemIsSelectable)
-            conf_item.setForeground(QColor(0, 0, 0, 0))
-            self.table.setItem(row, 12, conf_item)
+                conf_val = "Yes" if trans.confirmed else "No"
+                conf_item = ConfirmedTableWidgetItem(conf_val)
+                conf_item.setFlags(Qt.ItemFlag.ItemIsEnabled |
+                                   Qt.ItemFlag.ItemIsSelectable)
+                conf_item.setForeground(QColor(0, 0, 0, 0))
+                self.table.setItem(row, 12, conf_item)
 
-            self.table.setCellWidget(row, 12, checkbox_widget)
+                self.table.setCellWidget(row, 12, checkbox_widget)
 
-            action_widget = QWidget()
-            action_layout = QHBoxLayout()
-            action_layout.setContentsMargins(1, 1, 1, 1)
-            action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                action_widget = QWidget()
+                action_layout = QHBoxLayout()
+                action_layout.setContentsMargins(1, 1, 1, 1)
+                action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            delete_btn = QPushButton('✕')
-            delete_btn.setFixedSize(22, 22)
-            delete_btn.setStyleSheet('''
-                QPushButton {
-                    background-color: #ff4444;
-                    color: white;
-                    border: none;
-                    border-radius: 11px;
-                    font-weight: bold;
-                    font-size: 9px;
-                    margin: 0px;
-                    padding: 0px;
-                }
-                QPushButton:hover {
-                    background-color: #cc0000;
-                }
-                QPushButton:pressed {
-                    background-color: #990000;
-                }
-            ''')
-            delete_btn.setProperty('trans_id', trans.id)
-            delete_btn.clicked.connect(self.on_delete_clicked)
-            delete_btn.setToolTip('Delete transaction')
+                delete_btn = QPushButton('✕')
+                delete_btn.setFixedSize(22, 22)
+                delete_btn.setStyleSheet('''
+                    QPushButton {
+                        background-color: #ff4444;
+                        color: white;
+                        border: none;
+                        border-radius: 11px;
+                        font-weight: bold;
+                        font-size: 9px;
+                        margin: 0px;
+                        padding: 0px;
+                    }
+                    QPushButton:hover {
+                        background-color: #cc0000;
+                    }
+                    QPushButton:pressed {
+                        background-color: #990000;
+                    }
+                ''')
+                delete_btn.setProperty('trans_id', trans.id)
+                delete_btn.clicked.connect(self.on_delete_clicked)
+                delete_btn.setToolTip('Delete transaction')
 
-            action_layout.addWidget(delete_btn)
-            action_widget.setLayout(action_layout)
+                action_layout.addWidget(delete_btn)
+                action_widget.setLayout(action_layout)
 
-            self.table.setCellWidget(row, 13, action_widget)
+                self.table.setCellWidget(row, 13, action_widget)
 
-            self.color_row_by_type(row, trans.type)
+                self.color_row_by_type(row, trans.type)
 
-        self.table.resizeColumnsToContents()
+            self.table.resizeColumnsToContents()
 
-        self.table.setColumnWidth(1, max(150, self.table.columnWidth(1)))
+            self.table.setColumnWidth(1, max(150, self.table.columnWidth(1)))
 
-        total_width = self.table.horizontalHeader().length() + 80
-        if total_width > self.width():
-            self.resize(total_width, self.height())
-
-        self.table.blockSignals(False)
-        self.table.setSortingEnabled(True)
+            total_width = self.table.horizontalHeader().length() + 80
+            if total_width > self.width():
+                self.resize(total_width, self.height())
+        
+        finally:
+            self.table.blockSignals(False)
+            self.table.setSortingEnabled(True)
+            self.table.setUpdatesEnabled(True)
 
     def on_cell_changed(self, row, column):
         try:

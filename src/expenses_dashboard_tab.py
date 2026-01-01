@@ -128,7 +128,7 @@ class CategoryFilterDialog(QDialog):
 
 
 try:
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.figure import Figure
     import matplotlib.pyplot as plt
     MATPLOTLIB_AVAILABLE = True

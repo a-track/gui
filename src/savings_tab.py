@@ -8,7 +8,7 @@ from custom_widgets import NoScrollComboBox
 
 MATPLOTLIB_AVAILABLE = False
 try:
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.figure import Figure
     import matplotlib.pyplot as plt
     MATPLOTLIB_AVAILABLE = True
@@ -38,6 +38,7 @@ class SavingsTab(QWidget):
         self.chart_data = None
         self.bars_income = None
         self.bars_expense = None
+        self.bars_invested = None
         self.init_ui()
 
     def init_ui(self):
@@ -140,33 +141,55 @@ class SavingsTab(QWidget):
 
         incomes = []
         expenses = []
-        net_savings = []
+        monthly_invested = []
+        
         cumulative_savings = []
-        running_total = 0.0
+        cumulative_invested = []
+        
+        running_savings = 0.0
+        running_invested = 0.0
 
         for m in months:
-            val = data.get(m, {'income': 0.0, 'expense': 0.0})
+            val = data.get(m, {'income': 0.0, 'expense': 0.0, 'invested': 0.0})
             inc = val.get('income', 0.0)
             exp = val.get('expense', 0.0)
+            inv = val.get('invested', 0.0)
+            
             incomes.append(inc)
             expenses.append(-exp)
+            monthly_invested.append(inv)
 
             net = inc - exp
-            net_savings.append(net)
+            # net_savings.append(net) # Not directly used for plotting, but for cumulative
 
-            running_total += net
-            cumulative_savings.append(running_total)
+            running_savings += net
+            cumulative_savings.append(running_savings)
+            
+            running_invested += inv
+            cumulative_invested.append(running_invested)
 
+        # Calculate YTD Totals
+        tot_inc = sum(incomes)
+        tot_exp = sum([abs(x) for x in expenses])
+        tot_net = tot_inc - tot_exp
+        tot_inv = sum(monthly_invested)
+        tot_saved = tot_net - tot_inv
+
+        # 1. Cash Bars (Standard)
         self.bars_income = ax.bar(
             months, incomes, color='#4CAF50', label='Income', alpha=0.7)
         self.bars_expense = ax.bar(
             months, expenses, color='#F44336', label='Expenses', alpha=0.7)
-
+            
+        # 2. Cumulative Lines
         ax.plot(months, cumulative_savings, color='#2196F3',
                 marker='o', linewidth=2, label='Accumulated Savings')
+                
+        ax.plot(months, cumulative_invested, color='#7B1FA2',
+                marker='s', linewidth=2, label='Accumulated Invested')
 
+        # Annotations (Savings Line)
         for i, val in enumerate(cumulative_savings):
-
             if i % 1 == 0:
                 ax.annotate(f'{int(val):,}',
                             xy=(months[i], val),
@@ -175,35 +198,51 @@ class SavingsTab(QWidget):
                             ha='center', va='bottom',
                             color='#1565C0', fontsize=8, fontweight='bold')
 
-        ax.axhline(0, color='black', linewidth=0.8)
-
-        for i, (inc, exp) in enumerate(zip(incomes, expenses)):
-
-            if abs(inc) > 1.0:
-                ax.annotate(f'{int(inc):,}',
-                            xy=(months[i], inc),
-                            xytext=(0, 3),
-                            textcoords="offset points",
-                            ha='center', va='bottom',
-                            color='#1B5E20', fontsize=8, fontweight='bold')
-
-            if abs(exp) > 1.0:
-                ax.annotate(f'{int(abs(exp)):,}',
-
-
-                            xy=(months[i], exp),
-                            xytext=(0, -3),
+        # Annotations (Invested Line)
+        for i, val in enumerate(cumulative_invested):
+            if i % 1 == 0:
+                ax.annotate(f'{int(val):,}',
+                            xy=(months[i], val),
+                            xytext=(0, -10),
                             textcoords="offset points",
                             ha='center', va='top',
-                            color='#B71C1C', fontsize=8, fontweight='bold')
+                            color='#6A1B9A', fontsize=8, fontweight='bold')
 
-        ax.set_title(f'Monthly Cashflow ({self.current_year})')
+        ax.axhline(0, color='black', linewidth=0.8)
+
+        # Annotate Bars
+        for i in range(len(months)):
+            inc = incomes[i]
+            exp = expenses[i]
+
+            # Income Annotation
+            if abs(inc) > 1.0:
+                ax.annotate(f'{int(inc):,}',
+                            xy=(months[i], inc/2),
+                            ha='center', va='center',
+                            color='white', fontsize=7, fontweight='bold')
+
+            # Expense Annotation
+            if abs(exp) > 1.0:
+                 ax.annotate(f'{int(abs(exp)):,}',
+                            xy=(months[i], exp/2),
+                            ha='center', va='center',
+                            color='white', fontsize=7, fontweight='bold')
+        
+        title_text = f'Monthly Cashflow ({self.current_year})'
+        subtitle_text = (f"Inc: {tot_inc:,.0f} | Exp: {tot_exp:,.0f} | "
+                         f"Net: {tot_net:,.0f} | Inv: {tot_inv:,.0f} | Saved: {tot_saved:,.0f}")
+        
+        ax.set_title(f"{title_text}\n{subtitle_text}", fontsize=10)
         ax.set_ylabel('Amount (CHF)')
         ax.set_xticks(months)
         ax.set_xticklabels(month_labels)
         ax.grid(True, axis='y', linestyle=':', alpha=0.6)
 
-        ax.legend(loc='best')
+        # Legend
+        handles, labels = ax.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        ax.legend(by_label.values(), by_label.keys(), loc='best')
 
         ax.get_yaxis().set_major_formatter(
             plt.FuncFormatter(lambda x, p: format(int(x), ',')))
@@ -216,17 +255,17 @@ class SavingsTab(QWidget):
         if event.inaxes != self.figure.axes[0]:
             return
 
-        if self.bars_income:
-            for i, bar in enumerate(self.bars_income):
-                if bar.contains(event)[0]:
-                    self.show_tooltip(event, i + 1, 'income')
-                    return
+        checks = [
+            (self.bars_income, 'income'),
+            (self.bars_expense, 'expense')
+        ]
 
-        if self.bars_expense:
-            for i, bar in enumerate(self.bars_expense):
-                if bar.contains(event)[0]:
-                    self.show_tooltip(event, i + 1, 'expense')
-                    return
+        for bar_container, type_key in checks:
+            if bar_container:
+                for i, bar in enumerate(bar_container):
+                    if bar.contains(event)[0]:
+                        self.show_tooltip(event, i + 1, type_key)
+                        return
 
     def show_tooltip(self, event, month, type_key):
         if not self.chart_data:
@@ -234,6 +273,12 @@ class SavingsTab(QWidget):
 
         month_data = self.chart_data.get(month, {})
         if not month_data:
+            return
+            
+        if type_key == 'invested':
+            val = month_data.get('invested', 0.0)
+            text = f"Net Invested: {val:,.2f}"
+            QToolTip.showText(QCursor.pos(), text)
             return
 
         details = month_data.get('details', {}).get(type_key, {})
@@ -244,8 +289,6 @@ class SavingsTab(QWidget):
 
         sorted_cats = sorted(
             details.items(), key=lambda x: x[1]['total'], reverse=True)
-
-        title = "Income" if type_key == 'income' else "Expenses"
 
         lines = []
 

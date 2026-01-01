@@ -265,7 +265,7 @@ class AccountPerspectiveDialog(QDialog):
         content_columns = [1, 2, 3, 5, 6, 7]
         for col in content_columns:
             header.setSectionResizeMode(
-                col, QHeaderView.ResizeMode.ResizeToContents)
+                col, QHeaderView.ResizeMode.Interactive)
 
         fixed_columns = [0, 4, 8, 9]
         for col in fixed_columns:
@@ -391,66 +391,16 @@ class AccountPerspectiveDialog(QDialog):
             self.selected_account_id = self.account_combo.currentData()
             self.load_account_data()
 
-    def calculate_running_balance_history(self):
-        if not self.selected_account_id or not self.all_transactions_for_account:
-            return {}
-
-        sorted_transactions = sorted(
-            self.all_transactions_for_account, key=lambda x: (x.date, x.id))
-
-        running_balance = 0.0
-        balance_history = {}
-
-        for trans in sorted_transactions:
-            if trans.type == 'income' and trans.account_id == self.selected_account_id:
-                transaction_amount = float(trans.amount or 0)
-                running_balance += transaction_amount
-
-            elif trans.type == 'expense' and trans.account_id == self.selected_account_id:
-                transaction_amount = float(trans.amount or 0)
-                running_balance -= transaction_amount
-
-            elif trans.type == 'transfer':
-                if trans.account_id == self.selected_account_id:
-                    transaction_amount = float(trans.amount or 0)
-                    running_balance -= transaction_amount
-                elif trans.to_account_id == self.selected_account_id:
-                    transaction_amount = float(trans.to_amount or 0)
-                    running_balance += transaction_amount
-
-            balance_history[trans.id] = running_balance
-
-        return balance_history
-
     def load_account_data(self):
         if not self.selected_account_id:
             return
 
         try:
             account_id = self.selected_account_id
-
-            all_transactions = self.budget_app.get_all_transactions()
-
-            self.all_transactions_for_account = []
-            for trans in all_transactions:
-                if (trans.account_id == account_id or
-                        trans.to_account_id == account_id):
-                    self.all_transactions_for_account.append(trans)
-
-            valid_transactions = [
-                t for t in self.all_transactions_for_account
-                if t.date and str(t.date).strip()
-                and t.id
-                and t.type and str(t.type).strip()
-                and t.amount is not None and str(t.amount).strip() != ""
-            ]
-            self.all_transactions_for_account = valid_transactions
-
-            dates = [t.date for t in valid_transactions if t.date]
-            if dates:
-                pass
-
-            self.running_balance_history = self.calculate_running_balance_history()
+            
+            # Optimized fetch with SQL window functions
+            self.all_transactions_for_account, self.running_balance_history = \
+                self.budget_app.get_account_transactions_with_balance(account_id)
 
             self.apply_filters()
 
@@ -708,165 +658,121 @@ class AccountPerspectiveDialog(QDialog):
         self.table.blockSignals(False)
 
     def populate_table(self, transaction_history):
+        self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
-
-        valid_history = transaction_history
-
-        self.table.setRowCount(0)
-        self.table.setRowCount(len(valid_history))
         self.table.setSortingEnabled(False)
-
-        self.transaction_history_map = {}
-
-        for row, data in enumerate(valid_history):
-            try:
+        
+        try:
+            self.table.setRowCount(len(transaction_history))
+            
+            for row, data in enumerate(transaction_history):
                 trans = data['transaction']
-                self.transaction_history_map[row] = trans
-
                 transaction_amount = data['transaction_amount']
                 effect = data['effect']
                 running_balance = data['running_balance']
                 other_account = data['other_account']
 
+                # 0: Date
                 date_item = QTableWidgetItem(str(trans.date))
+                date_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 0, date_item)
 
-                t_type = str(trans.type).capitalize(
-                ) if trans.type else "Unknown"
-                type_item = QTableWidgetItem(t_type)
-                type_item.setFlags(type_item.flags() & ~
-                                   Qt.ItemFlag.ItemIsEditable)
+                # 1: Type
+                type_item = QTableWidgetItem(str(trans.type).capitalize())
+                type_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
                 self.table.setItem(row, 1, type_item)
 
-                category_item = QTableWidgetItem(trans.sub_category or "")
-                if trans.type == 'transfer':
-                    category_item.setFlags(
-                        category_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 2, category_item)
+                # 2: Category
+                cat_item = QTableWidgetItem(trans.sub_category or "")
+                # Category typically editable
+                cat_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 2, cat_item)
 
+                # 3: Payee
                 payee_item = QTableWidgetItem(trans.payee or "")
-                if trans.type == 'transfer':
-                    payee_item.setFlags(payee_item.flags()
-                                        & ~Qt.ItemFlag.ItemIsEditable)
+                payee_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 3, payee_item)
 
-                other_acc_item = QTableWidgetItem(other_account)
+                # 4: Other Account
+                other_item = QTableWidgetItem(other_account)
+                other_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                self.table.setItem(row, 4, other_item)
 
-                other_acc_item.setFlags(
-                    other_acc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 4, other_acc_item)
+                # 5: Notes
+                note_item = QTableWidgetItem(trans.notes or "")
+                note_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 5, note_item)
 
-                notes_item = QTableWidgetItem(trans.notes or "")
-                self.table.setItem(row, 5, notes_item)
-
-                formatted_amount = self.format_swiss_number(transaction_amount)
-                trans_amount_text = f"{effect}{formatted_amount}"
-
-                trans_effect_item = NumericTableWidgetItem(trans_amount_text)
-                if effect == "+":
-                    trans_effect_item.setForeground(QColor(0, 128, 0))
+                # 6: Transaction Amount
+                amount_str = f"{effect}{abs(transaction_amount):,.2f}"
+                amt_item = NumericTableWidgetItem(amount_str)
+                amt_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                if effect == '+':
+                    amt_item.setForeground(QColor("#2e7d32")) # Green
                 else:
-                    trans_effect_item.setForeground(QColor(255, 0, 0))
-                font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-                trans_effect_item.setFont(font)
-                self.table.setItem(row, 6, trans_effect_item)
+                    amt_item.setForeground(QColor("#c62828")) # Red
+                self.table.setItem(row, 6, amt_item)
 
-                self.format_swiss_number(abs(running_balance))
-                balance_item = NumericTableWidgetItem(f"{running_balance:.2f}")
-                if running_balance > 0:
-                    balance_item.setForeground(QColor(0, 128, 0))
-                elif running_balance < 0:
-                    balance_item.setForeground(QColor(255, 0, 0))
-                else:
-                    balance_item.setForeground(QColor(0, 0, 0))
-                font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-                balance_item.setFont(font)
-                balance_item.setFlags(
-                    balance_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 7, balance_item)
+                # 7: Running Balance
+                bal_item = NumericTableWidgetItem(f"{running_balance:,.2f}")
+                bal_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                bal_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                self.table.setItem(row, 7, bal_item)
 
-                checkbox_widget = QWidget()
-                checkbox_layout = QHBoxLayout()
-                checkbox_layout.setContentsMargins(0, 0, 0, 0)
-                checkbox_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                # 8: Confirmed
+                chk_widget = QWidget()
+                chk_layout = QHBoxLayout()
+                chk_layout.setContentsMargins(0, 0, 0, 0)
+                chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                chk = QCheckBox()
+                chk.setChecked(trans.confirmed)
+                chk.setProperty('trans_id', trans.id)
+                # Note: on_checkbox_changed expects sender() to be the checkbox
+                chk.clicked.connect(self.on_checkbox_changed) 
+                chk_layout.addWidget(chk)
+                chk_widget.setLayout(chk_layout)
+                self.table.setCellWidget(row, 8, chk_widget)
 
-                checkbox = QCheckBox()
-                checkbox.setChecked(trans.confirmed)
-                checkbox.setProperty('trans_id', trans.id)
-                checkbox.stateChanged.connect(self.on_checkbox_changed)
+                # 9: Delete
+                del_widget = QWidget()
+                del_layout = QHBoxLayout()
+                del_layout.setContentsMargins(0, 0, 0, 0)
+                del_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                del_btn = QPushButton("✕")
+                del_btn.setFixedSize(20, 20)
+                del_btn.setStyleSheet("""
+                    QPushButton { background-color: #ff4444; color: white; border-radius: 10px; font-weight: bold; }
+                    QPushButton:hover { background-color: #cc0000; }
+                """)
+                del_btn.setProperty('trans_id', trans.id)
+                del_btn.clicked.connect(self.on_delete_clicked)
+                del_layout.addWidget(del_btn)
+                del_widget.setLayout(del_layout)
+                self.table.setCellWidget(row, 9, del_widget)
 
-                checkbox_layout.addWidget(checkbox)
-                checkbox_widget.setLayout(checkbox_layout)
-                self.table.setCellWidget(row, 8, checkbox_widget)
+            self.table.resizeColumnsToContents()
+            self.table.setColumnWidth(0, max(150, self.table.columnWidth(0)))
+            self.table.setColumnWidth(4, max(150, self.table.columnWidth(4)))
+            self.table.setColumnWidth(8, 80)
+            self.table.setColumnWidth(9, 70)
 
-                action_widget = QWidget()
-                action_layout = QHBoxLayout()
-                action_layout.setContentsMargins(1, 1, 1, 1)
-                action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            if transaction_history:
+                self.table.scrollToTop()
 
-                delete_btn = QPushButton('✕')
-                delete_btn.setFixedSize(22, 22)
-                delete_btn.setStyleSheet('''
-                    QPushButton {
-                        background-color: #ff4444;
-                        color: white;
-                        border: none;
-                        border-radius: 11px;
-                        font-weight: bold;
-                        font-size: 9px;
-                        margin: 0px;
-                        padding: 0px;
-                    }
-                    QPushButton:hover {
-                        background-color: #cc0000;
-                    }
-                    QPushButton:pressed {
-                        background-color: #990000;
-                    }
-                ''')
-                delete_btn.setProperty('trans_id', trans.id)
-                delete_btn.clicked.connect(self.on_delete_clicked)
-                delete_btn.setToolTip('Delete transaction')
-
-                action_layout.addWidget(delete_btn)
-                action_widget.setLayout(action_layout)
-
-                self.table.setCellWidget(row, 9, action_widget)
-
-            except Exception as e:
-                print(f"Error populating row {row} (ID {trans.id}): {e}")
-
-        self.table.setSortingEnabled(True)
-
-        rows_hidden = 0
-        for r in range(self.table.rowCount()):
-            item = self.table.item(r, 1)
-            if not item or not item.text().strip() or item.text() == "Unknown":
-                self.table.setRowHidden(r, True)
-                rows_hidden += 1
-
-        if rows_hidden > 0:
-            pass
-
-        self.table.blockSignals(False)
-        self.table.resizeColumnsToContents()
-
-        self.table.setColumnWidth(0, max(150, self.table.columnWidth(0)))
-        self.table.setColumnWidth(4, max(150, self.table.columnWidth(4)))
-        self.table.setColumnWidth(8, 80)
-        self.table.setColumnWidth(9, 70)
-
-        if transaction_history:
-            self.table.scrollToTop()
-
-        total_width = self.table.horizontalHeader().length() + 50
-
-        parent_window = self.window()
-        if parent_window:
-
-            min_width = total_width + 100
-            if parent_window.width() < min_width:
-                parent_window.resize(min_width, parent_window.height())
+            total_width = self.table.horizontalHeader().length() + 50
+            parent_window = self.window()
+            if parent_window:
+                min_width = total_width + 100
+                if parent_window.width() < min_width:
+                    parent_window.resize(min_width, parent_window.height())
+        except Exception as e:
+            print(f"Error populating table: {e}")
+            self.show_status("Error displaying transactions", error=True)
+        finally:
+            self.table.blockSignals(False)
+            self.table.setSortingEnabled(True)
+            self.table.setUpdatesEnabled(True)
+            self.update_confirm_all_button_state()
 
     def confirm_all_visible(self):
         try:

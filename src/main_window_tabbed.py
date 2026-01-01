@@ -12,6 +12,8 @@ from models import BudgetApp
 from utils import safe_eval_math
 from custom_widgets import NoScrollComboBox
 from expenses_dashboard_tab import ExpensesDashboardTab
+from investment_profit_tab import InvestmentProfitTab
+
 
 
 class BudgetTrackerWindow(QMainWindow):
@@ -23,7 +25,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        title = 'Budget Tracker 3.10'
+        title = 'Budget Tracker 4.0'
         if self.db_path:
             title += f' - [{self.db_path}]'
         self.setWindowTitle(title)
@@ -95,7 +97,10 @@ class BudgetTrackerWindow(QMainWindow):
         self.tab_defs['currencies'] = self.create_exchange_rates_tab()
         self.tab_defs['manage_accounts'] = self.create_accounts_tab()
         self.tab_defs['manage_categories'] = self.create_categories_tab()
+        self.tab_defs['manage_categories'] = self.create_categories_tab()
         self.tab_defs['data_management'] = self.create_data_management_tab()
+        self.tab_defs['investment_profit'] = self.create_investment_profit_tab()
+
 
         self.restore_state()
 
@@ -163,8 +168,9 @@ class BudgetTrackerWindow(QMainWindow):
             i) for i in range(self.tab_widget.count())]
 
         default_order = ['add_transaction', 'overview', 'expenses_dashboard', 'performance', 'transactions', 'account_entries', 'budget',
-                         'balance_report', 'cash_flow', 'investments', 'currencies',
+                         'balance_report', 'cash_flow', 'investment_profit', 'investments', 'currencies',
                          'manage_accounts', 'manage_categories', 'data_management']
+
 
         local_checkboxes = []
 
@@ -309,8 +315,8 @@ class BudgetTrackerWindow(QMainWindow):
         self.tab_widget.clear()
 
         default_order = ['add_transaction', 'overview', 'expenses_dashboard', 'performance', 'transactions', 'account_entries', 'budget',
-                         'balance_report', 'cash_flow', 'investments', 'currencies',
-                         'manage_accounts', 'manage_categories', 'data_management']
+                     'balance_report', 'cash_flow', 'investment_profit', 'investments', 'currencies',
+                     'manage_accounts', 'manage_categories', 'data_management']
 
         for key in default_order:
             if key in self.tab_defs:
@@ -346,7 +352,7 @@ class BudgetTrackerWindow(QMainWindow):
             self.restoreGeometry(geometry)
 
         default_order = ['add_transaction', 'overview', 'expenses_dashboard', 'performance', 'transactions', 'account_entries', 'budget',
-                         'balance_report', 'cash_flow', 'investments', 'currencies',
+                         'balance_report', 'cash_flow', 'investment_profit', 'investments', 'currencies',
                          'manage_accounts', 'manage_categories', 'data_management']
 
         saved_order = settings.value("tab_order", default_order)
@@ -567,16 +573,6 @@ class BudgetTrackerWindow(QMainWindow):
         self.sub_category_layout.addStretch()
         form_layout.addLayout(self.sub_category_layout)
 
-        self.invest_account_layout = QHBoxLayout()
-        self.invest_account_layout.addWidget(QLabel('Investment Account:'))
-        self.invest_account_combo = NoScrollComboBox()
-        self.invest_account_combo.setMinimumWidth(250)
-        self.invest_account_combo.setPlaceholderText(
-            'Optional - select if dividend')
-        self.update_invest_account_combo()
-        self.invest_account_layout.addWidget(self.invest_account_combo)
-        self.invest_account_layout.addStretch()
-        form_layout.addLayout(self.invest_account_layout)
 
         amount_layout = QHBoxLayout()
         amount_layout.addWidget(QLabel('Amount:'))
@@ -618,6 +614,28 @@ class BudgetTrackerWindow(QMainWindow):
         self.to_amount_layout.addStretch()
         form_layout.addLayout(self.to_amount_layout)
 
+
+        notes_layout = QHBoxLayout()
+        notes_layout.addWidget(QLabel('Notes:'))
+        self.notes_input = QLineEdit()
+        self.notes_input.setPlaceholderText('Optional notes')
+        notes_layout.addWidget(self.notes_input)
+        notes_layout.addStretch()
+        form_layout.addLayout(notes_layout)
+
+        self.starting_balance_layout = QHBoxLayout()
+
+        self.invest_account_layout = QHBoxLayout()
+        self.invest_account_layout.addWidget(QLabel('Investment Account:'))
+        self.invest_account_combo = NoScrollComboBox()
+        self.invest_account_combo.setMinimumWidth(250)
+        self.invest_account_combo.setPlaceholderText(
+            'Optional - select if dividend')
+        self.update_invest_account_combo()
+        self.invest_account_layout.addWidget(self.invest_account_combo)
+        self.invest_account_layout.addStretch()
+        form_layout.addLayout(self.invest_account_layout)
+
         self.qty_layout = QHBoxLayout()
         self.qty_layout.addWidget(QLabel('Quantity:'))
         self.qty_input = QLineEdit()
@@ -630,15 +648,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.qty_layout.addStretch()
         form_layout.addLayout(self.qty_layout)
 
-        notes_layout = QHBoxLayout()
-        notes_layout.addWidget(QLabel('Notes:'))
-        self.notes_input = QLineEdit()
-        self.notes_input.setPlaceholderText('Optional notes')
-        notes_layout.addWidget(self.notes_input)
-        notes_layout.addStretch()
-        form_layout.addLayout(notes_layout)
 
-        self.starting_balance_layout = QHBoxLayout()
         self.starting_balance_checkbox = QCheckBox('Starting Balance')
         self.starting_balance_checkbox.setToolTip(
             "Use this for the very first transaction of an account to set its initial value.")
@@ -1191,7 +1201,12 @@ class BudgetTrackerWindow(QMainWindow):
         if self.sub_category_combo.count() > 0:
             self.sub_category_combo.setCurrentIndex(0)
 
+    def create_investment_profit_tab(self):
+        tab = InvestmentProfitTab(self.budget_app, self)
+        return tab, "💹 Invest P&L", "Monthly Investment Gains and Losses."
+
     def update_parent_categories(self, trans_type):
+
         self.parent_category_combo.clear()
         categories = self.budget_app.get_all_categories()
 

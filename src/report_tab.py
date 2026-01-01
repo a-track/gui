@@ -1,13 +1,13 @@
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QPushButton, QProgressBar, QMenu, QToolButton)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+                             QPushButton, QMenu, QToolButton)
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 
 
 MATPLOTLIB_AVAILABLE = False
 try:
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.figure import Figure
     import matplotlib.pyplot as plt
     MATPLOTLIB_AVAILABLE = True
@@ -15,19 +15,7 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 
-class ReportLoaderThread(QThread):
-    finished = pyqtSignal(dict)
 
-    def __init__(self, budget_app, years):
-        super().__init__()
-        self.budget_app = budget_app
-        self.years = years
-
-    def run(self):
-        data = {}
-        for year in self.years:
-            data[year] = self.budget_app.get_monthly_balances(year)
-        self.finished.emit(data)
 
 
 class ReportTab(QWidget):
@@ -78,18 +66,12 @@ class ReportTab(QWidget):
         """)
         header_layout.addWidget(self.year_btn)
 
-        refresh_btn = QPushButton("🔄 Refresh")
-        refresh_btn.clicked.connect(self.load_data)
-        refresh_btn.setStyleSheet("padding: 5px 10px;")
-        header_layout.addWidget(refresh_btn)
+
 
         header_layout.addStretch()
         layout.addLayout(header_layout)
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        self.progress_bar.setRange(0, 0)
-        layout.addWidget(self.progress_bar)
+
 
         self.figure = Figure(figsize=(8, 6), dpi=100)
         self.canvas = FigureCanvas(self.figure)
@@ -97,7 +79,7 @@ class ReportTab(QWidget):
 
         self.message_label = QLabel("")
         self.message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.message_label.hide()
+
         layout.addWidget(self.message_label)
 
     def populate_years(self):
@@ -147,18 +129,17 @@ class ReportTab(QWidget):
 
         sorted_years = sorted(list(self.selected_years))
 
-        self.progress_bar.setVisible(True)
-        self.canvas.setVisible(False)
+        self.canvas.setVisible(True)
         self.message_label.hide()
 
-        self.loader = ReportLoaderThread(self.budget_app, sorted_years)
-        self.loader.finished.connect(self.on_data_loaded)
-        self.loader.start()
-
-    def on_data_loaded(self, data):
-        self.progress_bar.setVisible(False)
-        self.canvas.setVisible(True)
-        self.plot_graph(data)
+        try:
+            data = {}
+            for year in sorted_years:
+                data[year] = self.budget_app.get_monthly_balances(year)
+            
+            self.plot_graph(data)
+        except Exception as e:
+            print(f"Error loading report: {e}")
 
     def plot_graph(self, data):
         if not MATPLOTLIB_AVAILABLE:
@@ -171,19 +152,35 @@ class ReportTab(QWidget):
         month_labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May',
                         'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+        import datetime
+        current_date = datetime.date.today()
+        current_year = current_date.year
+        current_month = current_date.month
+
         for year in sorted(data.keys()):
             year_data = data_to_list(data[year])
+            
+            x_vals = list(months)
+            y_vals = year_data
 
-            line = ax.plot(months, year_data, marker='o',
+            if year == current_year:
+                x_vals = x_vals[:current_month]
+                y_vals = y_vals[:current_month]
+            elif year > current_year:
+                continue
+
+            line = ax.plot(x_vals, y_vals, marker='o',
                            linewidth=2, label=str(year))
 
-            last_val = year_data[-1]
-            if last_val > 0:
-
-                color = line[0].get_color()
-                ax.annotate(f'{last_val:,.0f}', xy=(12, last_val),
-                            xytext=(5, 0), textcoords='offset points',
-                            color=color, fontweight='bold')
+            if y_vals:
+                last_val = y_vals[-1]
+                last_x = x_vals[-1]
+                
+                if last_val > 0:
+                    color = line[0].get_color()
+                    ax.annotate(f'{last_val:,.0f}', xy=(last_x, last_val),
+                                xytext=(5, 0), textcoords='offset points',
+                                color=color, fontweight='bold')
 
         ax.set_title('Balance Evolution')
         ax.set_ylabel('Net Worth (CHF)')

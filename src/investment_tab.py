@@ -135,100 +135,102 @@ class InvestmentTab(QWidget):
         return tracked
 
     def refresh_data(self):
+        self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
         self.save_btn.setEnabled(False)
         self.table.clear()
 
-        self.tracked_accounts = self.get_tracked_accounts()
-
-        headers = ["Date"] + [acc.account for acc in self.tracked_accounts]
-
-        self.table.setColumnCount(len(headers))
-        self.table.setHorizontalHeaderLabels(headers)
-
-        self.header_view = RestrictedExcelHeaderView(self.table)
-        self.table.setHorizontalHeader(self.header_view)
-
-        col_types = {0: 'date'}
-        for i in range(1, len(headers)):
-            col_types[i] = 'number'
-        self.header_view.set_column_types(col_types)
-
-        self.table.setSortingEnabled(True)
-
-        self.table.horizontalHeader().setSortIndicatorShown(False)
-
-        self.table.verticalHeader().hide()
-        self.table.horizontalHeader().setVisible(True)
-
-        self.table.horizontalHeader().setToolTip(
-            "Double-click cells to edit. Right-click rows to delete.")
-        for i, acc in enumerate(self.tracked_accounts):
-            if acc.valuation_strategy == 'Price/Qty':
-                tip = f"Valuation Method: Price/Qty\nEnter the price per single share/unit.\nTotal Value will be calculated as Price * Quantity."
-            else:
-                tip = f"Valuation Method: Total Value\nEnter the total market value of the holding."
-
-            item = self.table.horizontalHeaderItem(i+1)
-            if item:
-                item.setToolTip(tip)
-
-        self.acc_id_to_col = {acc.id: i+1 for i,
-                              acc in enumerate(self.tracked_accounts)}
-
-        if not self.tracked_accounts:
-            self.table.setRowCount(0)
-            self.table.blockSignals(False)
-            return
-
         try:
-            raw_data = self.budget_app.get_investment_history_matrix_data()
+            self.tracked_accounts = self.get_tracked_accounts()
 
-            pivot_data = {}
-            for (date_str, acc_id, val) in raw_data:
-                if date_str not in pivot_data:
-                    pivot_data[date_str] = {}
-                pivot_data[date_str][acc_id] = val
+            headers = ["Date"] + [acc.account for acc in self.tracked_accounts]
 
-            dates = sorted(pivot_data.keys(), reverse=True)
-            self.table.setRowCount(len(dates))
+            self.table.setColumnCount(len(headers))
+            self.table.setHorizontalHeaderLabels(headers)
 
-            for r, date_str in enumerate(dates):
+            self.header_view = RestrictedExcelHeaderView(self.table)
+            self.table.setHorizontalHeader(self.header_view)
 
-                date_item = QTableWidgetItem(date_str)
-                date_item.setFlags(
-                    Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
-                date_item.setData(Qt.ItemDataRole.UserRole, date_str)
+            col_types = {0: 'date'}
+            for i in range(1, len(headers)):
+                col_types[i] = 'number'
+            self.header_view.set_column_types(col_types)
 
-                self.table.setItem(r, 0, date_item)
+            self.table.setSortingEnabled(True)
 
-                row_vals = pivot_data[date_str]
-                for c, acc in enumerate(self.tracked_accounts):
-                    val = row_vals.get(acc.id)
+            self.table.horizontalHeader().setSortIndicatorShown(False)
 
-                    if val is not None:
+            self.table.verticalHeader().hide()
+            self.table.horizontalHeader().setVisible(True)
 
-                        fmt = "{:.4f}" if acc.valuation_strategy == 'Price/Qty' else "{:.2f}"
-                        item_text = fmt.format(val)
-                    else:
-                        item_text = ""
+            self.table.horizontalHeader().setToolTip(
+                "Double-click cells to edit. Right-click rows to delete.")
+            for i, acc in enumerate(self.tracked_accounts):
+                if acc.valuation_strategy == 'Price/Qty':
+                    tip = f"Valuation Method: Price/Qty\nEnter the price per single share/unit.\nTotal Value will be calculated as Price * Quantity."
+                else:
+                    tip = f"Valuation Method: Total Value\nEnter the total market value of the holding."
 
-                    item = NumericTableWidgetItem(item_text)
-                    item.setTextAlignment(
-                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                    self.table.setItem(r, c + 1, item)
+                item = self.table.horizontalHeaderItem(i+1)
+                if item:
+                    item.setToolTip(tip)
 
-            self.table.resizeColumnsToContents()
-            self.table.setColumnWidth(0, 120)
-            self.table.horizontalHeader().setStretchLastSection(False)
+            self.acc_id_to_col = {acc.id: i+1 for i,
+                                  acc in enumerate(self.tracked_accounts)}
 
-        except Exception as e:
-            print(f"Error refreshing investment data: {e}")
-            QMessageBox.critical(
-                self, "Error", "Failed to load investment data.")
+            if not self.tracked_accounts:
+                self.table.setRowCount(0)
+                return
+
+            try:
+                raw_data = self.budget_app.get_investment_history_matrix_data()
+
+                pivot_data = {}
+                for (date_str, acc_id, val) in raw_data:
+                    if date_str not in pivot_data:
+                        pivot_data[date_str] = {}
+                    pivot_data[date_str][acc_id] = val
+
+                dates = sorted(pivot_data.keys(), reverse=True)
+                self.table.setRowCount(len(dates))
+
+                for r, date_str in enumerate(dates):
+
+                    date_item = QTableWidgetItem(date_str)
+                    date_item.setFlags(
+                        Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
+                    date_item.setData(Qt.ItemDataRole.UserRole, date_str)
+
+                    self.table.setItem(r, 0, date_item)
+
+                    row_vals = pivot_data[date_str]
+                    for c, acc in enumerate(self.tracked_accounts):
+                        val = row_vals.get(acc.id)
+
+                        if val is not None:
+
+                            fmt = "{:.4f}" if acc.valuation_strategy == 'Price/Qty' else "{:.2f}"
+                            item_text = fmt.format(val)
+                        else:
+                            item_text = ""
+
+                        item = NumericTableWidgetItem(item_text)
+                        item.setTextAlignment(
+                            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        self.table.setItem(r, c + 1, item)
+
+                self.table.resizeColumnsToContents()
+                self.table.setColumnWidth(0, 120)
+                self.table.horizontalHeader().setStretchLastSection(False)
+
+            except Exception as e:
+                print(f"Error refreshing investment data: {e}")
+                QMessageBox.critical(
+                    self, "Error", "Failed to load investment data.")
 
         finally:
             self.table.blockSignals(False)
+            self.table.setUpdatesEnabled(True)
 
     def on_item_changed(self, item):
         self.save_btn.setEnabled(True)

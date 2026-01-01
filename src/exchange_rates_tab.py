@@ -122,75 +122,79 @@ class ExchangeRatesTab(QWidget):
         return sorted(list(currencies))
 
     def refresh_data(self):
+        self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
         self.save_btn.setEnabled(False)
         self.table.clear()
 
-        self.currencies = self.get_display_currencies()
-        headers = ["Date"] + self.currencies
-        self.table.setColumnCount(len(headers))
-        self.table.setHorizontalHeaderLabels(headers)
+        try:
+            self.currencies = self.get_display_currencies()
+            headers = ["Date"] + self.currencies
+            self.table.setColumnCount(len(headers))
+            self.table.setHorizontalHeaderLabels(headers)
 
-        self.header_view = RestrictedExcelHeaderView(self.table)
-        self.table.setHorizontalHeader(self.header_view)
+            self.header_view = RestrictedExcelHeaderView(self.table)
+            self.table.setHorizontalHeader(self.header_view)
 
-        col_types = {0: 'date'}
-        for i in range(1, len(headers)):
-            col_types[i] = 'number'
-        self.header_view.set_column_types(col_types)
+            col_types = {0: 'date'}
+            for i in range(1, len(headers)):
+                col_types[i] = 'number'
+            self.header_view.set_column_types(col_types)
 
-        self.table.setSortingEnabled(True)
+            self.table.setSortingEnabled(True)
 
-        self.table.horizontalHeader().setSortIndicatorShown(False)
+            self.table.horizontalHeader().setSortIndicatorShown(False)
 
-        self.table.verticalHeader().hide()
-        self.table.horizontalHeader().setVisible(True)
+            self.table.verticalHeader().hide()
+            self.table.horizontalHeader().setVisible(True)
 
-        self.table.horizontalHeader().setToolTip("Double-click to edit rates.")
-        for i, curr in enumerate(self.currencies):
+            self.table.horizontalHeader().setToolTip("Double-click to edit rates.")
+            for i, curr in enumerate(self.currencies):
 
-            item = self.table.horizontalHeaderItem(i+1)
-            if item:
-                item.setToolTip(
-                    f"Exchange Rate for {curr} relative to CHF.\n(e.g. 1 {curr} = X.XX CHF)")
+                item = self.table.horizontalHeaderItem(i+1)
+                if item:
+                    item.setToolTip(
+                        f"Exchange Rate for {curr} relative to CHF.\n(e.g. 1 {curr} = X.XX CHF)")
 
-        raw_data = self.budget_app.get_history_matrix_data()
+            raw_data = self.budget_app.get_history_matrix_data()
 
-        pivot_data = {}
-        for (date_str, curr, rate) in raw_data:
-            if date_str not in pivot_data:
-                pivot_data[date_str] = {}
-            pivot_data[date_str][curr] = rate
+            pivot_data = {}
+            for (date_str, curr, rate) in raw_data:
+                if date_str not in pivot_data:
+                    pivot_data[date_str] = {}
+                pivot_data[date_str][curr] = rate
 
-        dates = sorted(pivot_data.keys(), reverse=True)
-        self.table.setRowCount(len(dates))
+            dates = sorted(pivot_data.keys(), reverse=True)
+            self.table.setRowCount(len(dates))
 
-        for r, date_str in enumerate(dates):
+            for r, date_str in enumerate(dates):
 
-            date_item = QTableWidgetItem(date_str)
-            date_item.setFlags(Qt.ItemFlag.ItemIsEnabled |
-                               Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
-            date_item.setData(Qt.ItemDataRole.UserRole, date_str)
+                date_item = QTableWidgetItem(date_str)
+                date_item.setFlags(Qt.ItemFlag.ItemIsEnabled |
+                                   Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
+                date_item.setData(Qt.ItemDataRole.UserRole, date_str)
 
-            self.table.setItem(r, 0, date_item)
+                self.table.setItem(r, 0, date_item)
 
-            rates = pivot_data[date_str]
-            for c, curr in enumerate(self.currencies):
-                val = rates.get(curr, "")
-                if val:
-                    item_text = f"{val:.6f}".rstrip('0').rstrip('.')
-                else:
-                    item_text = ""
+                rates = pivot_data[date_str]
+                for c, curr in enumerate(self.currencies):
+                    val = rates.get(curr, "")
+                    if val:
+                        item_text = f"{val:.6f}".rstrip('0').rstrip('.')
+                    else:
+                        item_text = ""
 
-                item = NumericTableWidgetItem(item_text)
-                item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                self.table.setItem(r, c + 1, item)
+                    item = NumericTableWidgetItem(item_text)
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    self.table.setItem(r, c + 1, item)
 
-        self.table.resizeColumnsToContents()
-        self.table.setColumnWidth(0, 120)
-        self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.blockSignals(False)
+            self.table.resizeColumnsToContents()
+            self.table.setColumnWidth(0, 120)
+            self.table.horizontalHeader().setStretchLastSection(False)
+        finally:
+            self.table.blockSignals(False)
+            self.table.setUpdatesEnabled(True)
 
     def on_item_changed(self, item):
         self.save_btn.setEnabled(True)

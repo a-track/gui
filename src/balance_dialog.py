@@ -212,79 +212,82 @@ class BalanceDialog(QDialog):
                                        key=lambda x: group_transaction_counts[x[0]],
                                        reverse=True)
 
+        self.balance_table.setUpdatesEnabled(False)
         self.balance_table.blockSignals(True)
-        self.balance_table.clear()
-        self.balance_table.setColumnCount(len(all_currencies) + 1)
-        self.balance_table.setHorizontalHeaderLabels(
-            ['Account'] + all_currencies)
-        self.balance_table.horizontalHeader().setVisible(True)
+        try:
+            self.balance_table.clear()
+            self.balance_table.setColumnCount(len(all_currencies) + 1)
+            self.balance_table.setHorizontalHeaderLabels(
+                ['Account'] + all_currencies)
+            self.balance_table.horizontalHeader().setVisible(True)
 
-        row_count = len(sorted_account_groups) + 1
-        self.balance_table.setRowCount(row_count)
+            row_count = len(sorted_account_groups) + 1
+            self.balance_table.setRowCount(row_count)
 
-        current_row = 0
-        total_by_currency = {currency: 0.0 for currency in all_currencies}
+            current_row = 0
+            total_by_currency = {currency: 0.0 for currency in all_currencies}
 
-        font = self.balance_table.font()
-        bold_font = QFont(font)
-        bold_font.setBold(True)
+            font = self.balance_table.font()
+            bold_font = QFont(font)
+            bold_font.setBold(True)
 
-        for account_name, accounts in sorted_account_groups:
+            for account_name, accounts in sorted_account_groups:
 
-            name_item = QTableWidgetItem(account_name)
-            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.balance_table.setItem(current_row, 0, name_item)
+                name_item = QTableWidgetItem(account_name)
+                name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.balance_table.setItem(current_row, 0, name_item)
 
-            group_balances = {currency: 0.0 for currency in all_currencies}
-            for account_id, data, count in accounts:
-                currency = currency_map.get(account_id, 'CHF')
-                group_balances[currency] += data['balance']
+                group_balances = {currency: 0.0 for currency in all_currencies}
+                for account_id, data, count in accounts:
+                    currency = currency_map.get(account_id, 'CHF')
+                    group_balances[currency] += data['balance']
+
+                for col_idx, currency in enumerate(all_currencies):
+                    balance = group_balances[currency]
+                    if abs(balance) >= 0.001:
+                        formatted_balance = self.format_with_thousand_separators(
+                            balance)
+                        balance_item = QTableWidgetItem(formatted_balance)
+                        balance_item.setTextAlignment(
+                            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+                        if balance < 0:
+                            balance_item.setForeground(QColor(255, 0, 0))
+
+                        self.balance_table.setItem(
+                            current_row, col_idx + 1, balance_item)
+                        total_by_currency[currency] += balance
+
+                current_row += 1
+
+            total_label_item = QTableWidgetItem("Total")
+            total_label_item.setFont(bold_font)
+            total_label_item.setFlags(
+                total_label_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.balance_table.setItem(current_row, 0, total_label_item)
 
             for col_idx, currency in enumerate(all_currencies):
-                balance = group_balances[currency]
-                if abs(balance) >= 0.001:
-                    formatted_balance = self.format_with_thousand_separators(
-                        balance)
-                    balance_item = QTableWidgetItem(formatted_balance)
-                    balance_item.setTextAlignment(
-                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                formatted_total = self.format_with_thousand_separators(
+                    total_by_currency[currency])
+                total_item = QTableWidgetItem(formatted_total)
+                total_item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                total_item.setFont(bold_font)
 
-                    if balance < 0:
-                        balance_item.setForeground(QColor(255, 0, 0))
+                if total_by_currency[currency] < 0:
+                    total_item.setForeground(QColor(255, 0, 0))
 
-                    self.balance_table.setItem(
-                        current_row, col_idx + 1, balance_item)
-                    total_by_currency[currency] += balance
+                self.balance_table.setItem(current_row, col_idx + 1, total_item)
 
-            current_row += 1
+            self.balance_table.resizeColumnsToContents()
+            self.balance_table.resizeRowsToContents()
 
-        total_label_item = QTableWidgetItem("Total")
-        total_label_item.setFont(bold_font)
-        total_label_item.setFlags(
-            total_label_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        self.balance_table.setItem(current_row, 0, total_label_item)
-
-        for col_idx, currency in enumerate(all_currencies):
-            formatted_total = self.format_with_thousand_separators(
-                total_by_currency[currency])
-            total_item = QTableWidgetItem(formatted_total)
-            total_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            total_item.setFont(bold_font)
-
-            if total_by_currency[currency] < 0:
-                total_item.setForeground(QColor(255, 0, 0))
-
-            self.balance_table.setItem(current_row, col_idx + 1, total_item)
-
-        self.balance_table.blockSignals(False)
-
-        self.balance_table.resizeColumnsToContents()
-        self.balance_table.resizeRowsToContents()
-
-        for col in range(self.balance_table.columnCount()):
-            current_width = self.balance_table.columnWidth(col)
-            self.balance_table.setColumnWidth(col, current_width + 20)
+            for col in range(self.balance_table.columnCount()):
+                current_width = self.balance_table.columnWidth(col)
+                self.balance_table.setColumnWidth(col, current_width + 20)
+        finally:
+            self.balance_table.blockSignals(False)
+            self.balance_table.setUpdatesEnabled(True)
 
     def format_with_thousand_separators(self, number):
         """Format number with thousand separators and 2 decimal places"""

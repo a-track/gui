@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
-from balance_dialog import BalanceLoaderThread
+
 from PyQt6.QtWidgets import (QHBoxLayout, QLabel, QPushButton,
-                             QTableWidget, QProgressBar, QTableWidgetItem)
+                             QTableWidget, QTableWidgetItem)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QColor
 from excel_filter import ExcelHeaderView
@@ -37,9 +37,7 @@ class BalanceTab(QWidget):
 
         content_layout.addLayout(header_layout)
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        content_layout.addWidget(self.progress_bar)
+
 
         self.balance_table = QTableWidget()
         self.balance_table.setEditTriggers(
@@ -85,38 +83,20 @@ class BalanceTab(QWidget):
         self.refresh_data()
 
     def refresh_data(self):
-        """Reload balance data"""
-        self.balance_table.clear()
-        self.balance_table.setRowCount(1)
-        self.balance_table.setColumnCount(1)
-        item = QTableWidgetItem('Loading balances...')
-        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.balance_table.setItem(0, 0, item)
-        self.balance_table.horizontalHeader().setVisible(False)
-
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0)
-
-        self.balance_loader = BalanceLoaderThread(self.budget_app)
-        self.balance_loader.finished.connect(self.on_balances_loaded)
-        self.balance_loader.error.connect(self.on_balances_error)
-        self.balance_loader.start()
-
-    def on_balances_loaded(self, balances):
-        self.progress_bar.setVisible(False)
-        self.update_balance_display_with_data(balances)
-        self.show_status('Balances loaded successfully')
-
-    def on_balances_error(self, error_message):
-        self.progress_bar.setVisible(False)
-        self.balance_table.clear()
-        self.balance_table.setRowCount(1)
-        self.balance_table.setColumnCount(1)
-        item = QTableWidgetItem(f'Error loading balances: {error_message}')
-        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        item.setForeground(QColor('red'))
-        self.balance_table.setItem(0, 0, item)
-        self.show_status(f'Error: {error_message}', error=True)
+        """Reload balance data synchronously"""
+        try:
+            balances = self.budget_app.get_balance_summary()
+            self.update_balance_display_with_data(balances)
+            self.show_status('Balances loaded successfully')
+        except Exception as e:
+            self.balance_table.clear()
+            self.balance_table.setRowCount(1)
+            self.balance_table.setColumnCount(1)
+            item = QTableWidgetItem(f'Error loading balances: {e}')
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            item.setForeground(QColor('red'))
+            self.balance_table.setItem(0, 0, item)
+            self.show_status(f'Error: {e}', error=True)
 
     def update_balance_display_with_data(self, balances):
 
@@ -199,129 +179,131 @@ class BalanceTab(QWidget):
             all_currencies), key=lambda c: currency_totals_chf.get(c, 0.0), reverse=True)
         headers = ["Account"] + sorted_currencies + ["Total (CHF)"]
 
+        self.balance_table.setUpdatesEnabled(False)
         self.balance_table.setSortingEnabled(False)
-        self.balance_table.clear()
-        self.balance_table.setColumnCount(len(headers))
-        self.balance_table.setHorizontalHeaderLabels(headers)
+        self.balance_table.blockSignals(True)
+        try:
+            self.balance_table.clear()
+            self.balance_table.setColumnCount(len(headers))
+            self.balance_table.setHorizontalHeaderLabels(headers)
 
-        self.header_view = ExcelHeaderView(self.balance_table)
-        self.balance_table.setHorizontalHeader(self.header_view)
+            self.header_view = ExcelHeaderView(self.balance_table)
+            self.balance_table.setHorizontalHeader(self.header_view)
 
-        col_types = {0: 'text'}
-        for i in range(1, len(headers)):
-            col_types[i] = 'number'
-        self.header_view.set_column_types(col_types)
+            col_types = {0: 'text'}
+            for i in range(1, len(headers)):
+                col_types[i] = 'number'
+            self.header_view.set_column_types(col_types)
 
-        self.balance_table.verticalHeader().hide()
-        self.balance_table.horizontalHeader().setVisible(True)
+            self.balance_table.verticalHeader().hide()
+            self.balance_table.horizontalHeader().setVisible(True)
 
-        for col, title in enumerate(headers):
-            item = self.balance_table.horizontalHeaderItem(col)
-            if item:
-                if title == "Account":
-                    item.setToolTip("Account Name (Grouped)")
-                elif title == "Total (CHF)":
-                    item.setToolTip("Total value in CHF")
-                else:
-                    item.setToolTip(f"Total value in {title}")
+            for col, title in enumerate(headers):
+                item = self.balance_table.horizontalHeaderItem(col)
+                if item:
+                    if title == "Account":
+                        item.setToolTip("Account Name (Grouped)")
+                    elif title == "Total (CHF)":
+                        item.setToolTip("Total value in CHF")
+                    else:
+                        item.setToolTip(f"Total value in {title}")
 
-        sorted_names = sorted(
-            grouped_data.keys(), key=lambda x: grouped_data[x]['total_chf'], reverse=True)
-        total_rows = len(sorted_names) + 1
-        self.balance_table.setRowCount(total_rows)
+            sorted_names = sorted(
+                grouped_data.keys(), key=lambda x: grouped_data[x]['total_chf'], reverse=True)
+            total_rows = len(sorted_names) + 1
+            self.balance_table.setRowCount(total_rows)
 
-        font = self.balance_table.font()
-        bold_font = QFont(font)
-        bold_font.setBold(True)
+            font = self.balance_table.font()
+            bold_font = QFont(font)
+            bold_font.setBold(True)
 
-        col_grand_totals = {c: 0.0 for c in sorted_currencies}
-        final_grand_chf = 0.0
+            col_grand_totals = {c: 0.0 for c in sorted_currencies}
+            final_grand_chf = 0.0
 
-        for r, name in enumerate(sorted_names):
-            row_idx = r + 1
-            data = grouped_data[name]
+            for r, name in enumerate(sorted_names):
+                row_idx = r + 1
+                data = grouped_data[name]
 
-            self.balance_table.setItem(row_idx, 0, StringTableWidgetItem(name))
+                self.balance_table.setItem(row_idx, 0, StringTableWidgetItem(name))
+
+                for c, curr in enumerate(sorted_currencies):
+                    val = data['currencies'].get(curr, 0.0)
+                    if val != 0:
+                        formatted = f"{val:,.2f} {curr}"
+                        item = NumericTableWidgetItem(formatted)
+                        item.setTextAlignment(
+                            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        if val < 0:
+                            item.setForeground(QColor("red"))
+
+                        tooltips = data['tooltips'].get(curr, [])
+                        if tooltips:
+                            item.setToolTip("\n".join(tooltips))
+
+                        self.balance_table.setItem(row_idx, c+1, item)
+
+                        col_grand_totals[curr] += val
+
+                tot_chf = data['total_chf']
+                t_item = NumericTableWidgetItem(f"{tot_chf:,.2f} CHF")
+
+                fx_breakdown = []
+                for curr in sorted_currencies:
+                    val = data['currencies'].get(curr, 0.0)
+                    if val != 0 and curr != 'CHF':
+                        rate = current_rates.get(curr, 1.0)
+                        chf_val = val * rate
+                        fx_breakdown.append(
+                            f"{val:,.2f} {curr} = {chf_val:,.2f} CHF (Rate: {rate:.4f})")
+
+                if fx_breakdown:
+                    t_item.setToolTip("\n".join(fx_breakdown))
+
+                t_item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                if tot_chf < 0:
+                    t_item.setForeground(QColor("red"))
+                self.balance_table.setItem(row_idx, len(headers)-1, t_item)
+
+                final_grand_chf += tot_chf
+
+            l_item = StringTableWidgetItem("Total")
+            l_item.setData(TOTAL_ROW_ROLE, True)
+            l_item.setFont(bold_font)
+            self.balance_table.setItem(0, 0, l_item)
 
             for c, curr in enumerate(sorted_currencies):
-                val = data['currencies'].get(curr, 0.0)
-                if val != 0:
-                    formatted = f"{val:,.2f} {curr}"
-                    item = NumericTableWidgetItem(formatted)
-                    item.setTextAlignment(
-                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                    if val < 0:
-                        item.setForeground(QColor("red"))
+                val = col_grand_totals[curr]
+                item = NumericTableWidgetItem(f"{val:,.2f} {curr}")
+                item.setData(TOTAL_ROW_ROLE, True)
+                item.setFont(bold_font)
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                if val < 0:
+                    item.setForeground(QColor("red"))
+                self.balance_table.setItem(0, c+1, item)
 
-                    tooltips = data['tooltips'].get(curr, [])
-                    if tooltips:
-                        item.setToolTip("\n".join(tooltips))
-
-                    self.balance_table.setItem(row_idx, c+1, item)
-
-                    col_grand_totals[curr] += val
-
-            tot_chf = data['total_chf']
-            t_item = NumericTableWidgetItem(f"{tot_chf:,.2f} CHF")
-
-            fx_breakdown = []
-            for curr in sorted_currencies:
-                val = data['currencies'].get(curr, 0.0)
-                if val != 0 and curr != 'CHF':
-                    rate = current_rates.get(curr, 1.0)
-                    chf_val = val * rate
-                    fx_breakdown.append(
-                        f"{val:,.2f} {curr} = {chf_val:,.2f} CHF (Rate: {rate:.4f})")
-
-            if fx_breakdown:
-                t_item.setToolTip("\n".join(fx_breakdown))
-
-            t_item.setTextAlignment(
+            tot_item = NumericTableWidgetItem(f"{final_grand_chf:,.2f} CHF")
+            tot_item.setData(TOTAL_ROW_ROLE, True)
+            tot_item.setFont(bold_font)
+            tot_item.setTextAlignment(
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            if tot_chf < 0:
-                t_item.setForeground(QColor("red"))
-            self.balance_table.setItem(row_idx, len(headers)-1, t_item)
+            if final_grand_chf < 0:
+                tot_item.setForeground(QColor("red"))
+            self.balance_table.setItem(0, len(headers)-1, tot_item)
 
-            final_grand_chf += tot_chf
+            self.balance_table.sortItems(
+                len(headers)-1, Qt.SortOrder.DescendingOrder)
 
-        l_item = StringTableWidgetItem("Total")
-        l_item.setData(TOTAL_ROW_ROLE, True)
-        l_item.setFont(bold_font)
-        self.balance_table.setItem(0, 0, l_item)
+            self.balance_table.resizeColumnsToContents()
 
-        for c, curr in enumerate(sorted_currencies):
-            val = col_grand_totals[curr]
-            item = NumericTableWidgetItem(f"{val:,.2f} {curr}")
-            item.setData(TOTAL_ROW_ROLE, True)
-            item.setFont(bold_font)
-            item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            if val < 0:
-                item.setForeground(QColor("red"))
-            self.balance_table.setItem(0, c+1, item)
-
-        tot_item = NumericTableWidgetItem(f"{final_grand_chf:,.2f} CHF")
-        tot_item.setData(TOTAL_ROW_ROLE, True)
-        tot_item.setFont(bold_font)
-        tot_item.setTextAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        if final_grand_chf < 0:
-            tot_item.setForeground(QColor("red"))
-        self.balance_table.setItem(0, len(headers)-1, tot_item)
-
-        self.balance_table.setSortingEnabled(True)
-
-        self.balance_table.blockSignals(False)
-        self.balance_table.setSortingEnabled(True)
-
-        self.balance_table.sortItems(
-            len(headers)-1, Qt.SortOrder.DescendingOrder)
-
-        self.balance_table.resizeColumnsToContents()
-
-        for col in range(self.balance_table.columnCount()):
-            current_width = self.balance_table.columnWidth(col)
-            self.balance_table.setColumnWidth(col, current_width + 20)
+            for col in range(self.balance_table.columnCount()):
+                current_width = self.balance_table.columnWidth(col)
+                self.balance_table.setColumnWidth(col, current_width + 20)
+        finally:
+            self.balance_table.blockSignals(False)
+            self.balance_table.setSortingEnabled(True)
+            self.balance_table.setUpdatesEnabled(True)
 
     def show_status(self, message, error=False):
         self.status_label.setText(message)

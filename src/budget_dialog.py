@@ -23,6 +23,7 @@ class BudgetDialog(QDialog):
 
         layout = QVBoxLayout()
 
+        # --- Top Controls (Fixed) ---
         period_layout = QHBoxLayout()
         period_layout.addWidget(QLabel('Year:'))
         self.year_combo = NoScrollComboBox()
@@ -48,19 +49,67 @@ class BudgetDialog(QDialog):
         period_layout.addStretch()
         layout.addLayout(period_layout)
 
+        # --- Scrollable Content Area ---
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        
+        self.content_widget = QWidget()
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(0, 0, 10, 0) # Right margin for scrollbar
+
         self.summary_label = QLabel('')
         self.summary_label.setStyleSheet('color: #666; padding: 5px;')
-        layout.addWidget(self.summary_label)
+        self.content_layout.addWidget(self.summary_label)
 
-        self.income_summary_label = QLabel('')
-        self.income_summary_label.setStyleSheet(
-            'color: #4CAF50; padding: 5px;')
-        layout.addWidget(self.income_summary_label)
+        # --- EXPENSES SECTION ---
+        lbl_expenses = QLabel("Expenses")
+        lbl_expenses.setStyleSheet("font-size: 14px; font-weight: bold; color: #333; margin-top: 10px;")
+        self.content_layout.addWidget(lbl_expenses)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(
-            ['Main Category', 'Category', 'Monthly Budget', 'Current Month Expenses', 'Remaining', 'Usage %'])
+        self.table_expenses = QTableWidget()
+        self.setup_table(self.table_expenses)
+        self.content_layout.addWidget(self.table_expenses)
+
+        # --- INCOME SECTION ---
+        lbl_income = QLabel("Income")
+        lbl_income.setStyleSheet("font-size: 14px; font-weight: bold; color: #333; margin-top: 20px;")
+        self.content_layout.addWidget(lbl_income)
+
+        self.table_income = QTableWidget()
+        self.setup_table(self.table_income)
+        self.content_layout.addWidget(self.table_income)
+        
+        self.content_layout.addStretch() # Push content to top if empty
+
+        self.scroll_area.setWidget(self.content_widget)
+        layout.addWidget(self.scroll_area)
+
+        # --- Bottom Controls (Fixed) ---
+        set_budgets_btn = QPushButton('Set Monthly Budgets')
+        set_budgets_btn.clicked.connect(self.show_set_budgets_dialog)
+        set_budgets_btn.setStyleSheet(
+            'background-color: #2196F3; color: white; padding: 10px; font-size: 14px;')
+        layout.addWidget(set_budgets_btn)
+
+        self.status_label = QLabel('')
+        self.status_label.setStyleSheet('color: #666; padding: 5px;')
+        layout.addWidget(self.status_label)
+
+        self.setLayout(layout)
+
+        self.load_budget_data()
+
+    def setup_table(self, table):
+        # Disable internal scrolling to allow the outer scroll area to handle it
+        table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        table.setColumnCount(10)
+        table.setHorizontalHeaderLabels(
+            ['Main Category', 'Category', 
+             'Monthly Budget', 'Current Month', 'Remaining', 'Usage %',
+             'L12M Budget', 'L12M Actual', 'L12M Remaining', 'L12M %'])
 
         header_tooltips = [
             "Main Category",
@@ -68,16 +117,20 @@ class BudgetDialog(QDialog):
             "Target Monthly Limit",
             "Actual Spending this Month",
             "Budget - Expenses (Green = Under, Red = Over)",
-            "Percentage of budget used"
+            "Percentage of budget used",
+            "Budget x 12",
+            "Spending in Last 12 Months",
+            "L12M Budget - L12M Actual",
+            "Percentage of L12M budget used"
         ]
         for col, tooltip in enumerate(header_tooltips):
-            item = self.table.horizontalHeaderItem(col)
+            item = table.horizontalHeaderItem(col)
             if item:
                 item.setToolTip(tooltip)
 
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setAlternatingRowColors(True)
-        self.table.setStyleSheet("""
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setAlternatingRowColors(True)
+        table.setStyleSheet("""
             QTableWidget {
                 gridline-color: #d0d0d0;
                 background-color: white;
@@ -100,29 +153,14 @@ class BudgetDialog(QDialog):
             }
         """)
 
-        self.table.verticalHeader().hide()
+        table.verticalHeader().hide()
 
-        header = self.table.horizontalHeader()
-        for col in range(6):
+        header = table.horizontalHeader()
+        for col in range(10):
             header.setSectionResizeMode(
-                col, QHeaderView.ResizeMode.ResizeToContents)
+                col, QHeaderView.ResizeMode.Interactive) # Changed from ResizeToContents for performance
 
-        self.table.verticalHeader().setDefaultSectionSize(35)
-        layout.addWidget(self.table)
-
-        set_budgets_btn = QPushButton('Set Monthly Budgets')
-        set_budgets_btn.clicked.connect(self.show_set_budgets_dialog)
-        set_budgets_btn.setStyleSheet(
-            'background-color: #2196F3; color: white; padding: 10px; font-size: 14px;')
-        layout.addWidget(set_budgets_btn)
-
-        self.status_label = QLabel('')
-        self.status_label.setStyleSheet('color: #666; padding: 5px;')
-        layout.addWidget(self.status_label)
-
-        self.setLayout(layout)
-
-        self.load_budget_data()
+        table.verticalHeader().setDefaultSectionSize(35)
 
     def get_selected_period(self):
         year = int(self.year_combo.currentText())
@@ -133,267 +171,301 @@ class BudgetDialog(QDialog):
         try:
             year, month = self.get_selected_period()
 
-            monthly_budgets = self.budget_app.get_all_budgets()
+            # --- EXPENSES DATA ---
+            exp_budgets = self.budget_app.get_all_budgets('Expense')
+            exp_actuals = self.budget_app.get_budget_vs_actual(year, month, 'Expense', 'expense')
+            exp_l12m = self.budget_app.get_l12m_breakdown(year, month, 'Expense', 'expense')
+            
+            exp_data, exp_totals, exp_grand = self.prepare_data(exp_budgets, exp_actuals, exp_l12m)
+            self.populate_table(self.table_expenses, exp_data, exp_totals, exp_grand, is_income=False)
 
-            current_expenses = self.budget_app.get_budget_vs_expenses(
-                year, month)
-
-            income_by_category = self.get_income_by_category(year, month)
-
-            total_budget = 0.0
-            total_actual = 0.0
-            total_remaining = 0.0
-            total_income = sum(income_by_category.values())
-
-            categories = self.budget_app.get_all_categories()
-            category_map = {
-                cat.sub_category: cat.category for cat in categories}
-
-            category_data = {}
-            category_totals = {}
-
-            for sub_category, budget_amount in monthly_budgets.items():
-                category = category_map.get(sub_category, 'Other')
-                actual_data = current_expenses.get(sub_category, {})
-                actual_amount = actual_data.get('actual', 0.0)
-                remaining = budget_amount - actual_amount
-
-                if category not in category_data:
-                    category_data[category] = []
-                    category_totals[category] = {
-                        'budget': 0.0,
-                        'actual': 0.0,
-                        'remaining': 0.0
-                    }
-
-                category_data[category].append({
-                    'sub_category': sub_category,
-                    'budget': budget_amount,
-                    'actual': actual_amount,
-                    'remaining': remaining,
-                    'percentage': (actual_amount / budget_amount * 100) if budget_amount > 0 else 0
-                })
-
-                category_totals[category]['budget'] += budget_amount
-                category_totals[category]['actual'] += actual_amount
-                category_totals[category]['remaining'] += remaining
-
-                total_budget += budget_amount
-                total_actual += actual_amount
-                total_remaining += remaining
-
-            for sub_category, data in current_expenses.items():
-                if sub_category not in monthly_budgets:
-                    category = category_map.get(sub_category, 'Other')
-                    actual_amount = data.get('actual', 0.0)
-
-                    if category not in category_data:
-                        category_data[category] = []
-                        category_totals[category] = {
-                            'budget': 0.0,
-                            'actual': 0.0,
-                            'remaining': 0.0
-                        }
-
-                    category_data[category].append({
-                        'sub_category': sub_category,
-                        'budget': 0.0,
-                        'actual': actual_amount,
-                        'remaining': -actual_amount,
-                        'percentage': 0.0
-                    })
-
-                    category_totals[category]['actual'] += actual_amount
-                    category_totals[category]['remaining'] -= actual_amount
-
-                    total_actual += actual_amount
-                    total_remaining -= actual_amount
+            # --- INCOME DATA ---
+            inc_budgets = self.budget_app.get_all_budgets('Income')
+            inc_actuals = self.budget_app.get_budget_vs_actual(year, month, 'Income', 'income')
+            inc_l12m = self.budget_app.get_l12m_breakdown(year, month, 'Income', 'income')
+            
+            inc_data, inc_totals, inc_grand = self.prepare_data(inc_budgets, inc_actuals, inc_l12m)
+            self.populate_table(self.table_income, inc_data, inc_totals, inc_grand, is_income=True)
+            
+            # Summary (Net)
+            total_inc_actual = inc_grand['actual']
+            total_exp_actual = exp_grand['actual']
+            net_saved = total_inc_actual - total_exp_actual
+            
+            self.summary_label.setText(f"Net Result: {net_saved:,.2f}")
+            if net_saved >= 0:
+                self.summary_label.setStyleSheet("font-size: 14pt; font-weight: bold; color: #4CAF50; margin: 10px;")
+            else:
+                self.summary_label.setStyleSheet("font-size: 14pt; font-weight: bold; color: #f44336; margin: 10px;")
 
             month_name = self.month_combo.currentText()
-            summary_text = f"Selected Period ({month_name} {year}) - Budget: {total_budget:.2f} | Expenses: {total_actual:.2f} | Remaining: {total_remaining:.2f}"
-            self.summary_label.setText(summary_text)
-
-            income_text = "Monthly Income: "
-            if income_by_category:
-                income_parts = []
-                for category, amount in income_by_category.items():
-                    if amount > 0:
-                        income_parts.append(f"{category}: {amount:.2f}")
-                income_text += " | ".join(income_parts)
-                income_text += f" | Total: {total_income:.2f}"
-            else:
-                income_text += "No income recorded"
-            self.income_summary_label.setText(income_text)
-
-            self.populate_table_grouped(category_data, category_totals)
-
             self.show_status(f'Loaded budget data for {month_name} {year}')
 
         except Exception as e:
-            print(f"Error loading budget data: {e}")
+            self.show_status(f"Error loading budget: {e}", error=True)
+            import traceback
+            traceback.print_exc()
             self.show_status('Error loading budget data', error=True)
 
+    def prepare_data(self, monthly_budgets, current_actuals, l12m_actuals):
+        categories = self.budget_app.get_all_categories()
+        category_map = {cat.sub_category: cat.category for cat in categories}
+
+        category_data = {}
+        category_totals = {}
+        grand_totals = {
+            'budget': 0.0, 'actual': 0.0, 'remaining': 0.0,
+            'l12m_budget': 0.0, 'l12m_actual': 0.0, 'l12m_remaining': 0.0
+        }
+
+        # Union of all keys
+        all_sub_categories = set(monthly_budgets.keys())
+        all_sub_categories.update(current_actuals.keys())
+        all_sub_categories.update(l12m_actuals.keys())
+
+        for sub_category in all_sub_categories:
+            category = category_map.get(sub_category, 'Other')
+            
+            budget_amount = monthly_budgets.get(sub_category, 0.0)
+            
+            actual_data = current_actuals.get(sub_category, {})
+            actual_amount = actual_data.get('actual', 0.0) if isinstance(actual_data, dict) else 0.0
+            
+            remaining = budget_amount - actual_amount
+
+            l12m_budget = budget_amount * 12
+            l12m_actual = l12m_actuals.get(sub_category, 0.0)
+            l12m_remaining = l12m_budget - l12m_actual
+
+            if category not in category_data:
+                category_data[category] = []
+                category_totals[category] = {
+                    'budget': 0.0, 'actual': 0.0, 'remaining': 0.0,
+                    'l12m_budget': 0.0, 'l12m_actual': 0.0, 'l12m_remaining': 0.0
+                }
+
+            category_data[category].append({
+                'sub_category': sub_category,
+                'budget': budget_amount,
+                'actual': actual_amount,
+                'remaining': remaining,
+                'percentage': (actual_amount / budget_amount * 100) if budget_amount > 0 else 0,
+                'l12m_budget': l12m_budget,
+                'l12m_actual': l12m_actual,
+                'l12m_remaining': l12m_remaining,
+                'l12m_percentage': (l12m_actual / l12m_budget * 100) if l12m_budget > 0 else 0
+            })
+
+            # Update Category Totals
+            vals = {
+                'budget': budget_amount,
+                'actual': actual_amount,
+                'remaining': remaining,
+                'l12m_budget': l12m_budget,
+                'l12m_actual': l12m_actual,
+                'l12m_remaining': l12m_remaining
+            }
+            for key, val in vals.items():
+                 category_totals[category][key] += val
+                 grand_totals[key] += val
+
+        return category_data, category_totals, grand_totals
+
     def get_income_by_category(self, year, month):
-        """Get income transactions grouped by category for the given month"""
-        income_by_category = {}
-        all_transactions = self.budget_app.get_all_transactions()
+        # Deprecated: Logic moved to generic loading
+        return {}
 
-        for trans in all_transactions:
-            if trans.type == 'income' and trans.date:
-                try:
-                    trans_date = trans.date
-                    if isinstance(trans_date, str):
-                        trans_date = datetime.datetime.strptime(
-                            trans_date, '%Y-%m-%d').date()
+    def populate_table(self, table, category_data, category_totals, grand_totals, is_income=False):
+        table.setUpdatesEnabled(False)
+        table.setSortingEnabled(False)
+        try:
+            total_rows = 0
+            for category, items in category_data.items():
+                total_rows += 1 + len(items) + 1
+            
+            # Add 1 row for Grand Total + 1 spacer row potentially
+            total_rows += 2 
 
-                    if trans_date.year == year and trans_date.month == month:
-                        category = trans.sub_category or 'Uncategorized'
-                        amount = float(trans.amount or 0)
-                        if category in income_by_category:
-                            income_by_category[category] += amount
-                        else:
-                            income_by_category[category] = amount
-                except (ValueError, AttributeError):
-                    continue
+            table.setRowCount(total_rows)
 
-        return income_by_category
+            current_row = 0
 
-    def populate_table_grouped(self, category_data, category_totals):
-        total_rows = 0
-        for category, items in category_data.items():
-            total_rows += 1 + len(items) + 1
+            sorted_categories = sorted(category_data.keys())
 
-        self.table.setRowCount(total_rows)
-
-        current_row = 0
-
-        sorted_categories = sorted(category_data.keys())
-
-        for category in sorted_categories:
-            items = category_data[category]
-            totals = category_totals.get(
-                category, {'budget': 0, 'actual': 0, 'remaining': 0})
-
-            category_item = QTableWidgetItem(category)
-            category_item.setBackground(QColor(240, 240, 240))
-            category_item.setBackground(QColor(240, 240, 240))
-            font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-            category_item.setFont(font)
-            self.table.setItem(current_row, 0, category_item)
-
-            self.table.setSpan(current_row, 0, 1, 6)
-
-            current_row += 1
-
-            sorted_items = sorted(items, key=lambda x: x['sub_category'])
-
-            for item in sorted_items:
-                sub_category_item = QTableWidgetItem(
-                    f"  {item['sub_category']}")
-                self.table.setItem(current_row, 1, sub_category_item)
-
-                budget_item = NumericTableWidgetItem(f"{item['budget']:.2f}")
-                budget_item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                self.table.setItem(current_row, 2, budget_item)
-
-                actual_item = NumericTableWidgetItem(f"{item['actual']:.2f}")
-                actual_item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                self.table.setItem(current_row, 3, actual_item)
-
-                remaining = item['remaining']
-                remaining_item = NumericTableWidgetItem(f"{remaining:.2f}")
-                remaining_item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            for category in sorted_categories:
+                items = category_data[category]
+                
+                # Category Header
+                category_item = QTableWidgetItem(category)
+                category_item.setBackground(QColor(240, 240, 240))
                 font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-                remaining_item.setFont(font)
-
-                if remaining >= 0:
-                    remaining_item.setForeground(QColor(0, 128, 0))
-                else:
-                    remaining_item.setForeground(QColor(255, 0, 0))
-
-                self.table.setItem(current_row, 4, remaining_item)
-
-                percentage = item['percentage']
-                percentage_item = NumericTableWidgetItem(f"{percentage:.1f}%")
-                percentage_item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-                percentage_item.setFont(font)
-
-                if percentage <= 75:
-                    percentage_item.setForeground(QColor(0, 128, 0))
-                elif percentage <= 90:
-                    percentage_item.setForeground(QColor(255, 165, 0))
-                else:
-                    percentage_item.setForeground(QColor(255, 0, 0))
-
-                self.table.setItem(current_row, 5, percentage_item)
-
+                # ... check if font needs to be created every time?
+                # Optimization: create strict fonts once outside loop? 
+                # Keeping it simple for now, object creation is fast in Python relative to Qt paint.
+                category_item.setFont(font)
+                table.setItem(current_row, 0, category_item)
+                table.setSpan(current_row, 0, 1, 10)
                 current_row += 1
 
-            total_budget = totals['budget']
-            total_actual = totals['actual']
-            total_remaining = totals['remaining']
-            total_percentage = (total_actual / total_budget *
-                                100) if total_budget > 0 else 0
+                sorted_items = sorted(items, key=lambda x: x['sub_category'])
 
-            total_budget_item = NumericTableWidgetItem(f"{total_budget:.2f}")
-            total_budget_item.setBackground(QColor(220, 220, 220))
-            font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-            total_budget_item.setFont(font)
-            total_budget_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.table.setItem(current_row, 2, total_budget_item)
+                for item in sorted_items:
+                    sub_category_item = QTableWidgetItem(f"  {item['sub_category']}")
+                    table.setItem(current_row, 1, sub_category_item)
 
-            total_actual_item = NumericTableWidgetItem(f"{total_actual:.2f}")
-            total_actual_item.setBackground(QColor(220, 220, 220))
-            font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-            total_actual_item.setFont(font)
-            total_actual_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.table.setItem(current_row, 3, total_actual_item)
+                    self.set_numeric_item(table, current_row, 2, item['budget'])
+                    self.set_numeric_item(table, current_row, 3, item['actual'])
+                    self.set_diff_item(table, current_row, 4, item['remaining'], is_income, is_pct=False)
+                    self.set_diff_item(table, current_row, 5, item['percentage'], is_income, is_pct=True)
 
-            total_remaining_item = QTableWidgetItem(f"{total_remaining:.2f}")
-            total_remaining_item.setBackground(QColor(220, 220, 220))
-            font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-            total_remaining_item.setFont(font)
-            total_remaining_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    self.set_numeric_item(table, current_row, 6, item['l12m_budget'])
+                    self.set_numeric_item(table, current_row, 7, item['l12m_actual'])
+                    self.set_diff_item(table, current_row, 8, item['l12m_remaining'], is_income, is_pct=False)
+                    self.set_diff_item(table, current_row, 9, item['l12m_percentage'], is_income, is_pct=True)
 
-            if total_remaining >= 0:
-                total_remaining_item.setForeground(QColor(0, 128, 0))
-            else:
-                total_remaining_item.setForeground(QColor(255, 0, 0))
+                    current_row += 1
 
-            self.table.setItem(current_row, 4, total_remaining_item)
+                # Category Footer
+                totals = category_totals[category]
+                
+                # Recalculate percentages for totals
+                total_budget = totals['budget']
+                total_actual = totals['actual']
+                total_pct = (total_actual / total_budget * 100) if total_budget > 0 else 0
+                
+                total_l12m_budget = totals['l12m_budget']
+                total_l12m_actual = totals['l12m_actual']
+                total_l12m_pct = (total_l12m_actual / total_l12m_budget * 100) if total_l12m_budget > 0 else 0
+                
+                # Fill row
+                bg = QColor(220, 220, 220)
+                font_bold = QFont("Segoe UI", 10, QFont.Weight.Bold)
+                
+                self.set_numeric_item(table, current_row, 2, total_budget, bg, font_bold)
+                self.set_numeric_item(table, current_row, 3, total_actual, bg, font_bold)
+                self.set_diff_item(table, current_row, 4, totals['remaining'], is_income, False, bg, font_bold)
+                self.set_diff_item(table, current_row, 5, total_pct, is_income, True, bg, font_bold)
+                
+                self.set_numeric_item(table, current_row, 6, total_l12m_budget, bg, font_bold)
+                self.set_numeric_item(table, current_row, 7, total_l12m_actual, bg, font_bold)
+                self.set_diff_item(table, current_row, 8, totals['l12m_remaining'], is_income, False, bg, font_bold)
+                self.set_diff_item(table, current_row, 9, total_l12m_pct, is_income, True, bg, font_bold)
 
-            total_percentage_item = QTableWidgetItem(
-                f"{total_percentage:.1f}%")
-            total_percentage_item.setBackground(QColor(220, 220, 220))
-            font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-            total_percentage_item.setFont(font)
-            total_percentage_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
-            if total_percentage <= 75:
-                total_percentage_item.setForeground(QColor(0, 128, 0))
-            elif total_percentage <= 90:
-                total_percentage_item.setForeground(QColor(255, 165, 0))
-            else:
-                total_percentage_item.setForeground(QColor(255, 0, 0))
-
-            self.table.setItem(current_row, 5, total_percentage_item)
-
+                current_row += 1
+            
+            # Spacer Row
             current_row += 1
 
-        self.table.resizeColumnsToContents()
+            # Grand Total Row
+            gt_item = QTableWidgetItem("TOTAL")
+            bg_color = QColor(220, 220, 220) 
+            gt_item.setBackground(bg_color)
+            font = QFont("Segoe UI", 11, QFont.Weight.Bold)
+            gt_item.setFont(font)
+            table.setItem(current_row, 0, gt_item)
+            table.setSpan(current_row, 0, 1, 2)
 
-        total_width = self.table.horizontalHeader().length() + 80
-        if total_width > self.width():
-            self.resize(total_width, self.height())
+            gt_budget = grand_totals['budget']
+            gt_actual = grand_totals['actual']
+            gt_pct = (gt_actual / gt_budget * 100) if gt_budget > 0 else 0
+            
+            gt_l12m_budget = grand_totals['l12m_budget']
+            gt_l12m_actual = grand_totals['l12m_actual']
+            gt_l12m_pct = (gt_l12m_actual / gt_l12m_budget * 100) if gt_l12m_budget > 0 else 0
+
+            self.set_numeric_item(table, current_row, 2, gt_budget, bg_color, font)
+            self.set_numeric_item(table, current_row, 3, gt_actual, bg_color, font)
+            self.set_diff_item(table, current_row, 4, grand_totals['remaining'], is_income, False, bg_color, font)
+            self.set_diff_item(table, current_row, 5, gt_pct, is_income, True, bg_color, font)
+            
+            self.set_numeric_item(table, current_row, 6, gt_l12m_budget, bg_color, font)
+            self.set_numeric_item(table, current_row, 7, gt_l12m_actual, bg_color, font)
+            self.set_diff_item(table, current_row, 8, grand_totals['l12m_remaining'], is_income, False, bg_color, font)
+            self.set_diff_item(table, current_row, 9, gt_l12m_pct, is_income, True, bg_color, font)
+
+            table.resizeColumnsToContents()
+            
+            # Disable internal scrollbars to ensure outer QScrollArea handles scrolling
+            table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+            # Calculate exact required height based on header and rows
+            # Use verticalHeader().length() for accurate pixel height of all rows
+            header_height = table.horizontalHeader().height()
+            rows_height = table.verticalHeader().length()
+            total_height = header_height + rows_height + 4 # Small buffer for borders
+            
+            # Force height to match content
+            table.setMinimumHeight(total_height)
+            table.setMaximumHeight(total_height)
+        finally:
+            table.setUpdatesEnabled(True)
+        
+    def set_numeric_item(self, table, row, col, val, bg_color=None, font=None):
+        text = f"{val:.2f}"
+        item = NumericTableWidgetItem(text)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        if bg_color:
+            item.setBackground(bg_color)
+        if font:
+            item.setFont(font)
+        table.setItem(row, col, item)
+
+    def set_diff_item(self, table, row, col, val, is_income, is_pct, bg_color=None, font=None):
+        text = f"{val:.1f}%" if is_pct else f"{val:.2f}"
+        item = NumericTableWidgetItem(text)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        if bg_color:
+            item.setBackground(bg_color)
+        if font:
+            item.setFont(font)
+            
+        # Color Logic
+        # Expense: Remaining < 0 is Bad (Red). Usage > 100 is Bad (Red).
+        # Income: Actual > Budget (Remaining < 0? No, Remaining = Budget - Actual. 
+        #   If Budget 100, Actual 120, Remaining = -20. This is Good!
+        #   If Budget 100, Actual 80, Remaining = 20. This is Bad/neutral.
+        
+        # So for Income: Remaining < 0 is Good (Green). Remaining >= 0 is Red/Warning?
+        # Let's say we want to meet income target. So Actual >= Budget is Green.
+        
+        color = None
+        if is_pct:
+            # Usage %
+            # Expense: > 100 Red, 85-100 Orange, < 85 Green
+            # Income: > 100 Green (Exceeded target), 85-100 Orange, < 85 Red?
+            
+            if not is_income:
+                if val <= 85: color = QColor(0, 128, 0)
+                elif val <= 100: color = QColor(255, 165, 0)
+                else: color = QColor(255, 0, 0)
+            else:
+                if val >= 100: color = QColor(0, 128, 0) # Met/Exceeded target
+                elif val >= 85: color = QColor(255, 165, 0)
+                else: color = QColor(255, 0, 0) # Missed target bad
+        else:
+            # Remaining Amount = Budget - Actual
+            if not is_income:
+                # Expense: Remaining > 0 is Good (Green)
+                if val >= 0: color = QColor(0, 128, 0)
+                else: color = QColor(255, 0, 0)
+            else:
+                # Income: Remaining < 0 implies Actual > Budget (Good)
+                # Remaining > 0 implies Actual < Budget (Missed target)
+                if val <= 0: color = QColor(0, 128, 0)
+                else: color = QColor(255, 0, 0)
+        
+        if color:
+            item.setForeground(color)
+        else:
+            # Fallback for neutral?
+            pass
+
+        table.setItem(row, col, item)
+
+    def populate_table_grouped(self, category_data, category_totals, grand_totals):
+         # Shim for backward compatibility if I missed any calls, or redirect
+         self.populate_table(self.table_expenses, category_data, category_totals, grand_totals, is_income=False)
 
     def show_set_budgets_dialog(self):
         dialog = SetMonthlyBudgetsDialog(self.budget_app, self)
@@ -437,6 +509,9 @@ class SetMonthlyBudgetsDialog(QDialog):
         sub_categories_by_category = {}
 
         for category in categories:
+            if category.category_type != 'Expense':
+                continue
+                
             if category.category not in sub_categories_by_category:
                 sub_categories_by_category[category.category] = []
             sub_categories_by_category[category.category].append(

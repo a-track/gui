@@ -54,23 +54,31 @@ class PerformanceLoaderThread(QThread):
                 currency = acc.currency
 
                 # --- 1. Basic Stats ---
+                # --- 1. Basic Stats ---
                 balance_data = balances.get(acc_id, {})
-                cost_basis_native = balance_data.get('balance', 0.0)
                 qty = balance_data.get('qty', 0.0)
 
-                rate = rates.get(currency, 1.0)
-                cost_basis_chf = cost_basis_native * rate
+                # Cost Basis: Use Historical Exchange Rates (Net Invested Capital)
+                # Instead of current balance * current rate, we sum historic inflows
+                cost_basis_chf = self.budget_app.get_historical_cost_basis(acc_id)
 
-                market_val_native = cost_basis_native
+                # Market Value: Use Current Exchange Rates (What is it worth NOW?)
+                rate = rates.get(currency, 1.0)
+                
+                # Fetch Valuation (Native)
+                valuation_native = 0.0
                 strategy = getattr(acc, 'valuation_strategy', 'Total Value')
                 raw_val = self.budget_app.get_investment_valuation_for_date(acc_id)
 
                 if strategy == 'Price/Qty':
-                    market_val_native = qty * raw_val
+                    valuation_native = qty * raw_val
                 elif raw_val > 0:
-                    market_val_native = raw_val
+                    valuation_native = raw_val
+                else:
+                    # Fallback to balance if no valuation
+                    valuation_native = balance_data.get('balance', 0.0)
 
-                market_val_chf = market_val_native * rate
+                market_val_chf = valuation_native * rate
 
                 income_data = dividends.get(acc_id, {'total': 0.0, 'years': {}})
                 income_chf = income_data['total']
@@ -111,7 +119,7 @@ class PerformanceLoaderThread(QThread):
                 # `market_val_native` is Native.
                 # So:
                 xirr_flows_native = flows.copy()
-                xirr_flows_native.append((today, market_val_native))
+                xirr_flows_native.append((today, valuation_native))
                 irr_val = xirr(xirr_flows_native)
                 irr_pct = (irr_val * 100.0) if irr_val is not None else None
 
@@ -155,7 +163,7 @@ class PerformanceLoaderThread(QThread):
                     # Append current
                     # Make sure not duplicate date
                     if not val_history or val_history[-1][0] < today:
-                        val_history.append((today, market_val_native))
+                        val_history.append((today, valuation_native))
                     
                     twr_val = calculate_linked_twr(val_history, flows)
                     twr_pct = twr_val
@@ -488,96 +496,102 @@ class InvestmentPerformanceTab(QWidget):
         self.populate_table(self.current_data)
 
     def populate_table(self, data):
-        self.table.setRowCount(len(data))
+        self.table.setUpdatesEnabled(False)
+        self.table.blockSignals(True)
+        try:
+            self.table.setRowCount(len(data))
 
-        for r, row in enumerate(data):
-            is_total = row.get('is_total', False)
+            for r, row in enumerate(data):
+                is_total = row.get('is_total', False)
 
-            acc_item = StringTableWidgetItem(row['name'])
-            if is_total:
-                f = acc_item.font()
-                f.setBold(True)
-                acc_item.setFont(f)
-            self.table.setItem(r, 0, acc_item)
-
-            def set_num(col, val, is_pct=False, breakdown_dict=None):
-                if val is None:
-                    text = "-"
-                elif is_pct:
-                    text = f"{val:+.2f}%"
-                else:
-                    text = f"{val:,.2f}"
-
-                if col == 1 and is_total:
-                    text = ""
-
-                item = NumericTableWidgetItem(text)
-                
-                # Store numeric value for sorting if needed, though we sort data list
-                # item.setData(Qt.ItemDataRole.UserRole, val if val is not None else -999999)
-
-                item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
+                acc_item = StringTableWidgetItem(row['name'])
                 if is_total:
-                    f = item.font()
+                    f = acc_item.font()
                     f.setBold(True)
-                    item.setFont(f)
+                    acc_item.setFont(f)
+                self.table.setItem(r, 0, acc_item)
 
-                if val is not None and col in [4, 5, 8, 9, 10, 11]:
-                    if val > 0:
-                        item.setForeground(QColor("#2e7d32")) # Green
-                    elif val < 0:
-                        item.setForeground(QColor("#c62828")) # Red
+                def set_num(col, val, is_pct=False, breakdown_dict=None):
+                    if val is None:
+                        text = "-"
+                    elif is_pct:
+                        text = f"{val:+.2f}%"
+                    else:
+                        text = f"{val:,.2f}"
 
-                if breakdown_dict:
-                    sorted_years = sorted(
-                        breakdown_dict.items(), key=lambda x: x[0], reverse=True)
-                    tooltip_lines = []
-                    for year, year_data in sorted_years:
-                        cats = year_data.get('breakdown', {})
-                        sorted_cats = sorted(
-                            cats.items(), key=lambda x: x[1], reverse=True)
-                        for cat, amt in sorted_cats:
-                            tooltip_lines.append(f"{year} {cat}: {amt:,.2f}")
-                    tooltip = "\n".join(tooltip_lines).strip()
-                    item.setToolTip(tooltip)
-                elif col in [10, 11] and val is None:
-                    item.setToolTip("Insufficient data (needs >1 flow/valuation)")
+                    if col == 1 and is_total:
+                        text = ""
 
-                self.table.setItem(r, col, item)
+                    item = NumericTableWidgetItem(text)
+                    
+                    # Store numeric value for sorting if needed, though we sort data list
+                    # item.setData(Qt.ItemDataRole.UserRole, val if val is not None else -999999)
 
-            set_num(1, row['qty'])
-            self.table.item(r, 1).setForeground(QColor("black"))
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
-            set_num(2, row['cost_basis'])
-            self.table.item(r, 2).setForeground(QColor("black"))
+                    if is_total:
+                        f = item.font()
+                        f.setBold(True)
+                        item.setFont(f)
 
-            set_num(3, row['market_value'])
-            self.table.item(r, 3).setForeground(QColor("black"))
+                    if val is not None and col in [4, 5, 8, 9, 10, 11]:
+                        if val > 0:
+                            item.setForeground(QColor("#2e7d32")) # Green
+                        elif val < 0:
+                            item.setForeground(QColor("#c62828")) # Red
 
-            set_num(4, row['unrealized_pl'])
-            set_num(5, row['unrealized_pl_pct'], is_pct=True)
+                    if breakdown_dict:
+                        sorted_years = sorted(
+                            breakdown_dict.items(), key=lambda x: x[0], reverse=True)
+                        tooltip_lines = []
+                        for year, year_data in sorted_years:
+                            cats = year_data.get('breakdown', {})
+                            sorted_cats = sorted(
+                                cats.items(), key=lambda x: x[1], reverse=True)
+                            for cat, amt in sorted_cats:
+                                tooltip_lines.append(f"{year} {cat}: {amt:,.2f}")
+                        tooltip = "\n".join(tooltip_lines).strip()
+                        item.setToolTip(tooltip)
+                    elif col in [10, 11] and val is None:
+                        item.setToolTip("Insufficient data (needs >1 flow/valuation)")
 
-            set_num(6, row['dividends'],
-                    breakdown_dict=row.get('income_breakdown'))
-            if row['dividends'] is not None and row['dividends'] > 0:
-                self.table.item(r, 6).setForeground(QColor("#2e7d32"))
+                    self.table.setItem(r, col, item)
 
-            set_num(7, row['fees'], breakdown_dict=row.get('fees_breakdown'))
-            if row['fees'] is not None and row['fees'] > 0:
-                self.table.item(r, 7).setForeground(QColor("#c62828"))
+                set_num(1, row['qty'])
+                self.table.item(r, 1).setForeground(QColor("black"))
 
-            set_num(8, row['total_return'])
-            set_num(9, row['total_return_pct'], is_pct=True)
-            
-            # New Columns
-            set_num(10, row['irr'], is_pct=True)
-            set_num(11, row['twr'], is_pct=True)
+                set_num(2, row['cost_basis'])
+                self.table.item(r, 2).setForeground(QColor("black"))
 
-        self.table.resizeColumnsToContents()
+                set_num(3, row['market_value'])
+                self.table.item(r, 3).setForeground(QColor("black"))
 
-        header = self.table.horizontalHeader()
-        for i in range(self.table.columnCount()):
-            current_width = header.sectionSize(i)
-            header.resizeSection(i, current_width + 15)
+                set_num(4, row['unrealized_pl'])
+                set_num(5, row['unrealized_pl_pct'], is_pct=True)
+
+                set_num(6, row['dividends'],
+                        breakdown_dict=row.get('income_breakdown'))
+                if row['dividends'] is not None and row['dividends'] > 0:
+                    self.table.item(r, 6).setForeground(QColor("#2e7d32"))
+
+                set_num(7, row['fees'], breakdown_dict=row.get('fees_breakdown'))
+                if row['fees'] is not None and row['fees'] > 0:
+                    self.table.item(r, 7).setForeground(QColor("#c62828"))
+
+                set_num(8, row['total_return'])
+                set_num(9, row['total_return_pct'], is_pct=True)
+                
+                # New Columns
+                set_num(10, row['irr'], is_pct=True)
+                set_num(11, row['twr'], is_pct=True)
+
+            self.table.resizeColumnsToContents()
+
+            header = self.table.horizontalHeader()
+            for i in range(self.table.columnCount()):
+                current_width = header.sectionSize(i)
+                header.resizeSection(i, current_width + 15)
+        finally:
+            self.table.blockSignals(False)
+            self.table.setUpdatesEnabled(True)

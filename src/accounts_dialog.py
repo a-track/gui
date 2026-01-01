@@ -144,16 +144,16 @@ class AccountsDialog(QDialog):
 
         header = self.table.horizontalHeader()
 
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(9, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(9, QHeaderView.ResizeMode.Interactive)
 
         layout.addWidget(self.table)
 
@@ -182,127 +182,131 @@ class AccountsDialog(QDialog):
             self.show_status(f'Error loading accounts: {e}', error=True)
 
     def populate_table(self, accounts):
+        self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
         self.table.setSortingEnabled(False)
-        self.table.setRowCount(0)
+        try:
+            self.table.setRowCount(0)
 
-        valid_accounts = [
-            a for a in accounts if a.id and a.account and str(a.account).strip()]
+            valid_accounts = [
+                a for a in accounts if a.id and a.account and str(a.account).strip()]
 
-        self.table.setRowCount(len(valid_accounts))
+            self.table.setRowCount(len(valid_accounts))
 
-        for row, account in enumerate(valid_accounts):
-            try:
+            for row, account in enumerate(valid_accounts):
+                try:
 
-                id_item = NumericTableWidgetItem(str(account.id))
-                # Allow editing ID
-                id_item.setFlags(id_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                id_item.setBackground(QColor(240, 240, 240))
-                id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                id_item.setToolTip("Double click to change ID")
-                self.table.setItem(row, 0, id_item)
+                    id_item = NumericTableWidgetItem(str(account.id))
+                    # Allow editing ID
+                    id_item.setFlags(id_item.flags() | Qt.ItemFlag.ItemIsEditable)
+                    id_item.setBackground(QColor(240, 240, 240))
+                    id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    id_item.setToolTip("Double click to change ID")
+                    self.table.setItem(row, 0, id_item)
 
-                self.table.setItem(row, 1, QTableWidgetItem(account.account))
+                    self.table.setItem(row, 1, QTableWidgetItem(account.account))
 
-                self.table.setItem(row, 2, QTableWidgetItem(account.type))
+                    self.table.setItem(row, 2, QTableWidgetItem(account.type))
 
-                self.table.setItem(
-                    row, 3, QTableWidgetItem(account.company or ''))
+                    self.table.setItem(
+                        row, 3, QTableWidgetItem(account.company or ''))
 
-                self.table.setItem(row, 4, QTableWidgetItem(account.currency))
+                    self.table.setItem(row, 4, QTableWidgetItem(account.currency))
 
-                def create_checkbox_widget(checked, callback_name, prop_name):
-                    widget = QWidget()
-                    layout = QHBoxLayout()
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    cb = QCheckBox()
-                    cb.setChecked(checked)
-                    cb.setProperty('account_id', account.id)
-                    cb.toggled.connect(getattr(self, callback_name))
-                    layout.addWidget(cb)
-                    widget.setLayout(layout)
-                    return widget
+                    def create_checkbox_widget(checked, callback_name, prop_name):
+                        widget = QWidget()
+                        layout = QHBoxLayout()
+                        layout.setContentsMargins(0, 0, 0, 0)
+                        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        cb = QCheckBox()
+                        cb.setChecked(checked)
+                        cb.setProperty('account_id', account.id)
+                        cb.toggled.connect(getattr(self, callback_name))
+                        layout.addWidget(cb)
+                        widget.setLayout(layout)
+                        return widget
 
-                self.table.setItem(row, 5, BooleanTableWidgetItem(
-                    "Yes" if getattr(account, 'show_in_balance', True) else "No"))
-                self.table.setCellWidget(row, 5, create_checkbox_widget(
-                    getattr(account, 'show_in_balance',
-                            True), 'toggle_show_in_balance', 'show_in_balance'
-                ))
+                    self.table.setItem(row, 5, BooleanTableWidgetItem(
+                        "Yes" if getattr(account, 'show_in_balance', True) else "No"))
+                    self.table.setCellWidget(row, 5, create_checkbox_widget(
+                        getattr(account, 'show_in_balance',
+                                True), 'toggle_show_in_balance', 'show_in_balance'
+                    ))
 
-                self.table.setItem(row, 6, BooleanTableWidgetItem(
-                    "Yes" if getattr(account, 'is_active', True) else "No"))
-                self.table.setCellWidget(row, 6, create_checkbox_widget(
-                    getattr(account, 'is_active',
-                            True), 'toggle_active', 'is_active'
-                ))
+                    self.table.setItem(row, 6, BooleanTableWidgetItem(
+                        "Yes" if getattr(account, 'is_active', True) else "No"))
+                    self.table.setCellWidget(row, 6, create_checkbox_widget(
+                        getattr(account, 'is_active',
+                                True), 'toggle_active', 'is_active'
+                    ))
 
-                invest_widget = QWidget()
-                inv_layout = QHBoxLayout()
-                inv_layout.setContentsMargins(0, 0, 0, 0)
-                inv_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                inv_cb = QCheckBox()
-                inv_cb.setChecked(getattr(account, 'is_investment', False))
-                inv_cb.setProperty('account_id', account.id)
+                    invest_widget = QWidget()
+                    inv_layout = QHBoxLayout()
+                    inv_layout.setContentsMargins(0, 0, 0, 0)
+                    inv_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    inv_cb = QCheckBox()
+                    inv_cb.setChecked(getattr(account, 'is_investment', False))
+                    inv_cb.setProperty('account_id', account.id)
 
-                inv_cb.toggled.connect(self.toggle_investment)
-                inv_layout.addWidget(inv_cb)
-                invest_widget.setLayout(inv_layout)
-                self.table.setItem(row, 7, BooleanTableWidgetItem(
-                    "Yes" if getattr(account, 'is_investment', False) else "No"))
-                self.table.setCellWidget(row, 7, invest_widget)
+                    inv_cb.toggled.connect(self.toggle_investment)
+                    inv_layout.addWidget(inv_cb)
+                    invest_widget.setLayout(inv_layout)
+                    self.table.setItem(row, 7, BooleanTableWidgetItem(
+                        "Yes" if getattr(account, 'is_investment', False) else "No"))
+                    self.table.setCellWidget(row, 7, invest_widget)
 
-                strat_widget = QWidget()
-                strat_layout = QHBoxLayout()
-                strat_layout.setContentsMargins(0, 0, 0, 0)
-                strat_combo = NoScrollComboBox()
-                strat_combo.addItems(
-                    ['Total Value', 'Price/Qty', 'No Valuation'])
+                    strat_widget = QWidget()
+                    strat_layout = QHBoxLayout()
+                    strat_layout.setContentsMargins(0, 0, 0, 0)
+                    strat_combo = NoScrollComboBox()
+                    strat_combo.addItems(
+                        ['Total Value', 'Price/Qty', 'No Valuation'])
 
-                current_strat = getattr(
-                    account, 'valuation_strategy', 'Total Value')
-                if not current_strat and getattr(account, 'is_investment', False):
-                    current_strat = 'Total Value'
-                elif not current_strat:
-                    current_strat = 'Total Value'
+                    current_strat = getattr(
+                        account, 'valuation_strategy', 'Total Value')
+                    if not current_strat and getattr(account, 'is_investment', False):
+                        current_strat = 'Total Value'
+                    elif not current_strat:
+                        current_strat = 'Total Value'
 
-                strat_combo.setCurrentText(current_strat)
-                strat_combo.setProperty('account_id', account.id)
-                strat_combo.currentIndexChanged.connect(
-                    self.change_valuation_strategy)
+                    strat_combo.setCurrentText(current_strat)
+                    strat_combo.setProperty('account_id', account.id)
+                    strat_combo.currentIndexChanged.connect(
+                        self.change_valuation_strategy)
 
-                strat_combo.setEnabled(
-                    getattr(account, 'is_investment', False))
+                    strat_combo.setEnabled(
+                        getattr(account, 'is_investment', False))
 
-                strat_layout.addWidget(strat_combo)
-                strat_widget.setLayout(strat_layout)
-                self.table.setItem(row, 8, QTableWidgetItem(current_strat))
-                self.table.setCellWidget(row, 8, strat_widget)
+                    strat_layout.addWidget(strat_combo)
+                    strat_widget.setLayout(strat_layout)
+                    self.table.setItem(row, 8, QTableWidgetItem(current_strat))
+                    self.table.setCellWidget(row, 8, strat_widget)
 
-                action_widget = QWidget()
-                action_layout = QHBoxLayout()
-                action_layout.setContentsMargins(0, 0, 0, 0)
-                action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    action_widget = QWidget()
+                    action_layout = QHBoxLayout()
+                    action_layout.setContentsMargins(0, 0, 0, 0)
+                    action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-                delete_btn = QPushButton('✕')
-                delete_btn.setFixedSize(20, 20)
-                delete_btn.setStyleSheet('''
-                    QPushButton { background-color: #ff4444; color: white; border-radius: 10px; font-weight: bold; }
-                    QPushButton:hover { background-color: #cc0000; }
-                ''')
-                delete_btn.setProperty('account_id', account.id)
-                delete_btn.clicked.connect(self.delete_account)
+                    delete_btn = QPushButton('✕')
+                    delete_btn.setFixedSize(20, 20)
+                    delete_btn.setStyleSheet('''
+                        QPushButton { background-color: #ff4444; color: white; border-radius: 10px; font-weight: bold; }
+                        QPushButton:hover { background-color: #cc0000; }
+                    ''')
+                    delete_btn.setProperty('account_id', account.id)
+                    delete_btn.clicked.connect(self.delete_account)
 
-                action_layout.addWidget(delete_btn)
-                action_widget.setLayout(action_layout)
-                self.table.setCellWidget(row, 9, action_widget)
-            except Exception as e:
-                print(f"Error populating account row: {e}")
+                    action_layout.addWidget(delete_btn)
+                    action_widget.setLayout(action_layout)
+                    self.table.setCellWidget(row, 9, action_widget)
+                except Exception as e:
+                    print(f"Error populating account row: {e}")
 
-        self.table.resizeColumnsToContents()
-        self.table.blockSignals(False)
-        self.table.setSortingEnabled(True)
+            self.table.resizeColumnsToContents()
+        finally:
+            self.table.blockSignals(False)
+            self.table.setSortingEnabled(True)
+            self.table.setUpdatesEnabled(True)
         self.show_status(f'Loaded {len(valid_accounts)} accounts')
 
     def on_cell_changed(self, row, column):
