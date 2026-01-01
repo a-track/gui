@@ -1,8 +1,18 @@
-# Budget Tracker GUI v3.11
+# Budget Tracker GUI v4.0
 
 A powerful and user-friendly desktop application for personal finance management, built with Python, PyQt6, and DuckDB.
 
 ## Features
+
+### v4.0 Updates (Global Historical FX & Cash Flow)
+- **Global Historical FX**: All charts and calculations now strictly use historical exchange rates for maximum accuracy.
+- **Enhanced Cash Flow**:
+  - New "Net Invested" tracking (Solid Purple Line) side-by-side with Income/Expenses.
+  - "Cash Saved" metric in header (Net Savings - Investments).
+- **Investment Performance**:
+  - True "Unrealized P&L" based on historical Cost Basis.
+  - Aligned visuals across all tabs.
+- **UI Improvements**: Reordered tabs for better flow, consistent styling.
 
 ### v3.11 Updates (Investment Perfomance)
 - **Advanced Return Metrics**: Added **IRR** (Internal Rate of Return) and **TWR** (Time-Weighted Return) to the Investment Performance tab.
