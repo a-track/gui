@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from finance_utils import xirr, calculate_linked_twr
+from utils import format_currency
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
                              QTableWidget, QProgressBar)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -336,6 +337,26 @@ class InvestmentPerformanceTab(QWidget):
         super().__init__(parent)
         self.budget_app = budget_app
         self.init_ui()
+        
+    def filter_content(self, text):
+        """Filter table rows based on text matching."""
+        if not hasattr(self, 'performance_table'): return
+        
+        search_text = text.lower()
+        rows = self.performance_table.rowCount()
+        cols = self.performance_table.columnCount()
+        
+        for row in range(rows):
+            should_show = False
+            if not search_text:
+                should_show = True
+            else:
+                for col in range(cols):
+                    item = self.performance_table.item(row, col)
+                    if item and search_text in item.text().lower():
+                        should_show = True
+                        break
+            self.performance_table.setRowHidden(row, not should_show)
         self.refresh_data()
 
     def init_ui(self):
@@ -517,7 +538,7 @@ class InvestmentPerformanceTab(QWidget):
                     elif is_pct:
                         text = f"{val:+.2f}%"
                     else:
-                        text = f"{val:,.2f}"
+                        text = format_currency(val)
 
                     if col == 1 and is_total:
                         text = ""
@@ -550,7 +571,7 @@ class InvestmentPerformanceTab(QWidget):
                             sorted_cats = sorted(
                                 cats.items(), key=lambda x: x[1], reverse=True)
                             for cat, amt in sorted_cats:
-                                tooltip_lines.append(f"{year} {cat}: {amt:,.2f}")
+                                tooltip_lines.append(f"{year} {cat}: {format_currency(amt)}")
                         tooltip = "\n".join(tooltip_lines).strip()
                         item.setToolTip(tooltip)
                     elif col in [10, 11] and val is None:
@@ -595,3 +616,23 @@ class InvestmentPerformanceTab(QWidget):
         finally:
             self.table.blockSignals(False)
             self.table.setUpdatesEnabled(True)
+
+    def filter_content(self, text):
+        """Filter table rows based on text matching."""
+        if not hasattr(self, 'table'): return
+        
+        search_text = text.lower()
+        rows = self.table.rowCount()
+        cols = self.table.columnCount()
+        
+        for row in range(rows):
+            should_show = False
+            if not search_text:
+                should_show = True
+            else:
+                for col in range(cols):
+                    item = self.table.item(row, col)
+                    if item and search_text in item.text().lower():
+                        should_show = True
+                        break
+            self.table.setRowHidden(row, not should_show)

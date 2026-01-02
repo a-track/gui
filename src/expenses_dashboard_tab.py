@@ -5,6 +5,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 import datetime
 import math
 from custom_widgets import NoScrollComboBox
+from utils import format_currency
 
 
 class CategoryFilterDialog(QDialog):
@@ -371,13 +372,13 @@ class ExpensesDashboardTab(QWidget):
 
     def update_kpis(self, data):
         total = data['total_expense']
-        self.kpi_total.findChildren(QLabel)[1].setText(f"CHF {total:,.2f}")
+        self.kpi_total.findChildren(QLabel)[1].setText(f"CHF {format_currency(total)}")
 
         trend = data['trend']
         if trend:
             total_trend = sum(t['amount'] for t in trend)
             avg = total_trend / len(trend)
-            self.kpi_avg.findChildren(QLabel)[1].setText(f"CHF {avg:,.2f}")
+            self.kpi_avg.findChildren(QLabel)[1].setText(f"CHF {format_currency(avg)}")
         else:
             self.kpi_avg.findChildren(QLabel)[1].setText("CHF 0.00")
 
@@ -388,7 +389,7 @@ class ExpensesDashboardTab(QWidget):
             name = top_cat[0]
             val = top_cat[1]['total']
             self.kpi_top.findChildren(QLabel)[1].setText(name)
-            self.kpi_top.findChildren(QLabel)[2].setText(f"CHF {val:,.2f}")
+            self.kpi_top.findChildren(QLabel)[2].setText(f"CHF {format_currency(val)}")
         else:
             self.kpi_top.findChildren(QLabel)[1].setText("None")
             self.kpi_top.findChildren(QLabel)[2].setText("CHF 0.00")
@@ -422,8 +423,8 @@ class ExpensesDashboardTab(QWidget):
 
             subs = sorted(v['subs'].items(),
                           key=lambda x: x[1], reverse=True)[:3]
-            sub_text = "\n".join([f" - {sn}: {sv:,.2f}" for sn, sv in subs])
-            text = f"{k}: CHF {val:,.2f}\n{sub_text}"
+            sub_text = "\n".join([f" - {sn}: {format_currency(sv)}" for sn, sv in subs])
+            text = f"{k}: CHF {format_currency(val)}\n{sub_text}"
             tooltip_texts.append(text)
 
         if not filtered_sizes:
@@ -488,7 +489,7 @@ class ExpensesDashboardTab(QWidget):
         ax.grid(True, linestyle=':', alpha=0.6)
 
         ax.get_yaxis().set_major_formatter(
-            plt.FuncFormatter(lambda x, p: format(int(x), ',')))
+            plt.FuncFormatter(lambda x, p: format_currency(x, precision=0)))
 
         def on_hover(event):
             if event.inaxes == ax:
@@ -497,7 +498,7 @@ class ExpensesDashboardTab(QWidget):
                     idx = ind['ind'][0]
                     val = values[idx]
                     mon = months[idx]
-                    self.canvas_line.setToolTip(f"{mon}: CHF {val:,.2f}")
+                    self.canvas_line.setToolTip(f"{mon}: CHF {format_currency(val)}")
                     return
             self.canvas_line.setToolTip("")
 
@@ -546,7 +547,7 @@ class ExpensesDashboardTab(QWidget):
 
             x_pos = width + (max_val * 0.02)
             ax.text(x_pos, bar.get_y() + bar.get_height()/2,
-                    f'{width:,.2f}',
+                    f'{format_currency(width)}',
                     ha='left', va='center', fontweight='bold', color='#333', fontsize=9)
 
         ax.spines['top'].set_visible(False)

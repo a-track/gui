@@ -6,7 +6,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtGui import QColor, QFont
 import datetime
-from utils import safe_eval_math
+from utils import safe_eval_math, format_currency
 from transactions_dialog import NumericTableWidgetItem
 from custom_widgets import NoScrollComboBox
 
@@ -192,7 +192,7 @@ class BudgetDialog(QDialog):
             total_exp_actual = exp_grand['actual']
             net_saved = total_inc_actual - total_exp_actual
             
-            self.summary_label.setText(f"Net Result: {net_saved:,.2f}")
+            self.summary_label.setText(f"Net Result: {format_currency(net_saved)}")
             if net_saved >= 0:
                 self.summary_label.setStyleSheet("font-size: 14pt; font-weight: bold; color: #4CAF50; margin: 10px;")
             else:
@@ -402,7 +402,7 @@ class BudgetDialog(QDialog):
             table.setUpdatesEnabled(True)
         
     def set_numeric_item(self, table, row, col, val, bg_color=None, font=None):
-        text = f"{val:.2f}"
+        text = format_currency(val)
         item = NumericTableWidgetItem(text)
         item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         if bg_color:
@@ -412,7 +412,7 @@ class BudgetDialog(QDialog):
         table.setItem(row, col, item)
 
     def set_diff_item(self, table, row, col, val, is_income, is_pct, bg_color=None, font=None):
-        text = f"{val:.1f}%" if is_pct else f"{val:.2f}"
+        text = f"{val:.1f}%" if is_pct else format_currency(val)
         item = NumericTableWidgetItem(text)
         item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         if bg_color:

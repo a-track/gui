@@ -589,3 +589,27 @@ class AccountsDialog(QDialog):
         self.status_label.setStyleSheet(
             'color: #f44336' if error else 'color: #4CAF50')
         QTimer.singleShot(3000, lambda: self.status_label.setText(''))
+
+    def filter_content(self, text):
+        """Filter table rows based on text matching."""
+        if not hasattr(self, 'table'): return
+        
+        search_text = text.lower()
+        rows = self.table.rowCount()
+        cols = self.table.columnCount()
+        
+        for row in range(rows):
+            should_show = False
+            if not search_text:
+                should_show = True
+            else:
+                for col in range(cols):
+                    item = self.table.item(row, col)
+                    # Check standard items
+                    if item and search_text in item.text().lower():
+                        should_show = True
+                        break
+                    
+                    # Check cell widgets (checkboxes, combos) if needed, or rely on underlying data
+                    # For simple search, text check is usually enough if data is in items
+            self.table.setRowHidden(row, not should_show)

@@ -5,11 +5,11 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QRadioButton, QButtonGroup, QDateEdit, QGroupBox,
                              QScrollArea, QCheckBox, QTabWidget, QMenu,
                              QWidgetAction, QToolButton, QSizePolicy)
-from PyQt6.QtCore import Qt, QDate, QSettings
-from PyQt6.QtGui import QIcon, QAction
+from PyQt6.QtCore import Qt, QDate, QSettings, QTimer
+from PyQt6.QtGui import QIcon, QAction, QKeySequence, QShortcut
 
 from models import BudgetApp
-from utils import safe_eval_math
+from utils import safe_eval_math, format_currency
 from custom_widgets import NoScrollComboBox
 from expenses_dashboard_tab import ExpensesDashboardTab
 from investment_profit_tab import InvestmentProfitTab
@@ -25,7 +25,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        title = 'Budget Tracker 4.0'
+        title = 'Budget Tracker 4.1'
         if self.db_path:
             title += f' - [{self.db_path}]'
         self.setWindowTitle(title)
@@ -46,6 +46,54 @@ class BudgetTrackerWindow(QMainWindow):
 
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+
+
+        # Search Bar Area
+        self.search_container = QWidget()
+        search_layout = QHBoxLayout(self.search_container)
+        search_layout.setContentsMargins(10, 5, 10, 5)
+        search_layout.setSpacing(5)
+        
+        self.search_container.setStyleSheet("""
+            QWidget {
+                background-color: #f5f5f5;
+                border-bottom: 1px solid #ddd;
+            }
+        """)
+
+        search_label = QLabel("🔍")
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search... (Ctrl+F)")
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                padding: 5px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                background-color: #fff;
+            }
+            QLineEdit:disabled {
+                background-color: #eee;
+                color: #888;
+            }
+        """)
+        self.search_input.textChanged.connect(self.perform_search)
+
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.search_input)
+        
+        main_layout.addWidget(self.search_container)
+        self.search_container.setVisible(True) # Force visibility
+
+        # Shortcut Ctrl+F to focus search
+        self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.search_shortcut.activated.connect(self.focus_search)
+
+        
+        # Shortcut Esc to clear focus/search
+        self.esc_shortcut = QShortcut(QKeySequence("Esc"), self)
+        self.esc_shortcut.activated.connect(self.clear_search_focus)
+
         central_widget.setLayout(main_layout)
 
         self.tab_widget = QTabWidget()
@@ -97,7 +145,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.tab_defs['currencies'] = self.create_exchange_rates_tab()
         self.tab_defs['manage_accounts'] = self.create_accounts_tab()
         self.tab_defs['manage_categories'] = self.create_categories_tab()
-        self.tab_defs['manage_categories'] = self.create_categories_tab()
+
         self.tab_defs['data_management'] = self.create_data_management_tab()
         self.tab_defs['investment_profit'] = self.create_investment_profit_tab()
 
@@ -107,6 +155,108 @@ class BudgetTrackerWindow(QMainWindow):
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
 
         main_layout.addWidget(self.tab_widget)
+        
+        # Initialize search state for current tab (search bar code moved to top)
+        QTimer.singleShot(100, lambda: self.on_tab_changed(self.tab_widget.currentIndex()))
+
+
+
+        
+
+
+
+    def perform_search(self, text):
+        current_widget = self.tab_widget.currentWidget()
+        if not current_widget:
+            return
+            
+        # Check if widget has a controller attached (for dialog-based tabs)
+        controller = getattr(current_widget, 'searchable_controller', current_widget)
+        
+        if hasattr(controller, 'filter_content'):
+            controller.filter_content(text)
+
+    def focus_search(self):
+        """Focus the search bar (active only if search is enabled)"""
+        if self.search_input.isEnabled():
+            self.search_input.setFocus()
+            self.search_input.selectAll()
+            
+    def clear_search_focus(self):
+        """Clear search or remove focus"""
+        if self.search_input.hasFocus():
+            self.search_input.clear()
+            self.search_input.clearFocus() 
+            # Optionally give focus back to table? 
+            # For now just unfocus search.
+
+    def on_tab_changed(self, index):
+        """Called when user switches tabs - Handles search and data refresh"""
+        if index < 0 or index >= self.tab_widget.count():
+            return
+
+        # Clear search when switching tabs
+        self.search_input.clear()
+        
+        # White-list of tabs where search is enabled
+        # note: distinct items in tab_defs are tuples (widget, title, tip)
+        searchable_tabs = [
+            self.tab_defs['overview'][0],
+            self.tab_defs['performance'][0],
+            self.tab_defs['transactions'][0],
+            self.tab_defs['account_entries'][0],
+            self.tab_defs['manage_accounts'][0],
+            self.tab_defs['manage_categories'][0]
+        ]
+        
+        current_widget = self.tab_widget.widget(index)
+        is_searchable = current_widget in searchable_tabs
+        
+        self.search_input.setEnabled(is_searchable)
+        self.search_input.setPlaceholderText(
+            "Search..." if is_searchable else "Search not available for this tab")
+        if is_searchable:
+            self.search_input.setFocus()
+
+
+        # Refresh tab data
+        try:
+            current_widget = self.tab_widget.widget(index)
+            
+            if hasattr(self, 'balance_tab_widget') and current_widget == self.balance_tab_widget:
+                self.balance_tab_widget.refresh_data()
+            elif hasattr(self, 'transactions_tab_widget') and current_widget == self.transactions_tab_widget:
+                if hasattr(self, 'transactions_dialog_ref'):
+                    self.transactions_dialog_ref.load_transactions()
+            elif hasattr(self, 'account_perspective_tab_widget') and current_widget == self.account_perspective_tab_widget:
+                if hasattr(self, 'account_perspective_dialog_ref'):
+                    # Check if refresh_data exists, otherwise skip or implement it
+                    if hasattr(self.account_perspective_dialog_ref, 'refresh_data'):
+                        self.account_perspective_dialog_ref.refresh_data()
+            elif hasattr(self, 'budget_tab_widget') and current_widget == self.budget_tab_widget:
+                if hasattr(self, 'budget_dialog_ref'):
+                    self.budget_dialog_ref.load_budget_data()
+            elif hasattr(self, 'accounts_tab_widget') and current_widget == self.accounts_tab_widget:
+                if hasattr(self, 'accounts_dialog_ref'):
+                    self.accounts_dialog_ref.load_accounts()
+            elif hasattr(self, 'categories_tab_widget') and current_widget == self.categories_tab_widget:
+                if hasattr(self, 'categories_dialog_ref'):
+                    self.categories_dialog_ref.load_categories()
+            elif hasattr(self, 'exchange_rates_tab_widget') and current_widget == self.exchange_rates_tab_widget:
+                if hasattr(self, 'exchange_rates_tab_ref'):
+                    self.exchange_rates_tab_ref.refresh_data()
+            elif hasattr(self, 'report_tab_widget') and current_widget == self.report_tab_widget:
+                if hasattr(self, 'report_tab_ref'):
+                    self.report_tab_ref.refresh_data()
+            elif hasattr(self, 'savings_tab_widget') and current_widget == self.savings_tab_widget:
+                if hasattr(self, 'savings_tab_ref'):
+                    self.savings_tab_ref.refresh_data()
+            elif hasattr(self, 'investment_performance_tab_widget') and current_widget == self.investment_performance_tab_widget:
+                if hasattr(self, 'investment_performance_tab_ref'):
+                    self.investment_performance_tab_ref.refresh_data()
+
+        except Exception as e:
+            print(f"Error in on_tab_changed: {e}")
 
     def show_tab_context_menu(self, point):
 
@@ -700,6 +850,15 @@ class BudgetTrackerWindow(QMainWindow):
         buttons_layout.addWidget(add_btn)
         buttons_layout.addStretch()
         main_layout.addLayout(buttons_layout)
+
+        # Connect Enter key to add_transaction
+        self.amount_input.returnPressed.connect(self.add_transaction)
+        self.to_amount_input.returnPressed.connect(self.add_transaction)
+        self.notes_input.returnPressed.connect(self.add_transaction)
+        self.qty_input.returnPressed.connect(self.add_transaction)
+        if self.payee_input.lineEdit():
+             self.payee_input.lineEdit().returnPressed.connect(self.add_transaction)
+
         main_layout.addStretch(1)
 
         self.add_transaction_tab_widget = tab
@@ -715,7 +874,7 @@ class BudgetTrackerWindow(QMainWindow):
             try:
 
                 val = safe_eval_math(text)
-                self.amount_preview_label.setText(f"= {val:,.2f}")
+                self.amount_preview_label.setText(f"= {format_currency(val)}")
             except:
 
                 self.amount_preview_label.setText('')
@@ -737,6 +896,9 @@ class BudgetTrackerWindow(QMainWindow):
         from transactions_dialog import TransactionsDialog
         self.transactions_dialog_ref = TransactionsDialog(
             self.budget_app, self)
+        
+        # Attach controller for search
+        tab.searchable_controller = self.transactions_dialog_ref
 
         dialog_layout = self.transactions_dialog_ref.layout()
         if dialog_layout:
@@ -759,6 +921,9 @@ class BudgetTrackerWindow(QMainWindow):
         from account_perspective import AccountPerspectiveDialog
         self.account_perspective_dialog_ref = AccountPerspectiveDialog(
             self.budget_app, self)
+        
+        # Attach controller for search
+        tab.searchable_controller = self.account_perspective_dialog_ref
 
         dialog_layout = self.account_perspective_dialog_ref.layout()
         if dialog_layout:
@@ -801,6 +966,9 @@ class BudgetTrackerWindow(QMainWindow):
 
         from accounts_dialog import AccountsDialog
         self.accounts_dialog_ref = AccountsDialog(self.budget_app, self)
+        
+        # Attach controller for search
+        tab.searchable_controller = self.accounts_dialog_ref
 
         dialog_layout = self.accounts_dialog_ref.layout()
         if dialog_layout:
@@ -826,6 +994,9 @@ class BudgetTrackerWindow(QMainWindow):
 
         from categories_dialog import CategoriesDialog
         self.categories_dialog_ref = CategoriesDialog(self.budget_app, self)
+
+        # Attach controller for search
+        tab.searchable_controller = self.categories_dialog_ref
 
         dialog_layout = self.categories_dialog_ref.layout()
         if dialog_layout:
@@ -884,6 +1055,10 @@ class BudgetTrackerWindow(QMainWindow):
         from investment_performance_tab import InvestmentPerformanceTab
         self.investment_performance_tab_ref = InvestmentPerformanceTab(
             self.budget_app, self)
+        
+        # Attach controller for search
+        tab.searchable_controller = self.investment_performance_tab_ref
+        
         layout.addWidget(self.investment_performance_tab_ref)
         self.investment_performance_tab_widget = tab
         return tab, "🚀 Performance", "Detailed investment performance metrics including dividends."
@@ -913,47 +1088,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.savings_tab_ref.refresh_data()
         return tab, "💸 Cash Flow", "Visualize monthly savings rate."
 
-    def on_tab_changed(self, index):
-        """Called when user switches tabs - Refactored for movability"""
 
-        if index < 0 or index >= self.tab_widget.count():
-            return
-
-        try:
-            current_widget = self.tab_widget.widget(index)
-
-            if hasattr(self, 'balance_tab_widget') and current_widget == self.balance_tab_widget:
-                self.balance_tab_widget.refresh_data()
-            elif hasattr(self, 'transactions_tab_widget') and current_widget == self.transactions_tab_widget:
-                if hasattr(self, 'transactions_dialog_ref'):
-                    self.transactions_dialog_ref.load_transactions()
-            elif hasattr(self, 'account_perspective_tab_widget') and current_widget == self.account_perspective_tab_widget:
-                if hasattr(self, 'account_perspective_dialog_ref'):
-                    self.account_perspective_dialog_ref.refresh_data()
-            elif hasattr(self, 'budget_tab_widget') and current_widget == self.budget_tab_widget:
-                if hasattr(self, 'budget_dialog_ref'):
-                    self.budget_dialog_ref.load_budget_data()
-            elif hasattr(self, 'accounts_tab_widget') and current_widget == self.accounts_tab_widget:
-                if hasattr(self, 'accounts_dialog_ref'):
-                    self.accounts_dialog_ref.load_accounts()
-            elif hasattr(self, 'categories_tab_widget') and current_widget == self.categories_tab_widget:
-                if hasattr(self, 'categories_dialog_ref'):
-                    self.categories_dialog_ref.load_categories()
-            elif hasattr(self, 'exchange_rates_tab_widget') and current_widget == self.exchange_rates_tab_widget:
-                if hasattr(self, 'exchange_rates_tab_ref'):
-                    self.exchange_rates_tab_ref.refresh_data()
-            elif hasattr(self, 'report_tab_widget') and current_widget == self.report_tab_widget:
-                if hasattr(self, 'report_tab_ref'):
-                    self.report_tab_ref.refresh_data()
-            elif hasattr(self, 'savings_tab_widget') and current_widget == self.savings_tab_widget:
-                if hasattr(self, 'savings_tab_ref'):
-                    self.savings_tab_ref.refresh_data()
-            elif hasattr(self, 'investment_performance_tab_widget') and current_widget == self.investment_performance_tab_widget:
-                if hasattr(self, 'investment_performance_tab_ref'):
-                    self.investment_performance_tab_ref.refresh_data()
-
-        except Exception as e:
-            print(f"Error in on_tab_changed: {e}")
 
     def update_account_combo(self):
         self.account_combo.clear()

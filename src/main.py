@@ -49,7 +49,7 @@ def main():
 
     try:
         import ctypes
-        myappid = 'antigravity.budgettracker.app.3.11'
+        myappid = 'antigravity.budgettracker.app.4.1'
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except Exception:
         pass
@@ -130,7 +130,7 @@ def main():
 
                 error_msg = str(e)
                 if "IO Error" in error_msg and "process cannot access the file" in error_msg:
-                    error_msg = f"Database Locked!\n\nAnother instance of Budget Tracker seems to be running and holding the database lock.\n\nPlease close 'BudgetTracker_V3.5.exe' or other Python instances and try again.\n\nDetails: {e}"
+                    error_msg = f"Database Locked!\n\nAnother instance of Budget Tracker seems to be running and holding the database lock.\n\nPlease close 'BudgetTracker.exe' or other Python instances and try again.\n\nDetails: {e}"
 
                 QMessageBox.critical(
                     None, "Application Error", f"Critical Error: {error_msg}")

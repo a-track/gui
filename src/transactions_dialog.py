@@ -6,7 +6,8 @@ from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
 import datetime
 from delegates import ComboBoxDelegate, DateDelegate
-from utils import safe_eval_math
+from delegates import ComboBoxDelegate, DateDelegate
+from utils import safe_eval_math, format_currency
 from excel_filter import ExcelHeaderView
 import re
 from custom_widgets import NoScrollComboBox
@@ -157,6 +158,10 @@ class TransactionsDialog(QDialog):
         self.show_all_dates_checkbox.toggled.connect(
             self.on_show_all_dates_toggled)
         filter_layout.addWidget(self.show_all_dates_checkbox)
+
+        self.transactions_table = QTableWidget()
+        
+
 
         filter_layout.addStretch()
 
@@ -518,7 +523,7 @@ class TransactionsDialog(QDialog):
                 amount_value = trans.amount
 
                 amount_item = NumericTableWidgetItem(
-                    f"{amount_value:.2f}" if amount_value is not None else "")
+                    format_currency(amount_value) if amount_value is not None else "")
                 if amount_value is not None:
                     amount_item.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -526,7 +531,7 @@ class TransactionsDialog(QDialog):
 
                 to_amount_value = trans.to_amount
                 to_amount_item = NumericTableWidgetItem(
-                    f"{to_amount_value:.2f}" if to_amount_value is not None else "")
+                    format_currency(to_amount_value) if to_amount_value is not None else "")
                 if to_amount_value is not None:
                     to_amount_item.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -1012,3 +1017,23 @@ class TransactionsDialog(QDialog):
     def closeEvent(self, event):
         self.cleanup()
         super().closeEvent(event)
+
+    def filter_content(self, text):
+        """Filter table rows based on text matching."""
+        search_text = text.lower()
+        rows = self.table.rowCount()
+        cols = self.table.columnCount()
+        
+        for row in range(rows):
+            should_show = False
+            if not search_text:
+                should_show = True
+            else:
+                for col in range(cols):
+                    item = self.table.item(row, col)
+                    # Check standard items (skip widgets if any, or handle cell widget logic if needed)
+                    # For QTableWidget mostly items
+                    if item and search_text in item.text().lower():
+                        should_show = True
+                        break
+            self.table.setRowHidden(row, not should_show)

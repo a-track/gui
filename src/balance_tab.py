@@ -1,11 +1,14 @@
+
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
 from PyQt6.QtWidgets import (QHBoxLayout, QLabel, QPushButton,
-                             QTableWidget, QTableWidgetItem)
-from PyQt6.QtCore import Qt
+                              QTableWidget, QTableWidgetItem, QDateEdit)
+from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont, QColor
+from custom_widgets import NoScrollComboBox
 from excel_filter import ExcelHeaderView
 from transactions_dialog import NumericTableWidgetItem, TOTAL_ROW_ROLE, StringTableWidgetItem
+from utils import format_currency
 
 
 class BalanceTab(QWidget):
@@ -15,6 +18,14 @@ class BalanceTab(QWidget):
         super().__init__(parent)
         self.budget_app = budget_app
         self.parent_window = parent
+        self.init_ui()
+
+    def showEvent(self, event):
+        self.populate_years()
+        super().showEvent(event)
+
+    def init_ui(self):
+
 
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -29,6 +40,31 @@ class BalanceTab(QWidget):
             'font-weight: bold; font-size: 18px; margin-bottom: 10px;')
         header_layout.addWidget(balance_label)
         header_layout.addStretch()
+
+        header_layout.addWidget(QLabel("Range:"))
+        self.range_combo = NoScrollComboBox()
+        self.range_combo.setMinimumWidth(150)
+        self.range_combo.addItem("Current (All Time)", "last_12") # Reusing 'last_12' as 'Current' logic (Today)
+        self.range_combo.currentIndexChanged.connect(self.on_range_changed)
+        header_layout.addWidget(self.range_combo)
+
+        # Custom Date Range Inputs (Hidden by default, used for 'Custom' or specific year end)
+        self.date_range_widget = QWidget()
+        date_layout = QHBoxLayout(self.date_range_widget)
+        date_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Balance only cares about "As Of", typically End Date.
+        # But for consistency with savings tab UI, we keep the widgets, but mainly use 'To' date.
+        
+        date_layout.addWidget(QLabel("As Of:")) # Changed label to be clearer for Balance
+        self.to_date = QDateEdit()
+        self.to_date.setCalendarPopup(True)
+        self.to_date.setDisplayFormat("yyyy-MM-dd")
+        self.to_date.setDate(QDate.currentDate())
+        date_layout.addWidget(self.to_date)
+
+        header_layout.addWidget(self.date_range_widget)
+        self.date_range_widget.setVisible(False)
 
         refresh_btn = QPushButton("🔄 Refresh")
         refresh_btn.clicked.connect(self.refresh_data)
@@ -80,14 +116,87 @@ class BalanceTab(QWidget):
 
         layout.addWidget(content_widget)
 
+        self.populate_years()
         self.refresh_data()
+
+    def populate_years(self):
+        years = self.budget_app.get_available_years()
+        current_text = self.range_combo.currentText()
+        
+        self.range_combo.blockSignals(True)
+        self.range_combo.clear()
+        self.range_combo.addItem("Current (All Time)", "last_12")
+        
+        for year in years:
+            self.range_combo.addItem(f"Year {year}", str(year))
+            
+        self.range_combo.addItem("Custom", "custom")
+
+        index = self.range_combo.findText(current_text)
+        if index >= 0:
+            self.range_combo.setCurrentIndex(index)
+        else:
+            self.range_combo.setCurrentIndex(0)
+
+        self.range_combo.blockSignals(False)
+        self.on_range_changed()
+
+    def on_range_changed(self):
+        mode = self.range_combo.currentData()
+        self.date_range_widget.setVisible(mode == 'custom')
+        if mode != 'custom':
+            self.refresh_data()
+            
+    def filter_content(self, text):
+        """Filter table rows based on text matching."""
+        search_text = text.lower()
+        rows = self.balance_table.rowCount()
+        cols = self.balance_table.columnCount()
+        
+        for row in range(rows):
+            should_show = False
+            if not search_text:
+                should_show = True
+            else:
+                for col in range(cols):
+                    item = self.balance_table.item(row, col)
+                    # Skip widget checks if they complicate logic, just check text
+                    if item and search_text in item.text().lower():
+                        should_show = True
+                        break
+            
+            self.balance_table.setRowHidden(row, not should_show)
+
+    def get_end_date(self):
+        mode = self.range_combo.currentData()
+        today = QDate.currentDate()
+        
+        if mode == 'last_12':
+            # "Current" balance is effectively today (or all time)
+            return None # None means no filter (all time)
+            
+        elif mode == 'custom':
+            return self.to_date.date().toString("yyyy-MM-dd")
+            
+        else:
+            # Specific Year
+            try:
+                year = int(mode)
+                return f"{year}-12-31"
+            except:
+                return None
 
     def refresh_data(self):
         """Reload balance data synchronously"""
         try:
-            balances = self.budget_app.get_balance_summary()
-            self.update_balance_display_with_data(balances)
-            self.show_status('Balances loaded successfully')
+            target_date = self.get_end_date()
+            balances = self.budget_app.get_balance_summary(target_date)
+            self.update_balance_display_with_data(balances, target_date)
+            
+            status_msg = 'Balances loaded successfully'
+            if target_date:
+                status_msg += f" (As of {target_date})"
+            self.show_status(status_msg)
         except Exception as e:
             self.balance_table.clear()
             self.balance_table.setRowCount(1)
@@ -98,7 +207,7 @@ class BalanceTab(QWidget):
             self.balance_table.setItem(0, 0, item)
             self.show_status(f'Error: {e}', error=True)
 
-    def update_balance_display_with_data(self, balances):
+    def update_balance_display_with_data(self, balances, target_date=None):
 
         all_accounts = self.budget_app.get_all_accounts()
 
@@ -130,7 +239,7 @@ class BalanceTab(QWidget):
 
             if getattr(acc, 'is_investment', False):
                 raw_val = self.budget_app.get_investment_valuation_for_date(
-                    acc.id)
+                    acc.id, target_date)
                 strategy = getattr(acc, 'valuation_strategy', 'Total Value')
 
                 if strategy == 'Price/Qty':
@@ -146,13 +255,13 @@ class BalanceTab(QWidget):
 
                     tooltip_msg = (
                         f"{acc.account}:\n"
-                        f"{qty:,.4f} units @ {raw_val:,.2f} = {market_val:,.2f} {currency}\n"
-                        f"Invested Amount: {invested_amount:,.2f} {currency}\n"
-                        f"Performance: {sign}{performance:,.2f} {currency} ({sign}{perf_percent:.2f}%)"
+                        f"{format_currency(qty, precision=4)} units @ {format_currency(raw_val)} = {format_currency(market_val)} {currency}\n"
+                        f"Invested Amount: {format_currency(invested_amount)} {currency}\n"
+                        f"Performance: {sign}{format_currency(performance)} {currency} ({sign}{perf_percent:.2f}%)"
                     )
                 elif raw_val > 0:
                     market_val = raw_val
-                    tooltip_msg = f"{acc.account}: Manual Valuation = {market_val:,.2f} {currency}"
+                    tooltip_msg = f"{acc.account}: Manual Valuation = {format_currency(market_val)} {currency}"
 
             if currency not in grouped_data[name]['currencies']:
                 grouped_data[name]['currencies'][currency] = 0.0
@@ -228,9 +337,9 @@ class BalanceTab(QWidget):
 
                 for c, curr in enumerate(sorted_currencies):
                     val = data['currencies'].get(curr, 0.0)
-                    if val != 0:
-                        formatted = f"{val:,.2f} {curr}"
-                        item = NumericTableWidgetItem(formatted)
+                    if abs(val) >= 0.001: # Changed 'balance' to 'val'
+                        formatted_balance = format_currency(val) # Changed 'balance' to 'val'
+                        item = NumericTableWidgetItem(f"{formatted_balance} {curr}") # Changed 'balance_item' to 'item' and added currency
                         item.setTextAlignment(
                             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                         if val < 0:
@@ -245,7 +354,7 @@ class BalanceTab(QWidget):
                         col_grand_totals[curr] += val
 
                 tot_chf = data['total_chf']
-                t_item = NumericTableWidgetItem(f"{tot_chf:,.2f} CHF")
+                t_item = NumericTableWidgetItem(f"{format_currency(tot_chf)} CHF")
 
                 fx_breakdown = []
                 for curr in sorted_currencies:
@@ -254,7 +363,7 @@ class BalanceTab(QWidget):
                         rate = current_rates.get(curr, 1.0)
                         chf_val = val * rate
                         fx_breakdown.append(
-                            f"{val:,.2f} {curr} = {chf_val:,.2f} CHF (Rate: {rate:.4f})")
+                            f"{format_currency(val)} {curr} = {format_currency(chf_val)} CHF (Rate: {rate:.4f})")
 
                 if fx_breakdown:
                     t_item.setToolTip("\n".join(fx_breakdown))
@@ -272,9 +381,12 @@ class BalanceTab(QWidget):
             l_item.setFont(bold_font)
             self.balance_table.setItem(0, 0, l_item)
 
-            for c, curr in enumerate(sorted_currencies):
-                val = col_grand_totals[curr]
-                item = NumericTableWidgetItem(f"{val:,.2f} {curr}")
+            # Re-calculating total_by_currency based on col_grand_totals
+            total_by_currency = col_grand_totals
+            
+            for c, curr in enumerate(sorted_currencies): # Iterating through sorted_currencies to match column order
+                val = total_by_currency[curr]
+                item = NumericTableWidgetItem(f"{format_currency(val)} {curr}") # Corrected to use 'val' and 'curr'
                 item.setData(TOTAL_ROW_ROLE, True)
                 item.setFont(bold_font)
                 item.setTextAlignment(
@@ -283,7 +395,7 @@ class BalanceTab(QWidget):
                     item.setForeground(QColor("red"))
                 self.balance_table.setItem(0, c+1, item)
 
-            tot_item = NumericTableWidgetItem(f"{final_grand_chf:,.2f} CHF")
+            tot_item = NumericTableWidgetItem(f"{format_currency(final_grand_chf)} CHF")
             tot_item.setData(TOTAL_ROW_ROLE, True)
             tot_item.setFont(bold_font)
             tot_item.setTextAlignment(

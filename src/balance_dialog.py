@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QProgressBar)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
+from utils import format_currency
 
 
 class BalanceLoaderThread(QThread):
@@ -245,8 +246,7 @@ class BalanceDialog(QDialog):
                 for col_idx, currency in enumerate(all_currencies):
                     balance = group_balances[currency]
                     if abs(balance) >= 0.001:
-                        formatted_balance = self.format_with_thousand_separators(
-                            balance)
+                        formatted_balance = format_currency(balance)
                         balance_item = QTableWidgetItem(formatted_balance)
                         balance_item.setTextAlignment(
                             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -267,8 +267,7 @@ class BalanceDialog(QDialog):
             self.balance_table.setItem(current_row, 0, total_label_item)
 
             for col_idx, currency in enumerate(all_currencies):
-                formatted_total = self.format_with_thousand_separators(
-                    total_by_currency[currency])
+                formatted_total = format_currency(total_by_currency[currency])
                 total_item = QTableWidgetItem(formatted_total)
                 total_item.setTextAlignment(
                     Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -289,9 +288,7 @@ class BalanceDialog(QDialog):
             self.balance_table.blockSignals(False)
             self.balance_table.setUpdatesEnabled(True)
 
-    def format_with_thousand_separators(self, number):
-        """Format number with thousand separators and 2 decimal places"""
-        return f"{number:,.2f}"
+
 
     def show_status(self, message, error=False):
         self.status_label.setText(message)

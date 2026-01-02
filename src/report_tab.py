@@ -1,9 +1,10 @@
 
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QPushButton, QMenu, QToolButton)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction
 
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                             QPushButton, QDateEdit)
+from PyQt6.QtCore import Qt, QDate
+from custom_widgets import NoScrollComboBox
+from utils import format_currency
 
 MATPLOTLIB_AVAILABLE = False
 try:
@@ -15,14 +16,10 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 
-
-
-
 class ReportTab(QWidget):
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
         self.budget_app = budget_app
-        self.selected_years = set()
         self.init_ui()
 
     def init_ui(self):
@@ -34,44 +31,52 @@ class ReportTab(QWidget):
             error_label.setStyleSheet(
                 "font-size: 16px; font-weight: bold; color: #f44336;")
             error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-            hint_label = QLabel("Please run: pip install matplotlib")
-            hint_label.setStyleSheet("font-size: 14px; color: #666;")
-            hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
             layout.addStretch()
             layout.addWidget(error_label)
-            layout.addWidget(hint_label)
             layout.addStretch()
             return
 
         header_layout = QHBoxLayout()
 
-        self.year_btn = QToolButton()
-        self.year_btn.setText("Select Years 📅")
-        self.year_btn.setPopupMode(
-            QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.year_menu = QMenu(self)
-        self.year_btn.setMenu(self.year_menu)
+        header_layout.addWidget(QLabel("Range:"))
+        self.range_combo = NoScrollComboBox()
+        self.range_combo.setMinimumWidth(150)
+        self.range_combo.addItem("Last 12 Months", "last_12")
+        self.range_combo.currentIndexChanged.connect(self.on_range_changed)
+        header_layout.addWidget(self.range_combo)
 
-        self.year_btn.setStyleSheet("""
-            QToolButton {
-                padding: 5px 10px;
-                border: 1px solid #ccc;
-                border-radius: 3px;
-                background-color: #f0f0f0;
-            }
-            QToolButton:hover { background-color: #e0e0e0; }
-            QToolButton::menu-indicator { image: none; }
-        """)
-        header_layout.addWidget(self.year_btn)
+        # Custom Date Range Inputs
+        self.date_range_widget = QWidget()
+        date_layout = QHBoxLayout(self.date_range_widget)
+        date_layout.setContentsMargins(0, 0, 0, 0)
+        
+        date_layout.addWidget(QLabel("From:"))
+        self.from_date = QDateEdit()
+        self.from_date.setCalendarPopup(True)
+        self.from_date.setDisplayFormat("yyyy-MM-dd")
+        
+        date_layout.addWidget(QLabel("To:"))
+        self.to_date = QDateEdit()
+        self.to_date.setCalendarPopup(True)
+        self.to_date.setDisplayFormat("yyyy-MM-dd")
+        self.to_date.setDate(QDate.currentDate())
+        
+        # Default 'From' to 1 year ago
+        self.from_date.setDate(QDate.currentDate().addMonths(-12))
 
+        date_layout.addWidget(self.from_date)
+        date_layout.addWidget(self.to_date)
+        
+        header_layout.addWidget(self.date_range_widget)
+        self.date_range_widget.setVisible(False) # Default hidden
 
+        refresh_btn = QPushButton("🔄 Refresh")
+        refresh_btn.clicked.connect(self.refresh_data)
+        refresh_btn.setStyleSheet("padding: 5px 10px;")
+        header_layout.addWidget(refresh_btn)
 
         header_layout.addStretch()
         layout.addLayout(header_layout)
-
-
 
         self.figure = Figure(figsize=(8, 6), dpi=100)
         self.canvas = FigureCanvas(self.figure)
@@ -79,123 +84,140 @@ class ReportTab(QWidget):
 
         self.message_label = QLabel("")
         self.message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
         layout.addWidget(self.message_label)
+        
+        # Initial populate
+        self.populate_years()
+        self.refresh_data()
 
     def populate_years(self):
-        if not MATPLOTLIB_AVAILABLE:
-            return
-
+        """Populate year range combo"""
         years = self.budget_app.get_available_years()
-        self.year_menu.clear()
-
-        if not years:
-            self.year_btn.setEnabled(False)
-            return
-
-        self.year_btn.setEnabled(True)
-
-        if not self.selected_years and years:
-            self.selected_years.add(years[0])
-
+        current_text = self.range_combo.currentText()
+        
+        self.range_combo.blockSignals(True)
+        self.range_combo.clear()
+        self.range_combo.addItem("Last 12 Months", "last_12")
+        
         for year in years:
-            action = QAction(str(year), self)
-            action.setCheckable(True)
-            action.setChecked(year in self.selected_years)
-            action.triggered.connect(
-                lambda checked, y=year: self.toggle_year(y, checked))
-            self.year_menu.addAction(action)
+            self.range_combo.addItem(f"Year {year}", str(year))
+            
+        self.range_combo.addItem("Custom Range", "custom")
 
-    def toggle_year(self, year, checked):
-        if checked:
-            self.selected_years.add(year)
+        index = self.range_combo.findText(current_text)
+        if index >= 0:
+            self.range_combo.setCurrentIndex(index)
         else:
-            self.selected_years.discard(year)
-        self.load_data()
+            self.range_combo.setCurrentIndex(0)
+
+        self.range_combo.blockSignals(False)
+        self.on_range_changed()
+
+    def on_range_changed(self):
+        mode = self.range_combo.currentData()
+        self.date_range_widget.setVisible(mode == 'custom')
+        if mode != 'custom':
+            self.refresh_data()
+
+    def get_date_range(self):
+        mode = self.range_combo.currentData()
+        today = QDate.currentDate()
+        
+        if mode == 'last_12':
+            end_date = today
+            start_date = today.addMonths(-12).addDays(1)
+            return start_date.toString("yyyy-MM-dd"), end_date.toString("yyyy-MM-dd")
+            
+        elif mode == 'custom':
+            s = self.from_date.date()
+            e = self.to_date.date()
+            if s > e: s = e # Basic validation
+            return s.toString("yyyy-MM-dd"), e.toString("yyyy-MM-dd")
+            
+        else:
+            # Specific Year
+            try:
+                year = int(mode)
+                return f"{year}-01-01", f"{year}-12-31"
+            except:
+                # Fallback
+                return today.addMonths(-12).toString("yyyy-MM-dd"), today.toString("yyyy-MM-dd")
 
     def refresh_data(self):
-        """Called when tab becomes active or user clicks Refresh"""
-        self.populate_years()
-        self.load_data()
+        start_date, end_date = self.get_date_range()
+        self.load_data(start_date, end_date)
 
-    def load_data(self):
+    def load_data(self, start_date, end_date):
         if not MATPLOTLIB_AVAILABLE:
             return
-
-        if not self.selected_years:
-            self.figure.clear()
-            self.canvas.draw()
-            return
-
-        sorted_years = sorted(list(self.selected_years))
 
         self.canvas.setVisible(True)
         self.message_label.hide()
 
         try:
-            data = {}
-            for year in sorted_years:
-                data[year] = self.budget_app.get_monthly_balances(year)
-            
-            self.plot_graph(data)
+            # Fetch continuous history
+            data = self.budget_app.get_net_worth_history(start_date, end_date)
+            self.plot_graph(data, start_date, end_date)
         except Exception as e:
             print(f"Error loading report: {e}")
+            self.message_label.setText(f"Error: {e}")
+            self.message_label.show()
+            self.canvas.hide()
 
-    def plot_graph(self, data):
+    def plot_graph(self, data, start_date, end_date):
         if not MATPLOTLIB_AVAILABLE:
             return
 
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
-        months = range(1, 13)
-        month_labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May',
-                        'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-        import datetime
-        current_date = datetime.date.today()
-        current_year = current_date.year
-        current_month = current_date.month
-
-        for year in sorted(data.keys()):
-            year_data = data_to_list(data[year])
+        # data is {YYYY-MM: val}
+        # Sort keys
+        sorted_keys = sorted(data.keys())
+        if not sorted_keys:
+            self.message_label.setText("No data for selected range")
+            self.message_label.show()
+            self.canvas.hide()
+            return
             
-            x_vals = list(months)
-            y_vals = year_data
+        x_vals = range(len(sorted_keys))
+        y_vals = [data[k] for k in sorted_keys]
+        
+        # Plot Line
+        line = ax.plot(x_vals, y_vals, marker='o', linewidth=2, color='#2196F3', label='Net Worth')
+        
+        # Fill area under line
+        ax.fill_between(x_vals, y_vals, color='#2196F3', alpha=0.1)
 
-            if year == current_year:
-                x_vals = x_vals[:current_month]
-                y_vals = y_vals[:current_month]
-            elif year > current_year:
-                continue
+        # Annotate last value
+        if y_vals:
+            last_val = y_vals[-1]
+            last_x = x_vals[-1]
+            ax.annotate(f'{format_currency(last_val)}', xy=(last_x, last_val),
+                        xytext=(5, 5), textcoords='offset points',
+                        color='#2196F3', fontweight='bold')
 
-            line = ax.plot(x_vals, y_vals, marker='o',
-                           linewidth=2, label=str(year))
-
-            if y_vals:
-                last_val = y_vals[-1]
-                last_x = x_vals[-1]
-                
-                if last_val > 0:
-                    color = line[0].get_color()
-                    ax.annotate(f'{last_val:,.0f}', xy=(last_x, last_val),
-                                xytext=(5, 0), textcoords='offset points',
-                                color=color, fontweight='bold')
-
-        ax.set_title('Balance Evolution')
+        ax.set_title(f'Balance Evolution ({start_date} to {end_date})')
         ax.set_ylabel('Net Worth (CHF)')
-        ax.set_xticks(months)
-        ax.set_xticklabels(month_labels)
+        
+        # X-Axis Labels
+        labels = []
+        for k in sorted_keys:
+            # k is YYYY-MM. Convert to nicer format e.g. "Jan '24"
+            parts = k.split('-')
+            year_short = parts[0][2:]
+            month_idx = int(parts[1]) - 1
+            month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            labels.append(f"{month_names[month_idx]} '{year_short}")
+            
+        ax.set_xticks(x_vals)
+        ax.set_xticklabels(labels, rotation=45 if len(labels) > 6 else 0)
+        
         ax.grid(True, linestyle=':', alpha=0.6)
-        ax.legend()
-
+        
+        # Y-Axis formatting
         ax.get_yaxis().set_major_formatter(
-            plt.FuncFormatter(lambda x, p: format(int(x), ',')))
+            plt.FuncFormatter(lambda x, p: format(int(x), ",").replace(",", "'"))) # Simple Swiss format for axis
 
         self.figure.tight_layout()
         self.canvas.draw()
-
-
-def data_to_list(data_dict):
-    """Convert dict {1: val, ...} to list [val, ...] sorted by key"""
-    return [data_dict.get(m, 0.0) for m in range(1, 13)]

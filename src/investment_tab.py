@@ -7,6 +7,7 @@ from datetime import datetime
 
 from transactions_dialog import NumericTableWidgetItem
 from excel_filter import ExcelHeaderView
+from utils import format_currency
 
 from delegates import DateDelegate
 
@@ -137,6 +138,8 @@ class InvestmentTab(QWidget):
     def refresh_data(self):
         self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
+        
+
         self.save_btn.setEnabled(False)
         self.table.clear()
 
@@ -208,9 +211,8 @@ class InvestmentTab(QWidget):
                         val = row_vals.get(acc.id)
 
                         if val is not None:
-
-                            fmt = "{:.4f}" if acc.valuation_strategy == 'Price/Qty' else "{:.2f}"
-                            item_text = fmt.format(val)
+                            precision = 4 if acc.valuation_strategy == 'Price/Qty' else 2
+                            item_text = format_currency(val, precision=precision)
                         else:
                             item_text = ""
 
@@ -373,7 +375,9 @@ class InvestmentTab(QWidget):
                     text = item.text().strip()
 
                     try:
-                        val = float(text)
+                        # Clean currency formatting
+                        clean_text = text.replace("'", "").replace(",", "")
+                        val = float(clean_text)
                         if val < 0:
                             raise ValueError(f"Value must be >= 0 (Row {r+1})")
 
@@ -420,3 +424,21 @@ class InvestmentTab(QWidget):
 
     def has_unsaved_changes(self):
         return self.save_btn.isEnabled()
+
+    def filter_content(self, text):
+        """Filter table rows based on text matching."""
+        search_text = text.lower()
+        rows = self.table.rowCount()
+        cols = self.table.columnCount()
+        
+        for row in range(rows):
+            should_show = False
+            if not search_text:
+                should_show = True
+            else:
+                for col in range(cols):
+                    item = self.table.item(row, col)
+                    if item and search_text in item.text().lower():
+                        should_show = True
+                        break
+            self.table.setRowHidden(row, not should_show)

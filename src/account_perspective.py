@@ -12,6 +12,7 @@ import datetime
 from excel_filter import ExcelHeaderView
 from transactions_dialog import NumericTableWidgetItem
 from custom_widgets import NoScrollComboBox
+from utils import format_currency
 
 
 class AccountPerspectiveDialog(QDialog):
@@ -25,6 +26,7 @@ class AccountPerspectiveDialog(QDialog):
         self.all_transactions_for_account = []
         self.filtered_transactions = []
         self.running_balance_history = {}
+        self.transaction_history_map = {}
 
         self.setWindowTitle('Account Perspective')
         self.setMinimumSize(1200, 600)
@@ -148,6 +150,8 @@ class AccountPerspectiveDialog(QDialog):
         self.confirm_all_button.clicked.connect(self.confirm_all_visible)
         self.confirm_all_button.setEnabled(False)
         button_layout.addWidget(self.confirm_all_button)
+        
+
 
         self.all_confirmed_label = QLabel('✓ All transactions confirmed')
         self.all_confirmed_label.setStyleSheet('''
@@ -356,11 +360,7 @@ class AccountPerspectiveDialog(QDialog):
 
         self.month_combo.setCurrentIndex(0)
 
-    def format_swiss_number(self, number):
-        try:
-            return f"{number:,.2f}".replace(",", "'")
-        except (ValueError, TypeError):
-            return "0.00"
+    # Removed format_swiss_number, using utils.format_currency instead
 
     def get_account_name_by_id(self, account_id):
         if account_id is None:
@@ -561,11 +561,11 @@ class AccountPerspectiveDialog(QDialog):
         period_color = '#2e7d32' if period_end_balance >= 0 else '#c62828'
 
         if currency:
-            total_val = f"{currency} {self.format_swiss_number(total_balance)}"
-            period_val = f"{currency} {self.format_swiss_number(period_end_balance)}"
+            total_val = f"{currency} {format_currency(total_balance)}"
+            period_val = f"{currency} {format_currency(period_end_balance)}"
         else:
-            total_val = self.format_swiss_number(total_balance)
-            period_val = self.format_swiss_number(period_end_balance)
+            total_val = format_currency(total_balance)
+            period_val = format_currency(period_end_balance)
 
         self.current_balance_label.setText(f'Total Balance: {total_val}')
         self.current_balance_label.setStyleSheet(
@@ -610,7 +610,17 @@ class AccountPerspectiveDialog(QDialog):
                     return
 
             elif column == 2:
-                field = 'sub_category'
+                # Resolve sub_category name to category_id
+                categories = self.budget_app.get_all_categories()
+                category_match = next((c for c in categories if c.sub_category == new_value), None)
+                
+                if category_match:
+                    field = 'category_id'
+                    new_value = category_match.id
+                else:
+                    self.show_status(f"Category '{new_value}' not found", error=True)
+                    self.revert_cell(row, column, trans.sub_category or "")
+                    return
 
             elif column == 3:
                 field = 'payee'
@@ -658,6 +668,7 @@ class AccountPerspectiveDialog(QDialog):
         self.table.blockSignals(False)
 
     def populate_table(self, transaction_history):
+        self.transaction_history_map = {}
         self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
         self.table.setSortingEnabled(False)
@@ -667,6 +678,7 @@ class AccountPerspectiveDialog(QDialog):
             
             for row, data in enumerate(transaction_history):
                 trans = data['transaction']
+                self.transaction_history_map[row] = trans
                 transaction_amount = data['transaction_amount']
                 effect = data['effect']
                 running_balance = data['running_balance']
@@ -704,7 +716,7 @@ class AccountPerspectiveDialog(QDialog):
                 self.table.setItem(row, 5, note_item)
 
                 # 6: Transaction Amount
-                amount_str = f"{effect}{abs(transaction_amount):,.2f}"
+                amount_str = f"{effect}{format_currency(abs(transaction_amount))}"
                 amt_item = NumericTableWidgetItem(amount_str)
                 amt_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 if effect == '+':
@@ -714,7 +726,7 @@ class AccountPerspectiveDialog(QDialog):
                 self.table.setItem(row, 6, amt_item)
 
                 # 7: Running Balance
-                bal_item = NumericTableWidgetItem(f"{running_balance:,.2f}")
+                bal_item = NumericTableWidgetItem(format_currency(running_balance))
                 bal_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 bal_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
                 self.table.setItem(row, 7, bal_item)
@@ -900,3 +912,23 @@ class AccountPerspectiveDialog(QDialog):
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
 
         QTimer.singleShot(5000, lambda: self.status_label.setText(''))
+
+    def filter_content(self, text):
+        """Filter table rows based on text matching."""
+        if not hasattr(self, 'table'): return
+        
+        search_text = text.lower()
+        rows = self.table.rowCount()
+        cols = self.table.columnCount()
+        
+        for row in range(rows):
+            should_show = False
+            if not search_text:
+                should_show = True
+            else:
+                for col in range(cols):
+                    item = self.table.item(row, col)
+                    if item and search_text in item.text().lower():
+                        should_show = True
+                        break
+            self.table.setRowHidden(row, not should_show)

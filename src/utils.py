@@ -64,3 +64,17 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+
+def format_currency(value, precision=2):
+    """
+    Format a number with Swiss thousands separator (').
+    precision: Number of decimal places (default 2).
+    """
+    try:
+        if value is None:
+            value = 0.0
+        
+        format_str = f"{{:,.{precision}f}}"
+        return format_str.format(float(value)).replace(",", "'")
+    except (ValueError, TypeError):
+        return f"0.{'0'*precision}"

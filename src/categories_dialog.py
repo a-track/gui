@@ -494,3 +494,23 @@ class CategoriesDialog(QDialog):
             self.status_label.setText('')
         except RuntimeError:
             pass
+
+    def filter_content(self, text):
+        """Filter table rows based on text matching."""
+        if not hasattr(self, 'table'): return
+        
+        search_text = text.lower()
+        rows = self.table.rowCount()
+        cols = self.table.columnCount()
+        
+        for row in range(rows):
+            should_show = False
+            if not search_text:
+                should_show = True
+            else:
+                for col in range(cols):
+                    item = self.table.item(row, col)
+                    if item and search_text in item.text().lower():
+                        should_show = True
+                        break
+            self.table.setRowHidden(row, not should_show)
