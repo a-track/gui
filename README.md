@@ -1,4 +1,4 @@
-# Budget Tracker GUI v4.2
+# Budget Tracker GUI v4.3
 
 A powerful and user-friendly desktop application for personal finance management, built with Python, PyQt6, and DuckDB.
 
