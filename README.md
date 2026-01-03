@@ -4,6 +4,14 @@ A powerful and user-friendly desktop application for personal finance management
 
 ## Features
 
+### v4.3 Updates (UI Polish & Bug Fixes)
+- **Header Visibility Fixes**: 
+  - Increased column padding across **Investment Performance**, **Transactions**, **Investment Tab**, **Account Perspective**, and **Manage Accounts** tables to ensure all header titles are fully visible and readable.
+- **Account Entries Layout**:
+  - Refactored the **Account Perspective** header into two distinct rows to prevent UI overlap on smaller screens.
+- **Bug Fixes**:
+  - Fixed a critical bug where editing a confirmed transaction (which is blocked) would visually revert the row to incorrect data (e.g., wrong payee) when the table was sorted. Now reverts strictly to the original confirmed data.
+
 ### v4.2 Updates (Safety & Protection)
 - **Confirmed Transactions Protection**:
   - **Sorting-Safe Logic**: Completely refactored edit/delete operations to use unique Transaction IDs. Modifying transactions is now 100% reliable even when the table is sorted by date, amount, or any other column.

@@ -303,6 +303,11 @@ class AccountsDialog(QDialog):
                     print(f"Error populating account row: {e}")
 
             self.table.resizeColumnsToContents()
+            
+            header = self.table.horizontalHeader()
+            for i in range(self.table.columnCount()):
+                current_width = header.sectionSize(i)
+                header.resizeSection(i, current_width + 25)
         finally:
             self.table.blockSignals(False)
             self.table.setSortingEnabled(True)

@@ -34,6 +34,7 @@ def create_placeholder_splash():
 
 
 def main():
+    print("Starting Budget Tracker v4.3...")
     def exception_hook(exctype, value, tb):
         print("\n" + "="*60)
         print("UNCAUGHT EXCEPTION - APP CRASHED:")
@@ -44,12 +45,13 @@ def main():
         import traceback
         traceback.print_tb(tb)
         print("="*60)
+        input("Press Enter to exit...")
 
     sys.excepthook = exception_hook
 
     try:
         import ctypes
-        myappid = 'antigravity.budgettracker.app.4.1'
+        myappid = 'antigravity.budgettracker.app.4.3'
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except Exception:
         pass

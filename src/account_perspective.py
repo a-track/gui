@@ -33,53 +33,30 @@ class AccountPerspectiveDialog(QDialog):
 
         layout = QVBoxLayout()
 
-        main_header = QHBoxLayout()
-        main_header.setContentsMargins(0, 0, 0, 10)
+        # --- Top Section: Account Selection & Balance ---
+        top_bar = QHBoxLayout()
+        top_bar.setContentsMargins(0, 0, 0, 10)
 
-        filter_widget = QWidget()
-        filter_widget.setStyleSheet(
-            ".QWidget { background-color: #f5f5f5; border-radius: 6px; border: 1px solid #e0e0e0; }")
-        filter_layout = QHBoxLayout(filter_widget)
-        filter_layout.setContentsMargins(10, 5, 10, 5)
-
+        # Account Selection Area
+        acc_widget = QWidget()
+        acc_widget.setStyleSheet(".QWidget { background-color: #f5f5f5; border-radius: 6px; border: 1px solid #e0e0e0; }")
+        acc_layout = QHBoxLayout(acc_widget)
+        acc_layout.setContentsMargins(10, 5, 10, 5)
+        
         lbl_acc = QLabel('Account:')
         lbl_acc.setStyleSheet("font-weight: bold; color: #333;")
-        filter_layout.addWidget(lbl_acc)
+        acc_layout.addWidget(lbl_acc)
 
         self.account_combo = NoScrollComboBox()
         self.account_combo.setMinimumWidth(250)
         self.populate_accounts_combo()
         self.account_combo.currentIndexChanged.connect(self.on_account_changed)
-        filter_layout.addWidget(self.account_combo)
+        acc_layout.addWidget(self.account_combo)
+        
+        top_bar.addWidget(acc_widget)
+        top_bar.addStretch()
 
-        filter_layout.addSpacing(15)
-
-        filter_layout.addWidget(QLabel('Year:'))
-        self.year_combo = NoScrollComboBox()
-        self.year_combo.setFixedWidth(80)
-        self.populate_years()
-        self.year_combo.currentTextChanged.connect(self.apply_filters)
-        filter_layout.addWidget(self.year_combo)
-
-        filter_layout.addWidget(QLabel('Month:'))
-        self.month_combo = NoScrollComboBox()
-        self.month_combo.setFixedWidth(100)
-        self.populate_months()
-        self.month_combo.currentTextChanged.connect(self.apply_filters)
-        filter_layout.addWidget(self.month_combo)
-
-        filter_layout.addSpacing(15)
-
-        self.show_all_dates_checkbox = QCheckBox("Show All Dates")
-        self.show_all_dates_checkbox.setChecked(False)
-        self.show_all_dates_checkbox.toggled.connect(
-            self.on_show_all_dates_toggled)
-        filter_layout.addWidget(self.show_all_dates_checkbox)
-
-        main_header.addWidget(filter_widget)
-
-        main_header.addStretch()
-
+        # Balance Area
         balance_widget = QWidget()
         balance_widget.setStyleSheet("""
             .QWidget {
@@ -94,13 +71,11 @@ class AccountPerspectiveDialog(QDialog):
 
         p_layout = QVBoxLayout()
         p_lbl = QLabel("Period End")
-        p_lbl.setStyleSheet(
-            "color: #666; font-size: 11px; text-transform: uppercase;")
+        p_lbl.setStyleSheet("color: #666; font-size: 11px; text-transform: uppercase;")
         p_layout.addWidget(p_lbl)
 
         self.period_balance_label = QLabel("0.00")
-        self.period_balance_label.setStyleSheet(
-            "font-size: 16px; font-weight: bold; color: #333;")
+        self.period_balance_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #333;")
         p_layout.addWidget(self.period_balance_label)
         balance_layout.addLayout(p_layout)
 
@@ -112,24 +87,54 @@ class AccountPerspectiveDialog(QDialog):
 
         t_layout = QVBoxLayout()
         t_lbl = QLabel("Total Balance")
-        t_lbl.setStyleSheet(
-            "color: #666; font-size: 11px; text-transform: uppercase;")
+        t_lbl.setStyleSheet("color: #666; font-size: 11px; text-transform: uppercase;")
         t_layout.addWidget(t_lbl)
 
         self.current_balance_label = QLabel("0.00")
-        self.current_balance_label.setStyleSheet(
-            "font-size: 16px; font-weight: bold; color: #2e7d32;")
+        self.current_balance_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #2e7d32;")
         t_layout.addWidget(self.current_balance_label)
         balance_layout.addLayout(t_layout)
 
-        main_header.addWidget(balance_widget)
+        top_bar.addWidget(balance_widget)
+        layout.addLayout(top_bar)
 
-        layout.addLayout(main_header)
+        # --- Second Section: Filters & Actions ---
+        action_bar = QHBoxLayout()
+        action_bar.setContentsMargins(0, 0, 0, 10)
 
-        button_layout = QHBoxLayout()
+        # Filters
+        filter_widget = QWidget()
+        filter_layout = QHBoxLayout(filter_widget)
+        filter_layout.setContentsMargins(0, 0, 0, 0)
+        
+        filter_layout.addWidget(QLabel('Year:'))
+        self.year_combo = NoScrollComboBox()
+        self.year_combo.setFixedWidth(80)
+        self.populate_years()
+        self.year_combo.currentTextChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.year_combo)
 
-        self.confirm_all_button = QPushButton(
-            'Confirm All Visible Transactions')
+        filter_layout.addSpacing(10)
+
+        filter_layout.addWidget(QLabel('Month:'))
+        self.month_combo = NoScrollComboBox()
+        self.month_combo.setFixedWidth(100)
+        self.populate_months()
+        self.month_combo.currentTextChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.month_combo)
+
+        filter_layout.addSpacing(10)
+
+        self.show_all_dates_checkbox = QCheckBox("Show All Dates")
+        self.show_all_dates_checkbox.setChecked(False)
+        self.show_all_dates_checkbox.toggled.connect(self.on_show_all_dates_toggled)
+        filter_layout.addWidget(self.show_all_dates_checkbox)
+
+        action_bar.addWidget(filter_widget)
+        action_bar.addStretch()
+
+        # Action Buttons
+        self.confirm_all_button = QPushButton('Confirm All Visible Transactions')
         self.confirm_all_button.setStyleSheet('''
             QPushButton {
                 background-color: #4CAF50;
@@ -149,9 +154,7 @@ class AccountPerspectiveDialog(QDialog):
         ''')
         self.confirm_all_button.clicked.connect(self.confirm_all_visible)
         self.confirm_all_button.setEnabled(False)
-        button_layout.addWidget(self.confirm_all_button)
-        
-
+        action_bar.addWidget(self.confirm_all_button)
 
         self.all_confirmed_label = QLabel('✓ All transactions confirmed')
         self.all_confirmed_label.setStyleSheet('''
@@ -165,18 +168,16 @@ class AccountPerspectiveDialog(QDialog):
             }
         ''')
         self.all_confirmed_label.setVisible(False)
-        button_layout.addWidget(self.all_confirmed_label)
+        action_bar.addWidget(self.all_confirmed_label)
 
-        button_layout.addStretch()
-
-        button_layout.addStretch()
+        action_bar.addSpacing(10)
 
         self.reset_filters_btn = QPushButton("Reset Filters")
         self.reset_filters_btn.clicked.connect(self.reset_filters)
         self.reset_filters_btn.setStyleSheet("padding: 8px 16px;")
-        button_layout.addWidget(self.reset_filters_btn)
+        action_bar.addWidget(self.reset_filters_btn)
 
-        layout.addLayout(button_layout)
+        layout.addLayout(action_bar)
 
         info_label = QLabel(
             'Showing all transactions where this account is involved. Click checkbox to confirm transaction.')
@@ -821,6 +822,11 @@ class AccountPerspectiveDialog(QDialog):
                 self.table.setCellWidget(row, 9, del_widget)
 
             self.table.resizeColumnsToContents()
+            
+            header = self.table.horizontalHeader()
+            for i in range(self.table.columnCount()):
+                current_width = header.sectionSize(i)
+                header.resizeSection(i, current_width + 25)
             self.table.setColumnWidth(0, max(150, self.table.columnWidth(0)))
             self.table.setColumnWidth(4, max(150, self.table.columnWidth(4)))
             self.table.setColumnWidth(8, 80)

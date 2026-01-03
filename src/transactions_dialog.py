@@ -650,6 +650,11 @@ class TransactionsDialog(QDialog):
                 self.color_row_by_type(row, trans.type)
 
             self.table.resizeColumnsToContents()
+            
+            header = self.table.horizontalHeader()
+            for i in range(self.table.columnCount()):
+                current_width = header.sectionSize(i)
+                header.resizeSection(i, current_width + 25)
 
             self.table.setColumnWidth(1, max(150, self.table.columnWidth(1)))
 

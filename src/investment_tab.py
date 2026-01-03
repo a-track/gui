@@ -222,6 +222,11 @@ class InvestmentTab(QWidget):
                         self.table.setItem(r, c + 1, item)
 
                 self.table.resizeColumnsToContents()
+                
+                header = self.table.horizontalHeader()
+                for i in range(self.table.columnCount()):
+                    current_width = header.sectionSize(i)
+                    header.resizeSection(i, current_width + 25)
                 self.table.setColumnWidth(0, 120)
                 self.table.horizontalHeader().setStretchLastSection(False)
 
