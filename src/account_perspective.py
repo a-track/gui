@@ -517,7 +517,7 @@ class AccountPerspectiveDialog(QDialog):
 
         total_balance = 0.0
         if self.running_balance_history:
-            last_transaction_id = list(self.running_balance_history.keys())[-1]
+            last_transaction_id = list(self.running_balance_history.keys())[0]
             total_balance = self.running_balance_history[last_transaction_id]
 
         period_end_balance = 0.0
@@ -590,11 +590,65 @@ class AccountPerspectiveDialog(QDialog):
             if not item:
                 return
 
-            if row not in self.transaction_history_map:
+            # Ignore updates to the Confirmed column (triggered by ON/OFF toggle)
+            if column == 8:
                 return
 
-            trans = self.transaction_history_map[row]
-            trans_id = trans.id
+            # Sorting-safe: get ID from column 0 user data
+            trans_id_item = self.table.item(row, 0)
+            if not trans_id_item: return
+            
+            # Use data role for safe ID access, fallback to text if needed but data is safer if we set it
+            # In populate_table below, I will ensure column 0 has `Qt.UserRole` with the ID or object.
+            # But wait, looking at populate_table, column 0 is date. I can attach ID there.
+            # OR I can check `self.transaction_history_map[row]` IF I disable sorting while editing?
+            # No, user might sort then edit.
+            # Safest is to attach `trans_id` to every editable item or at least col 0.
+            
+            # Let's rely on `trans_id` property from checkboxes/buttons for specific actions,
+            # but for cell edits we need to know WHICH transaction.
+            # Using `transaction_history_map` is inherently unsafe if rows move.
+            # Better approach: Map row -> trans_id is unsafe after sort.
+            # Better: `self.table.item(row, 0).data(Qt.UserRole)` should hold the `trans_id`.
+            
+            # Let's grab trans_id from the hidden data I will add to Col 0
+            trans_id = trans_id_item.data(Qt.ItemDataRole.UserRole)
+            
+            # If we haven't updated populate yet, this might be None.
+            # I will update populate_table to set this.
+            if trans_id is None:
+                 # Fallback to map if not set (legacy or before refresh)
+                 # This is risky but better than crash.
+                 if row in self.transaction_history_map:
+                    trans_id = self.transaction_history_map[row].id
+            
+            if trans_id is None: return
+
+            # Find transaction object (need a map for this too or search)
+            # self.transaction_history_map is row-based. 
+            # I need an ID-based map for `account_perspective` too.
+            # Let's build it on the fly or maintain it.
+            # Actually `self.all_transactions_for_account` + `running_balance_history` is available.
+            # Let's search `self.all_transactions_for_account` or better, build a dict.
+            # Efficient: `self.trans_id_map` built in `populate_table`.
+            
+            trans = getattr(self, 'trans_id_map', {}).get(trans_id)
+            if not trans:
+                # Fallback search
+                trans = next((t for t in self.all_transactions_for_account if t.id == trans_id), None)
+            
+            if not trans: return
+
+            # Prevent modification of confirmed transactions (except confirmation checkbox)
+            if hasattr(trans, 'confirmed') and trans.confirmed:
+                self.show_status("Cannot edit confirmed transaction", error=True)
+                QMessageBox.warning(self, "Transaction Confirmed",
+                                    "This transaction is confirmed and cannot be modified.\n"
+                                    "Please uncheck the confirmation box first.")
+                self.revert_cell(row, column, item.text()) 
+                self.refresh_data()
+                return
+
             new_value = item.text().strip()
 
             field = None
@@ -669,6 +723,7 @@ class AccountPerspectiveDialog(QDialog):
 
     def populate_table(self, transaction_history):
         self.transaction_history_map = {}
+        self.trans_id_map = {} # New ID-based map
         self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
         self.table.setSortingEnabled(False)
@@ -679,13 +734,16 @@ class AccountPerspectiveDialog(QDialog):
             for row, data in enumerate(transaction_history):
                 trans = data['transaction']
                 self.transaction_history_map[row] = trans
+                self.trans_id_map[trans.id] = trans # Populate ID map
+                
                 transaction_amount = data['transaction_amount']
                 effect = data['effect']
                 running_balance = data['running_balance']
                 other_account = data['other_account']
 
-                # 0: Date
+                # 0: Date - Store ID here for retrieval
                 date_item = QTableWidgetItem(str(trans.date))
+                date_item.setData(Qt.ItemDataRole.UserRole, trans.id)
                 date_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 0, date_item)
 
@@ -838,6 +896,10 @@ class AccountPerspectiveDialog(QDialog):
             trans_id = checkbox.property('trans_id')
             self.budget_app.toggle_confirmation(trans_id)
             self.show_status(f'Transaction #{trans_id} confirmation toggled!')
+            
+            # Sync local model via ID lookup (sorting safe)
+            if hasattr(self, 'trans_id_map') and trans_id in self.trans_id_map:
+                 self.trans_id_map[trans_id].confirmed = checkbox.isChecked()
 
             if self.parent_window and hasattr(self.parent_window, 'update_balance_display'):
                 self.parent_window.update_balance_display()
@@ -876,6 +938,19 @@ class AccountPerspectiveDialog(QDialog):
         try:
             button = self.sender()
             trans_id = button.property('trans_id')
+
+            # Look up by ID directly (safe)
+            trans = getattr(self, 'trans_id_map', {}).get(trans_id)
+            if not trans:
+                # Fallback
+                 trans = next((t for t in self.all_transactions_for_account if t.id == trans_id), None)
+            
+            if trans and hasattr(trans, 'confirmed') and trans.confirmed:
+                self.show_status("Cannot delete confirmed transaction", error=True)
+                QMessageBox.warning(self, "Transaction Confirmed",
+                                    "This transaction is confirmed and cannot be deleted.\n"
+                                    "Please uncheck the confirmation box first.")
+                return
 
             reply = QMessageBox.question(
                 self,

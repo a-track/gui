@@ -130,6 +130,7 @@ class TransactionsDialog(QDialog):
         self.parent_window = parent
         self.all_transactions = []
         self.filtered_transactions = []
+        self.transaction_map = {} # Map ID -> Transaction object
 
         self.setWindowFlags(Qt.WindowType.Window)
         self.setWindowTitle('View All Transactions')
@@ -434,6 +435,9 @@ class TransactionsDialog(QDialog):
 
         self.all_transactions = valid_transactions
         self.filtered_transactions = valid_transactions
+        
+        # Build map for fast ID lookup
+        self.transaction_map = {t.id: t for t in self.filtered_transactions}
 
         self.populate_table(self.filtered_transactions)
 
@@ -664,21 +668,31 @@ class TransactionsDialog(QDialog):
             if not item:
                 return
 
-            conf_item = self.table.item(row, 12)
-            if conf_item and conf_item.text() == "Yes":
-                self.show_status(
-                    "Cannot edit confirmed transaction", error=True)
-                QMessageBox.warning(self, "Transaction Confirmed",
-                                    "This transaction is confirmed and cannot be modified.\n"
-                                    "Please uncheck the confirmation box first.")
-                self.revert_cell(row, column)
+            # Ignore updates to the Confirmed column (triggered by ON/OFF toggle)
+            if column == 12:
                 return
+
+            # Protection moved to AFTER ID retrieval to be sorting-safe
+            # See below block starting with 'trans_id = ...'
 
             trans_id_item = self.table.item(row, 0)
             if not trans_id_item:
                 return
 
             trans_id = int(trans_id_item.text())
+            
+            # Use ID lookup for safety (sorting changes row order)
+            trans = self.get_transaction_by_id(trans_id)
+            if not trans: return
+
+            if hasattr(trans, 'confirmed') and trans.confirmed:
+                self.show_status("Cannot edit confirmed transaction", error=True)
+                QMessageBox.warning(self, "Transaction Confirmed",
+                                    "This transaction is confirmed and cannot be modified.\n"
+                                    "Please uncheck the confirmation box first.")
+                self.revert_cell(row, column)
+                return
+
             new_value = item.text().strip()
 
             field = None
@@ -864,6 +878,21 @@ class TransactionsDialog(QDialog):
             self.budget_app.toggle_confirmation(trans_id)
             self.show_status(f'Transaction #{trans_id} confirmation toggled!')
 
+            # Update local transaction object via ID (sorting safe)
+            if trans_id in self.transaction_map:
+                self.transaction_map[trans_id].confirmed = checkbox.isChecked()
+
+            index = self.table.indexAt(checkbox.parentWidget().pos())
+            if index.isValid():
+                row = index.row()
+                
+                # Update table item for reliable visual sort
+                conf_item = self.table.item(row, 12)
+                if conf_item:
+                    is_checked = checkbox.isChecked()
+                    conf_item.setData(ConfirmedTableWidgetItem.FILTER_ROLE, "Yes" if is_checked else "No")
+                    conf_item.setText("Yes" if is_checked else "No")
+
             if self.parent_window and hasattr(self.parent_window, 'update_balance_display'):
                 self.parent_window.update_balance_display()
 
@@ -950,17 +979,14 @@ class TransactionsDialog(QDialog):
             button = self.sender()
             trans_id = button.property('trans_id')
 
-            index = self.table.indexAt(button.parentWidget().pos())
-            if index.isValid():
-                row = index.row()
-                conf_item = self.table.item(row, 9)
-                if conf_item and conf_item.text() == "Yes":
-                    self.show_status(
-                        "Cannot delete confirmed transaction", error=True)
-                    QMessageBox.warning(self, "Transaction Confirmed",
-                                        "This transaction is confirmed and cannot be deleted.\n"
-                                        "Please uncheck the confirmation box first.")
-                    return
+            # Use ID lookup for delete protection too
+            trans = self.get_transaction_by_id(trans_id)
+            if trans and hasattr(trans, 'confirmed') and trans.confirmed:
+                 self.show_status("Cannot delete confirmed transaction", error=True)
+                 QMessageBox.warning(self, "Transaction Confirmed",
+                                    "This transaction is confirmed and cannot be deleted.\n"
+                                    "Please uncheck the confirmation box first.")
+                 return
 
             reply = QMessageBox.question(
                 self,
@@ -1017,6 +1043,15 @@ class TransactionsDialog(QDialog):
     def closeEvent(self, event):
         self.cleanup()
         super().closeEvent(event)
+
+    def get_transaction_by_id(self, trans_id):
+        if hasattr(self, 'transaction_map'):
+            return self.transaction_map.get(trans_id)
+        # Fallback if map not built for some reason
+        for t in self.filtered_transactions:
+            if t.id == trans_id:
+                return t
+        return None
 
     def filter_content(self, text):
         """Filter table rows based on text matching."""
