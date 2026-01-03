@@ -1,8 +1,14 @@
-# Budget Tracker GUI v4.1
+# Budget Tracker GUI v4.2
 
 A powerful and user-friendly desktop application for personal finance management, built with Python, PyQt6, and DuckDB.
 
 ## Features
+
+### v4.2 Updates (Safety & Protection)
+- **Confirmed Transactions Protection**:
+  - **Sorting-Safe Logic**: Completely refactored edit/delete operations to use unique Transaction IDs. Modifying transactions is now 100% reliable even when the table is sorted by date, amount, or any other column.
+  - **Lockdown**: Confirmed transactions are strictly protected from accidental deletion or modification.
+  - **Smart Toggles**: Toggling the "Confirmed" checkbox (on/off) allows for quick status updates without triggering "blocked" warnings.
 
 ### v4.1 Updates (Global Visuals & Search)
 - **Global Search**:
