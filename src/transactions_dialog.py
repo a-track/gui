@@ -818,7 +818,15 @@ class TransactionsDialog(QDialog):
         """Revert cell to value from local model"""
         try:
             self.table.blockSignals(True)
-            trans = self.filtered_transactions[row]
+            trans_id_item = self.table.item(row, 0)
+            if not trans_id_item:
+                return
+
+            trans_id = int(trans_id_item.text())
+            trans = self.get_transaction_by_id(trans_id)
+
+            if not trans:
+                return
 
             value = ""
             if column == 1:
