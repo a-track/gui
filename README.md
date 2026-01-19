@@ -1,8 +1,19 @@
-# Budget Tracker GUI v4.3
+# Budget Tracker GUI v4.4
 
 A powerful and user-friendly desktop application for personal finance management, built with Python, PyQt6, and DuckDB.
 
 ## Features
+
+### v4.4 Updates (Account Perspective Enhancements)
+- **Account Perspective**:
+  - **Start Period Balance**: Added a new "Period Start" balance display to clearly show the account status at the beginning of the selected timeframe.
+  - **Multi-Month Selection**: Completely revamped the Month filter. Now supports selecting **multiple specific months** (e.g., "Jan + Mar") or using the new **"Select All"** toggle.
+  - **Smart Filtering**: The filter dropdown stays open for easier multiple selections and defaults to "All Months" if nothing is selected.
+  - **Default View**: Automatically selects the **Current Month** by default for quicker access to relevant data.
+- **Transactions Tab**:
+  - **Default View**: Automatically defaults to the **Current Month** when opening the application.
+- **Inactive Accounts**: Hidden inactive accounts from the selection list to keep the interface clean.
+- **UI Cleanup**: Simplified table headers by removing unused Excel-style column filters across all tabs.
 
 ### v4.3 Updates (UI Polish & Bug Fixes)
 - **Header Visibility Fixes**: 

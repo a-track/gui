@@ -396,6 +396,7 @@ class InvestmentPerformanceTab(QWidget):
         ])
 
         self.header_view = ExcelHeaderView(self.table)
+        self.header_view.set_filters_enabled(False)
         self.table.setHorizontalHeader(self.header_view)
 
         # Tooltips for headers

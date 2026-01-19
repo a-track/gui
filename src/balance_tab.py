@@ -297,6 +297,7 @@ class BalanceTab(QWidget):
             self.balance_table.setHorizontalHeaderLabels(headers)
 
             self.header_view = ExcelHeaderView(self.balance_table)
+            self.header_view.set_filters_enabled(False)
             self.balance_table.setHorizontalHeader(self.header_view)
 
             col_types = {0: 'text'}

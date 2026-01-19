@@ -105,9 +105,10 @@ class CategoriesDialog(QDialog):
         self.table.verticalHeader().hide()
 
         self.header_view = ExcelHeaderView(self.table)
+        self.header_view.set_filters_enabled(False)
         self.table.setHorizontalHeader(self.header_view)
 
-        self.header_view.set_filter_enabled(4, False)
+        # self.header_view.set_filter_enabled(4, False) # No longer needed if all disabled
 
         self.header_view.set_column_types({
             0: 'number'

@@ -132,9 +132,10 @@ class AccountsDialog(QDialog):
         self.table.verticalHeader().hide()
 
         self.header_view = ExcelHeaderView(self.table)
+        self.header_view.set_filters_enabled(False)
         self.table.setHorizontalHeader(self.header_view)
 
-        self.header_view.set_filter_enabled(9, False)
+        # self.header_view.set_filter_enabled(9, False) # No longer needed
 
         self.header_view.set_column_types({
             0: 'number'

@@ -700,6 +700,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.payee_input.setEditable(True)
         self.payee_input.setInsertPolicy(QComboBox.InsertPolicy.InsertAtTop)
         self.payee_input.setPlaceholderText('Optional - select or type new')
+        self.payee_input.currentTextChanged.connect(self.on_payee_text_changed)
         self.update_payee_combo()
         self.payee_layout.addWidget(self.payee_input)
         self.payee_layout.addStretch()
@@ -1309,6 +1310,24 @@ class BudgetTrackerWindow(QMainWindow):
 
     def on_parent_category_changed(self, parent_category):
         self.update_sub_categories()
+
+    def on_payee_text_changed(self, text):
+        if not text:
+            return
+
+        prediction = self.budget_app.get_predicted_category(text)
+        if prediction:
+            main_category, sub_category = prediction
+            
+            # Update Main Category
+            index = self.parent_category_combo.findText(main_category)
+            if index >= 0:
+                self.parent_category_combo.setCurrentIndex(index)
+                
+                # Update Sub Category (after main category triggers update)
+                index_sub = self.sub_category_combo.findText(sub_category)
+                if index_sub >= 0:
+                    self.sub_category_combo.setCurrentIndex(index_sub)
 
     def update_sub_categories(self):
         self.sub_category_combo.clear()

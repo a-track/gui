@@ -152,6 +152,7 @@ class InvestmentTab(QWidget):
             self.table.setHorizontalHeaderLabels(headers)
 
             self.header_view = RestrictedExcelHeaderView(self.table)
+            self.header_view.set_filters_enabled(False)
             self.table.setHorizontalHeader(self.header_view)
 
             col_types = {0: 'date'}

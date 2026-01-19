@@ -11,7 +11,7 @@ from delegates import ComboBoxDelegate, DateDelegate
 import datetime
 from excel_filter import ExcelHeaderView
 from transactions_dialog import NumericTableWidgetItem
-from custom_widgets import NoScrollComboBox
+from custom_widgets import NoScrollComboBox, CheckableComboBox
 from utils import format_currency
 
 
@@ -79,6 +79,22 @@ class AccountPerspectiveDialog(QDialog):
         p_layout.addWidget(self.period_balance_label)
         balance_layout.addLayout(p_layout)
 
+        line1 = QFrame()
+        line1.setFrameShape(QFrame.Shape.VLine)
+        line1.setFrameShadow(QFrame.Shadow.Sunken)
+        line1.setStyleSheet("color: #e0e0e0;")
+        balance_layout.addWidget(line1)
+
+        ps_layout = QVBoxLayout()
+        ps_lbl = QLabel("Period Start")
+        ps_lbl.setStyleSheet("color: #666; font-size: 11px; text-transform: uppercase;")
+        ps_layout.addWidget(ps_lbl)
+
+        self.period_start_label = QLabel("0.00")
+        self.period_start_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #333;")
+        ps_layout.addWidget(self.period_start_label)
+        balance_layout.addLayout(ps_layout)
+
         line = QFrame()
         line.setFrameShape(QFrame.Shape.VLine)
         line.setFrameShadow(QFrame.Shadow.Sunken)
@@ -117,10 +133,20 @@ class AccountPerspectiveDialog(QDialog):
         filter_layout.addSpacing(10)
 
         filter_layout.addWidget(QLabel('Month:'))
-        self.month_combo = NoScrollComboBox()
-        self.month_combo.setFixedWidth(100)
+        self.month_combo = CheckableComboBox()
+        self.month_combo.setMinimumWidth(120)
         self.populate_months()
-        self.month_combo.currentTextChanged.connect(self.apply_filters)
+        # Connect to model dataChanged or similar if possible, or just use a custom signal if we added one.
+        # But for now, we can rely on manual "confirm" or maybe hook into internal model changes?
+        # Simpler: Connect a signal that fires when checked state changes.
+        # Our CheckableComboBox implementation toggles state in handle_item_pressed.
+        # We should emit a signal there or just connect to pressed/activated?
+        # Let's add a "Apply Filter" button or update dynamically?
+        # Dynamic is better. We can connect to view().clicked / pressed?
+        # self.month_combo.view().pressed.connect(lambda: QTimer.singleShot(100, self.apply_filters))
+        # Better: CheckableComboBox should signal.
+        # Let's use `model().dataChanged`?
+        self.month_combo.model().dataChanged.connect(self.apply_filters)
         filter_layout.addWidget(self.month_combo)
 
         filter_layout.addSpacing(10)
@@ -172,10 +198,10 @@ class AccountPerspectiveDialog(QDialog):
 
         action_bar.addSpacing(10)
 
-        self.reset_filters_btn = QPushButton("Reset Filters")
-        self.reset_filters_btn.clicked.connect(self.reset_filters)
-        self.reset_filters_btn.setStyleSheet("padding: 8px 16px;")
-        action_bar.addWidget(self.reset_filters_btn)
+        # self.reset_filters_btn = QPushButton("Reset Filters")
+        # self.reset_filters_btn.clicked.connect(self.reset_filters)
+        # self.reset_filters_btn.setStyleSheet("padding: 8px 16px;")
+        # action_bar.addWidget(self.reset_filters_btn)
 
         layout.addLayout(action_bar)
 
@@ -195,6 +221,7 @@ class AccountPerspectiveDialog(QDialog):
         ])
 
         self.header_view = ExcelHeaderView(self.table)
+        self.header_view.set_filters_enabled(False)
         self.table.setHorizontalHeader(self.header_view)
 
         self.table.verticalHeader().setVisible(False)
@@ -295,6 +322,9 @@ class AccountPerspectiveDialog(QDialog):
         self.setLayout(layout)
 
         self.set_current_month_year()
+        
+        self._updating_month_selection = False
+        self.month_combo.model().dataChanged.connect(self.on_month_data_changed)
 
         if self.account_combo.count() > 0:
             self.account_combo.setCurrentIndex(0)
@@ -317,7 +347,7 @@ class AccountPerspectiveDialog(QDialog):
                 account_transaction_count[account.id] = count
 
             filtered_accounts = [acc for acc in accounts if acc.id !=
-                                 0 and account_transaction_count.get(acc.id, 0) > 0]
+                                 0 and account_transaction_count.get(acc.id, 0) > 0 and getattr(acc, 'is_active', True)]
             sorted_accounts = sorted(filtered_accounts,
                                      key=lambda x: account_transaction_count.get(
                                          x.id, 0),
@@ -332,7 +362,7 @@ class AccountPerspectiveDialog(QDialog):
         except Exception as e:
             print(f"Error populating accounts combo: {e}")
             accounts = self.budget_app.get_all_accounts()
-            filtered_accounts = [acc for acc in accounts if acc.id != 0]
+            filtered_accounts = [acc for acc in accounts if acc.id != 0 and getattr(acc, 'is_active', True)]
             for account in filtered_accounts:
                 display_text = f"{account.account} {account.currency}"
                 self.account_combo.addItem(display_text, account.id)
@@ -343,13 +373,15 @@ class AccountPerspectiveDialog(QDialog):
         self.year_combo.addItems([str(year) for year in years])
 
     def populate_months(self):
-
-        self.month_combo.addItem('All')
+        self.month_combo.addItem('All') # Index 0
         months = [
             'January', 'February', 'March', 'April', 'May', 'June',
             'July', 'August', 'September', 'October', 'November', 'December'
         ]
         self.month_combo.addItems(months)
+        
+        # Default: Unchecked (will be set by set_current_month_year)
+        self.month_combo.update_display_text()
 
     def set_current_month_year(self):
         now = datetime.datetime.now()
@@ -359,7 +391,20 @@ class AccountPerspectiveDialog(QDialog):
         if index >= 0:
             self.year_combo.setCurrentIndex(index)
 
-        self.month_combo.setCurrentIndex(0)
+        # Set current month checked, others unchecked
+        current_month = now.month # 1-12
+        model = self.month_combo.model()
+        model.blockSignals(True)
+        # Uncheck all first
+        for i in range(model.rowCount()):
+             model.item(i).setCheckState(Qt.CheckState.Unchecked)
+        
+        # Check current month (Index 1 is Jan, so index matches month number)
+        if 1 <= current_month < model.rowCount():
+             model.item(current_month).setCheckState(Qt.CheckState.Checked)
+             
+        model.blockSignals(False)
+        self.month_combo.update_display_text()
 
     # Removed format_swiss_number, using utils.format_currency instead
 
@@ -416,25 +461,70 @@ class AccountPerspectiveDialog(QDialog):
         self.month_combo.setEnabled(not checked)
         self.apply_filters()
 
+    def on_month_data_changed(self, topLeft, bottomRight, roles=None):
+        if self._updating_month_selection:
+            return
+            
+        # Check if CheckStateRole changed
+        if roles and Qt.ItemDataRole.CheckStateRole not in roles:
+            # For StandardItemModel, roles might be empty on some changes?
+            # Safe to proceed.
+            pass
+
+        model = self.month_combo.model()
+        row = topLeft.row()
+        item = model.item(row)
+        
+        self._updating_month_selection = True
+        try:
+            if row == 0: # "All" item changed
+                new_state = item.checkState()
+                for i in range(1, model.rowCount()):
+                    model.item(i).setCheckState(new_state)
+            else: # A month changed
+                # Update "All" based on others
+                all_checked = True
+                for i in range(1, model.rowCount()):
+                    if model.item(i).checkState() != Qt.CheckState.Checked:
+                        all_checked = False
+                        break
+                
+                model.item(0).setCheckState(Qt.CheckState.Checked if all_checked else Qt.CheckState.Unchecked)
+        finally:
+            self._updating_month_selection = False
+            self.month_combo.update_display_text()
+            self.apply_filters()
+
     def apply_filters(self):
         if not self.selected_account_id or not self.all_transactions_for_account:
             return
 
         show_all_dates = self.show_all_dates_checkbox.isChecked()
         selected_year = int(self.year_combo.currentText())
-        selected_month_text = self.month_combo.currentText()
+        # selected_month_text = self.month_combo.currentText() # Not really needed now
 
         transactions_to_display = []
 
+        checked_indices = self.month_combo.get_checked_indices() 
+        # Index 0 is "All", 1-12 are Jan-Dec.
+        
+        # Filter indices to just months (subtract 1 to get 1-12 based or 0-11 based)
+        # We need actual month numbers 1-12 for filtering.
+        selected_months_0based = [] # 0 (Jan) to 11 (Dec)
+        
+        for idx in checked_indices:
+            if idx == 0: continue
+            selected_months_0based.append(idx - 1)
+        
+        transactions_to_display = []
+
         if show_all_dates:
-
             for trans in self.all_transactions_for_account:
-
                 if hasattr(trans, 'date') and trans.date:
                     transactions_to_display.append(trans)
             filter_info = "All Dates"
 
-        elif selected_month_text == 'All':
+        elif len(selected_months_0based) == 12 or not selected_months_0based: # All months selected
             for trans in self.all_transactions_for_account:
                 try:
                     if hasattr(trans, 'date') and trans.date:
@@ -445,11 +535,18 @@ class AccountPerspectiveDialog(QDialog):
 
                         if trans_date.year == selected_year:
                             transactions_to_display.append(trans)
-                except (ValueError, AttributeError) as e:
+                except (ValueError, AttributeError):
                     continue
             filter_info = f"All months {selected_year}"
         else:
-            selected_month = self.month_combo.currentIndex()
+            # Filter by selected months
+            selected_month_names = []
+            for idx in selected_months_0based:
+                 target_month = idx + 1
+                 selected_month_names.append(datetime.date(1900, target_month, 1).strftime('%b'))
+
+            filter_info = f"{', '.join(selected_month_names)} {selected_year}"
+
             for trans in self.all_transactions_for_account:
                 try:
                     if hasattr(trans, 'date') and trans.date:
@@ -458,12 +555,12 @@ class AccountPerspectiveDialog(QDialog):
                             trans_date = datetime.datetime.strptime(
                                 trans_date, '%Y-%m-%d').date()
 
-                        if trans_date.year == selected_year and trans_date.month == selected_month:
-                            transactions_to_display.append(trans)
-                except (ValueError, AttributeError) as e:
+                        if trans_date.year == selected_year:
+                             # Check if month is in selected_months (which are 0-based indices)
+                             if (trans_date.month - 1) in selected_months_0based:
+                                 transactions_to_display.append(trans)
+                except (ValueError, AttributeError):
                     continue
-
-            filter_info = f"{selected_month_text} {selected_year}"
 
         transactions_to_display = sorted(
             transactions_to_display, key=lambda x: (x.date, x.id), reverse=True)
@@ -521,19 +618,48 @@ class AccountPerspectiveDialog(QDialog):
             last_transaction_id = list(self.running_balance_history.keys())[0]
             total_balance = self.running_balance_history[last_transaction_id]
 
+        # Start Period Calculation (Always calculate)
+        period_start_date = None
+        if not show_all_dates:
+             if len(selected_months_0based) == 12 or not selected_months_0based: # All months
+                 period_start_date = datetime.date(selected_year, 1, 1)
+             elif selected_months_0based:
+                 # Earliest selected month
+                 min_idx = min(selected_months_0based) # 0-based
+                 period_start_date = datetime.date(selected_year, min_idx + 1, 1)
+        
+        period_start_balance = 0.0
+        if period_start_date:
+            # Find latest transaction BEFORE period_start_date
+            candidates_start = []
+            for t in self.all_transactions_for_account:
+                 if not (t.date and t.type and t.amount is not None): continue
+                 t_date = t.date
+                 if isinstance(t_date, str):
+                     try: t_date = datetime.datetime.strptime(t_date, '%Y-%m-%d').date()
+                     except: continue
+                 
+                 if t_date < period_start_date:
+                     candidates_start.append(t)
+            
+            if candidates_start:
+                candidates_start.sort(key=lambda x: (x.date, x.id), reverse=True)
+                period_start_balance = self.running_balance_history.get(candidates_start[0].id, 0.0)
+
         period_end_balance = 0.0
         if transaction_history:
-
             period_end_balance = transaction_history[0]['running_balance']
         else:
-
-            if selected_month_text == 'All':
+            # End Period Calculation (Only needed if no visible transactions)
+            if len(selected_months_0based) == 12 or not selected_months_0based: # All
                 period_end_date = datetime.date(selected_year, 12, 31)
-            else:
-                selected_month = self.month_combo.currentIndex()
-                next_month = datetime.date(
-                    selected_year + 1, 1, 1) if selected_month == 12 else datetime.date(selected_year, selected_month + 1, 1)
+            elif selected_months_0based:
+                # Latest selected month end
+                max_idx = max(selected_months_0based)
+                next_month = datetime.date(selected_year + 1, 1, 1) if max_idx == 11 else datetime.date(selected_year, max_idx + 2, 1)
                 period_end_date = next_month - datetime.timedelta(days=1)
+            else:
+                 period_end_date = None
 
             candidates = []
             for t in self.all_transactions_for_account:
@@ -560,21 +686,29 @@ class AccountPerspectiveDialog(QDialog):
 
         total_color = '#4CAF50' if total_balance >= 0 else '#f44336'
         period_color = '#2e7d32' if period_end_balance >= 0 else '#c62828'
+        start_color = '#333333' # Neutral or same logic? Let's use neutral or dark green/red. 333 is fine or logic.
+        start_color = '#2e7d32' if period_start_balance >= 0 else '#c62828'
 
         if currency:
             total_val = f"{currency} {format_currency(total_balance)}"
             period_val = f"{currency} {format_currency(period_end_balance)}"
+            start_val = f"{currency} {format_currency(period_start_balance)}"
         else:
             total_val = format_currency(total_balance)
             period_val = format_currency(period_end_balance)
+            start_val = format_currency(period_start_balance)
 
         self.current_balance_label.setText(f'Total Balance: {total_val}')
         self.current_balance_label.setStyleSheet(
             f'font-weight: bold; font-size: 14px; color: {total_color};')
 
-        self.period_balance_label.setText(f'Period Balance: {period_val}')
+        self.period_balance_label.setText(f'Period End: {period_val}')
         self.period_balance_label.setStyleSheet(
             f'font-weight: bold; font-size: 14px; color: {period_color};')
+            
+        self.period_start_label.setText(f'Period Start: {start_val}')
+        self.period_start_label.setStyleSheet(
+            f'font-weight: bold; font-size: 14px; color: {start_color};')
 
         account_name = self.account_combo.currentText().split(' (')[0]
         self.show_status(

@@ -97,6 +97,7 @@ class ExcelHeaderView(QHeaderView):
 
         self.icon_size = 14
         self.padding = 6
+        self.filters_enabled = True
 
     def _get_value(self, item):
         """Get value for filtering/sorting. Checks custom role first, then text."""
@@ -117,11 +118,16 @@ class ExcelHeaderView(QHeaderView):
         elif col in self.disabled_filters:
             self.disabled_filters.remove(col)
 
+    def set_filters_enabled(self, enabled):
+        """Enable or disable filter icons and functionality globally."""
+        self.filters_enabled = enabled
+        self.viewport().update()
+
     def paintSection(self, painter, rect, logicalIndex):
         painter.save()
         super().paintSection(painter, rect, logicalIndex)
 
-        if logicalIndex in self.disabled_filters:
+        if logicalIndex in self.disabled_filters or not self.filters_enabled:
             painter.restore()
             return
 
@@ -167,7 +173,7 @@ class ExcelHeaderView(QHeaderView):
 
     def mouseReleaseEvent(self, event):
         logicalIndex = self.logicalIndexAt(event.pos())
-        if logicalIndex == -1 or logicalIndex in self.disabled_filters:
+        if logicalIndex == -1 or logicalIndex in self.disabled_filters or not self.filters_enabled:
             super().mouseReleaseEvent(event)
             return
 

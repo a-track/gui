@@ -149,7 +149,15 @@ class TransactionsDialog(QDialog):
         filter_layout.addWidget(QLabel('Month:'))
         self.month_combo = NoScrollComboBox()
         self.populate_months()
-        self.month_combo.setCurrentText('All')
+        
+        # Set default to current month
+        current_month_name = datetime.datetime.now().strftime('%B')
+        index = self.month_combo.findText(current_month_name)
+        if index >= 0:
+             self.month_combo.setCurrentIndex(index)
+        else:
+             self.month_combo.setCurrentText('All')
+             
         self.month_combo.currentTextChanged.connect(self.apply_filters)
         filter_layout.addWidget(self.month_combo)
 
@@ -218,10 +226,10 @@ class TransactionsDialog(QDialog):
 
         filter_controls_layout.addStretch()
 
-        self.reset_filters_btn = QPushButton("Reset Filters")
-        self.reset_filters_btn.clicked.connect(self.reset_filters)
-        self.reset_filters_btn.setStyleSheet("padding: 5px;")
-        filter_controls_layout.addWidget(self.reset_filters_btn)
+        # self.reset_filters_btn = QPushButton("Reset Filters")
+        # self.reset_filters_btn.clicked.connect(self.reset_filters)
+        # self.reset_filters_btn.setStyleSheet("padding: 5px;")
+        # filter_controls_layout.addWidget(self.reset_filters_btn)
         filter_controls_layout.addStretch()
         layout.addLayout(filter_controls_layout)
 
@@ -234,6 +242,7 @@ class TransactionsDialog(QDialog):
         ])
 
         self.header_view = ExcelHeaderView(self.table)
+        self.header_view.set_filters_enabled(False)
         self.table.setHorizontalHeader(self.header_view)
 
         self.table.verticalHeader().setVisible(False)

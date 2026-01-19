@@ -206,6 +206,27 @@ class BudgetApp:
     def add_exchange_rate(self, date: str, currency: str, rate: float):
         return self.add_exchange_rates_bulk([(date, currency, rate)]) is True
 
+    def get_predicted_category(self, payee: str):
+        conn = self._get_connection()
+        try:
+            # Query for most frequent category for this payee
+            # Order by frequency (DESC), then by date (DESC) to break ties with recency
+            result = conn.execute("""
+                SELECT c.category, c.sub_category
+                FROM transactions t
+                JOIN categories c ON t.category_id = c.id
+                WHERE t.payee = ?
+                GROUP BY c.category, c.sub_category
+                ORDER BY COUNT(*) DESC, MAX(t.date) DESC
+                LIMIT 1
+            """, [payee]).fetchone()
+            return result # Returns (Main Category, Sub Category) or None
+        except Exception as e:
+            print(f"Error predicting category: {e}")
+            return None
+        finally:
+            conn.close()
+
     def add_exchange_rates_bulk(self, rates_data: list):
         """
         Bulk add exchange rates efficiently.
