@@ -130,7 +130,7 @@ class TransactionsDialog(QDialog):
         self.parent_window = parent
         self.all_transactions = []
         self.filtered_transactions = []
-        self.transaction_map = {} # Map ID -> Transaction object
+        self.transaction_map = {}
 
         self.setWindowFlags(Qt.WindowType.Window)
         self.setWindowTitle('View All Transactions')
@@ -150,7 +150,6 @@ class TransactionsDialog(QDialog):
         self.month_combo = NoScrollComboBox()
         self.populate_months()
         
-        # Set default to current month
         current_month_name = datetime.datetime.now().strftime('%B')
         index = self.month_combo.findText(current_month_name)
         if index >= 0:
@@ -226,10 +225,6 @@ class TransactionsDialog(QDialog):
 
         filter_controls_layout.addStretch()
 
-        # self.reset_filters_btn = QPushButton("Reset Filters")
-        # self.reset_filters_btn.clicked.connect(self.reset_filters)
-        # self.reset_filters_btn.setStyleSheet("padding: 5px;")
-        # filter_controls_layout.addWidget(self.reset_filters_btn)
         filter_controls_layout.addStretch()
         layout.addLayout(filter_controls_layout)
 
@@ -445,7 +440,6 @@ class TransactionsDialog(QDialog):
         self.all_transactions = valid_transactions
         self.filtered_transactions = valid_transactions
         
-        # Build map for fast ID lookup
         self.transaction_map = {t.id: t for t in self.filtered_transactions}
 
         self.populate_table(self.filtered_transactions)
@@ -682,12 +676,9 @@ class TransactionsDialog(QDialog):
             if not item:
                 return
 
-            # Ignore updates to the Confirmed column (triggered by ON/OFF toggle)
             if column == 12:
                 return
 
-            # Protection moved to AFTER ID retrieval to be sorting-safe
-            # See below block starting with 'trans_id = ...'
 
             trans_id_item = self.table.item(row, 0)
             if not trans_id_item:
@@ -695,7 +686,6 @@ class TransactionsDialog(QDialog):
 
             trans_id = int(trans_id_item.text())
             
-            # Use ID lookup for safety (sorting changes row order)
             trans = self.get_transaction_by_id(trans_id)
             if not trans: return
 
@@ -900,7 +890,6 @@ class TransactionsDialog(QDialog):
             self.budget_app.toggle_confirmation(trans_id)
             self.show_status(f'Transaction #{trans_id} confirmation toggled!')
 
-            # Update local transaction object via ID (sorting safe)
             if trans_id in self.transaction_map:
                 self.transaction_map[trans_id].confirmed = checkbox.isChecked()
 
@@ -908,7 +897,6 @@ class TransactionsDialog(QDialog):
             if index.isValid():
                 row = index.row()
                 
-                # Update table item for reliable visual sort
                 conf_item = self.table.item(row, 12)
                 if conf_item:
                     is_checked = checkbox.isChecked()
@@ -1001,7 +989,6 @@ class TransactionsDialog(QDialog):
             button = self.sender()
             trans_id = button.property('trans_id')
 
-            # Use ID lookup for delete protection too
             trans = self.get_transaction_by_id(trans_id)
             if trans and hasattr(trans, 'confirmed') and trans.confirmed:
                  self.show_status("Cannot delete confirmed transaction", error=True)
@@ -1069,7 +1056,6 @@ class TransactionsDialog(QDialog):
     def get_transaction_by_id(self, trans_id):
         if hasattr(self, 'transaction_map'):
             return self.transaction_map.get(trans_id)
-        # Fallback if map not built for some reason
         for t in self.filtered_transactions:
             if t.id == trans_id:
                 return t
@@ -1088,8 +1074,6 @@ class TransactionsDialog(QDialog):
             else:
                 for col in range(cols):
                     item = self.table.item(row, col)
-                    # Check standard items (skip widgets if any, or handle cell widget logic if needed)
-                    # For QTableWidget mostly items
                     if item and search_text in item.text().lower():
                         should_show = True
                         break

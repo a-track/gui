@@ -26,7 +26,6 @@ class PerformanceLoaderThread(QThread):
 
             data = []
 
-            # Aggregators for Total Row
             total_stats = {
                 'cost_basis': 0.0,
                 'market_val': 0.0,
@@ -38,9 +37,8 @@ class PerformanceLoaderThread(QThread):
                 'fees_bd': {},
             }
             
-            # For Total TWR, we need to merge all value histories and all flows.
-            all_value_histories_chf = [] # List of list of (date, value_chf)
-            all_flows_chf = [] # List of (date, amount_chf)
+            all_value_histories_chf = []
+            all_flows_chf = []
 
             today = date.today()
 
@@ -54,19 +52,11 @@ class PerformanceLoaderThread(QThread):
                 name = acc.account
                 currency = acc.currency
 
-                # --- 1. Basic Stats ---
-                # --- 1. Basic Stats ---
                 balance_data = balances.get(acc_id, {})
                 qty = balance_data.get('qty', 0.0)
-
-                # Cost Basis: Use Historical Exchange Rates (Net Invested Capital)
-                # Instead of current balance * current rate, we sum historic inflows
                 cost_basis_chf = self.budget_app.get_historical_cost_basis(acc_id)
-
-                # Market Value: Use Current Exchange Rates (What is it worth NOW?)
                 rate = rates.get(currency, 1.0)
                 
-                # Fetch Valuation (Native)
                 valuation_native = 0.0
                 strategy = getattr(acc, 'valuation_strategy', 'Total Value')
                 raw_val = self.budget_app.get_investment_valuation_for_date(acc_id)
@@ -76,7 +66,6 @@ class PerformanceLoaderThread(QThread):
                 elif raw_val > 0:
                     valuation_native = raw_val
                 else:
-                    # Fallback to balance if no valuation
                     valuation_native = balance_data.get('balance', 0.0)
 
                 market_val_chf = valuation_native * rate
@@ -100,49 +89,26 @@ class PerformanceLoaderThread(QThread):
                 if abs(cost_basis_chf) > 0.01:
                     total_return_pct = (total_return_chf / abs(cost_basis_chf)) * 100
 
-                # --- 2. Advanced Stats (IRR & TWR) ---
-                
-                # Fetch Flows
                 flows = self.budget_app.get_account_cash_flows(acc_id)
                 
-                # IRR Calcs
                 xirr_flows = flows.copy()
-                xirr_flows.append((today, market_val_chf)) # Assuming flows are converted/base? 
-                # Wait, flows from `get_account_cash_flows` returns `amount`. 
-                # We need to treat flows as CHF if we compare to CHF Market Value?
-                # Usually XIRR should be in Currency of the Asset to get "Native IRR".
-                # But here we display "IRR" in the table. 
-                # If we mix currencies in Total, we must use CHF.
-                # For individual rows, Native IRR is better?
-                # The prompt tooltip says "IRR/TWR in Native Currency".
-                # So for individual row, we use Native Flows and Native MV.
-                # `get_account_cash_flows` returns values in Transaction Amount (Native).
-                # `market_val_native` is Native.
-                # So:
+                xirr_flows.append((today, market_val_chf))
                 xirr_flows_native = flows.copy()
                 xirr_flows_native.append((today, valuation_native))
                 irr_val = xirr(xirr_flows_native)
                 irr_pct = (irr_val * 100.0) if irr_val is not None else None
 
-                # TWR Calcs
-                # Requires Value History in Native Currency
                 val_history = []
                 
                 if strategy == 'Total Value':
-                    # History is already Total Value
                     raw_history = self.budget_app.get_investment_valuation_history(acc_id)
-                    val_history = raw_history # List of (date, value)
+                    val_history = raw_history
                 
                 elif strategy == 'Price/Qty':
-                    # Need to reconstruct Total Value = Price * Qty
                     price_history = self.budget_app.get_investment_valuation_history(acc_id)
                     qty_changes = self.budget_app.get_qty_changes(acc_id)
                     
                     if price_history:
-                        # Reconstruct
-                        # Create Qty timeline
-                        # We need Qty at each Price Date
-                        # Sort both
                         price_history.sort(key=lambda x: x[0])
                         qty_changes.sort(key=lambda x: x[0])
                         
@@ -151,7 +117,6 @@ class PerformanceLoaderThread(QThread):
                         n_qty = len(qty_changes)
                         
                         for p_date, price in price_history:
-                            # Apply all qty changes up to p_date
                             while qty_idx < n_qty and qty_changes[qty_idx][0] <= p_date:
                                 current_qty += qty_changes[qty_idx][1]
                                 qty_idx += 1
@@ -161,43 +126,19 @@ class PerformanceLoaderThread(QThread):
 
                 twr_pct = None
                 if val_history:
-                    # Append current
-                    # Make sure not duplicate date
                     if not val_history or val_history[-1][0] < today:
                         val_history.append((today, valuation_native))
                     
                     twr_val = calculate_linked_twr(val_history, flows)
                     twr_pct = twr_val
 
-                # --- 3. Collect Data for TOTAL Row ---
-                # We need CHF flows and CHF history
-                
-                # Convert flows to CHF
                 flows_chf_acc = [(d, amt * rate) for d, amt in flows]
                 all_flows_chf.extend(flows_chf_acc)
 
-                # Convert history to CHF
-                # (Ideally we use historical rate, but using current rate is a necessary simplification 
-                # if we don't carry full exchange rate history efficiently here. 
-                # Or we could fetch rate for each point? That's heavy.
-                # Let's use current rate for approximation of "Current Portfolio performance"
-                # OR better: The values stored were historical. We should convert them using historical rates?
-                # That creates "Currency Impact" in TWR. 
-                # Usually Total Portfolio TWR is in Base Currency (CHF).
-                # So yes, we should convert everything to CHF. 
-                # Using CURRENT rate for HISTORY is wrong (distorts past value).
-                # But we don't have easy historical lookup here without N queries.
-                # Let's use Constant Rate (Current) for the entire history series?
-                # This effectively calculates "What if this was always in CHF at today's rate?".
-                # This removes currency fluctuation from the TWR, showing only Asset Performance.
-                # This is arguably BETTER for "Investment Performance" pure view.
-                # If we want "Total Return in CHF", we need realized FX gains.
-                # Let's stick to Current Rate for simplicity and consistency with "Native TWR".
                 
                 history_chf = [(d, v * rate) for d, v in val_history]
                 all_value_histories_chf.append(history_chf)
 
-                # Add to basic aggregates
                 total_stats['cost_basis'] += cost_basis_chf
                 total_stats['market_val'] += market_val_chf
                 total_stats['unrealized'] += unrealized_pl_chf
@@ -205,7 +146,6 @@ class PerformanceLoaderThread(QThread):
                 total_stats['fees'] += fees_chf
                 total_stats['return_sum'] += total_return_chf
                 
-                # Aggregate breakdowns
                 def agg_bd(src, limit_dict):
                     for y, d in src.items():
                         if y not in limit_dict: limit_dict[y] = {'total':0.0,'breakdown':{}}
@@ -236,68 +176,39 @@ class PerformanceLoaderThread(QThread):
                 }
                 data.append(row)
 
-            # --- Calculate TOTAL Row Stats ---
-            
-            # Total TWR
             total_twr_pct = None
             if all_value_histories_chf:
-                # Merge Histories
-                # 1. Get all unique dates
                 all_dates = set()
                 for h in all_value_histories_chf:
                     for d, v in h:
                         all_dates.add(d)
                 sorted_dates = sorted(list(all_dates))
                 
-                # 2. Forward fill summation
                 total_history = []
-                # Current values for each account (initially 0 or start val? Assumed 0 before first point)
                 curr_vals = [0.0] * len(all_value_histories_chf)
                 
-                # We need to efficienty walk time.
-                # Map date -> list of (acc_idx, val) updates
                 updates_by_date = {d: [] for d in sorted_dates}
                 for idx, h in enumerate(all_value_histories_chf):
                     for d, v in h:
                         updates_by_date[d].append((idx, v))
                 
                 for d in sorted_dates:
-                    # Apply updates
                     for idx, v in updates_by_date[d]:
                         curr_vals[idx] = v
                     
-                    # Sum
                     total_val = sum(curr_vals)
                     total_history.append((d, total_val))
-                
-                # 3. Calculate TWR
-                # Flows: internal flows cancel out? 
-                # Yes, if we sum +100 and -100 on same day.
-                # `calculate_linked_twr` takes flows.
-                # We need to flatten `all_flows_chf`?
-                # Ideally merge flows on same day to single net flow.
-                # (Though `calculate_linked_twr` might handle list of flows? Checks implementation...
-                # implementation expects list of (date, amount). If multiple same day?
-                # It does `flows_by_date[f_date] += f_amt`. So yes, it aggregates.)
-                
                 total_twr_pct = calculate_linked_twr(total_history, all_flows_chf)
 
-            # Total IRR
             total_irr_pct = None
             if all_flows_chf or total_stats['market_val'] > 0:
                 total_xirr_flows = all_flows_chf.copy()
                 total_xirr_flows.append((today, total_stats['market_val']))
-                # Recalculate XIRR on aggregated flows
-                # Note: Internal flows between accounts in all_flows_chf should cancel out 
-                # if we have both sides (Transfer Out from A, Transfer In to B).
-                # Provided they have same date and amount.
-                # Even if dates slightly differ, XIRR handles them as separate flows.
                 
                 t_irr = xirr(total_xirr_flows)
                 if t_irr is not None:
                      total_irr_pct = t_irr * 100.0
 
-            # Total stats pct
             t_unreal_pct = (total_stats['unrealized'] / abs(total_stats['cost_basis']) * 100) if abs(total_stats['cost_basis']) > 0.01 else 0.0
             t_ret_pct = (total_stats['return_sum'] / abs(total_stats['cost_basis']) * 100) if abs(total_stats['cost_basis']) > 0.01 else 0.0
 
@@ -399,7 +310,6 @@ class InvestmentPerformanceTab(QWidget):
         self.header_view.set_filters_enabled(False)
         self.table.setHorizontalHeader(self.header_view)
 
-        # Tooltips for headers
         self.table.horizontalHeaderItem(10).setToolTip(
             "Internal Rate of Return (Money-Weighted Return).\n"
             "Measures your personal performance, accounting for the timing and size of your deposits/withdrawals."
@@ -511,7 +421,6 @@ class InvestmentPerformanceTab(QWidget):
         key_name = keys.get(column)
         if key_name:
             reverse = (order == Qt.SortOrder.DescendingOrder)
-            # Handle None values for sort
             data_to_sort.sort(key=lambda x: (x.get(key_name) is None, x.get(key_name, 0)), reverse=reverse)
 
         self.current_data = [total_row] + data_to_sort
@@ -545,9 +454,6 @@ class InvestmentPerformanceTab(QWidget):
                         text = ""
 
                     item = NumericTableWidgetItem(text)
-                    
-                    # Store numeric value for sorting if needed, though we sort data list
-                    # item.setData(Qt.ItemDataRole.UserRole, val if val is not None else -999999)
 
                     item.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -559,9 +465,9 @@ class InvestmentPerformanceTab(QWidget):
 
                     if val is not None and col in [4, 5, 8, 9, 10, 11]:
                         if val > 0:
-                            item.setForeground(QColor("#2e7d32")) # Green
+                            item.setForeground(QColor("#2e7d32"))
                         elif val < 0:
-                            item.setForeground(QColor("#c62828")) # Red
+                            item.setForeground(QColor("#c62828"))
 
                     if breakdown_dict:
                         sorted_years = sorted(
@@ -604,7 +510,6 @@ class InvestmentPerformanceTab(QWidget):
                 set_num(8, row['total_return'])
                 set_num(9, row['total_return_pct'], is_pct=True)
                 
-                # New Columns
                 set_num(10, row['irr'], is_pct=True)
                 set_num(11, row['twr'], is_pct=True)
 

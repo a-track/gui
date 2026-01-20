@@ -61,7 +61,6 @@ class SavingsTab(QWidget):
         self.range_combo.currentIndexChanged.connect(self.on_range_changed)
         header_layout.addWidget(self.range_combo)
 
-        # Custom Date Range Inputs (Hidden by default)
         self.date_range_widget = QWidget()
         date_layout = QHBoxLayout(self.date_range_widget)
         date_layout.setContentsMargins(0, 0, 0, 0)
@@ -103,7 +102,6 @@ class SavingsTab(QWidget):
         self.canvas.mpl_connect("motion_notify_event", self.on_hover)
 
     def populate_years(self):
-        # Add years to the combo box after "Last 12 Months"
         if not MATPLOTLIB_AVAILABLE:
             return
 
@@ -111,11 +109,7 @@ class SavingsTab(QWidget):
         current_text = self.range_combo.currentText()
         
         self.range_combo.blockSignals(True)
-        
-        # Keep "Last 12 Months" and "Custom"
-        # Re-populate years in between
-        
-        # Clear specific year items if any (simplified: rebuild all)
+
         self.range_combo.clear()
         self.range_combo.addItem("Last 12 Months", "last_12")
         
@@ -124,15 +118,14 @@ class SavingsTab(QWidget):
             
         self.range_combo.addItem("Custom Range", "custom")
 
-        # Restore selection if possible
         index = self.range_combo.findText(current_text)
         if index >= 0:
             self.range_combo.setCurrentIndex(index)
         else:
-            self.range_combo.setCurrentIndex(0) # Default to Last 12 Months
+            self.range_combo.setCurrentIndex(0)
 
         self.range_combo.blockSignals(False)
-        self.on_range_changed() # Update visibility
+        self.on_range_changed()
 
     def refresh_data(self):
         """Called when tab becomes active"""
@@ -155,14 +148,13 @@ class SavingsTab(QWidget):
         
         if mode == 'last_12':
             end_date = today
-            start_date = today.addMonths(-11).addDays(-(today.day() - 1)) # Start of that month
+            start_date = today.addMonths(-11).addDays(-(today.day() - 1))
             return start_date.toString("yyyy-MM-dd"), end_date.toString("yyyy-MM-dd")
             
         elif mode == 'custom':
             return self.from_date.date().toString("yyyy-MM-dd"), self.to_date.date().toString("yyyy-MM-dd")
             
         else:
-            # Specific Year
             try:
                 year = int(mode)
                 return f"{year}-01-01", f"{year}-12-31"
@@ -201,7 +193,6 @@ class SavingsTab(QWidget):
         super().closeEvent(event)
 
     def refresh_graph(self):
-        # Triggered by combo change (handled by on_range_changed)
         pass
 
     def on_data_loaded(self, data):
@@ -216,13 +207,11 @@ class SavingsTab(QWidget):
 
         month_keys = sorted(data.keys())
         
-        # If no data, show at least current month
         if not month_keys:
              month_keys = [datetime.now().strftime("%Y-%m")]
         
         months_x = range(len(month_keys))
         
-        # Format labels: "2025-01" -> "Jan '25" or "Jan" if all same year
         labels = []
         for k in month_keys:
             try:
@@ -252,7 +241,6 @@ class SavingsTab(QWidget):
             monthly_invested.append(inv)
 
             net = inc - exp
-            # net_savings.append(net) # Not directly used for plotting, but for cumulative
 
             running_savings += net
             cumulative_savings.append(running_savings)
@@ -260,29 +248,25 @@ class SavingsTab(QWidget):
             running_invested += inv
             cumulative_invested.append(running_invested)
 
-        # Calculate YTD Totals
         tot_inc = sum(incomes)
         tot_exp = sum([abs(x) for x in expenses])
         tot_net = tot_inc - tot_exp
         tot_inv = sum(monthly_invested)
         tot_saved = tot_net - tot_inv
 
-        # 1. Cash Bars (Standard)
         self.bars_income = ax.bar(
             months_x, incomes, color='#4CAF50', label='Income', alpha=0.7)
         self.bars_expense = ax.bar(
             months_x, expenses, color='#F44336', label='Expenses', alpha=0.7)
             
-        # 2. Cumulative Lines
         ax.plot(months_x, cumulative_savings, color='#2196F3',
                 marker='o', linewidth=2, label='Accumulated Savings')
                 
         ax.plot(months_x, cumulative_invested, color='#7B1FA2',
                 marker='s', linewidth=2, label='Accumulated Invested')
 
-        # Annotations (Savings Line)
+
         for i, val in enumerate(cumulative_savings):
-            # Show every point if <= 12 months, else sparser
             step = 1 if len(month_keys) <= 12 else 2
             if i % step == 0:
                 ax.annotate(format_currency(val, precision=0),
@@ -292,7 +276,6 @@ class SavingsTab(QWidget):
                             ha='center', va='bottom',
                             color='#1565C0', fontsize=8, fontweight='bold')
 
-        # Annotations (Invested Line)
         for i, val in enumerate(cumulative_invested):
             step = 1 if len(month_keys) <= 12 else 2
             if i % step == 0:
@@ -305,19 +288,16 @@ class SavingsTab(QWidget):
 
         ax.axhline(0, color='black', linewidth=0.8)
 
-        # Annotate Bars
         for i in range(len(months_x)):
             inc = incomes[i]
             exp = expenses[i]
 
-            # Income Annotation
             if abs(inc) > 1.0:
                 ax.annotate(format_currency(inc, precision=0),
                             xy=(months_x[i], inc/2),
                             ha='center', va='center',
                             color='white', fontsize=7, fontweight='bold')
 
-            # Expense Annotation
             if abs(exp) > 1.0:
                  ax.annotate(format_currency(abs(exp), precision=0),
                             xy=(months_x[i], exp/2),
@@ -334,7 +314,6 @@ class SavingsTab(QWidget):
         ax.set_xticklabels(labels, rotation=45 if len(labels) > 6 else 0)
         ax.grid(True, axis='y', linestyle=':', alpha=0.6)
 
-        # Legend
         handles, labels = ax.get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
         ax.legend(by_label.values(), by_label.keys(), loc='best')
@@ -366,7 +345,6 @@ class SavingsTab(QWidget):
         if not self.chart_data:
             return
 
-        # Map index back to key
         sorted_keys = sorted(self.chart_data.keys())
         if idx < 1 or idx > len(sorted_keys):
             return

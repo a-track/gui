@@ -48,8 +48,6 @@ class BudgetTrackerWindow(QMainWindow):
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setContentsMargins(5, 5, 5, 5)
 
-
-        # Search Bar Area
         self.search_container = QWidget()
         search_layout = QHBoxLayout(self.search_container)
         search_layout.setContentsMargins(10, 5, 10, 5)
@@ -83,14 +81,11 @@ class BudgetTrackerWindow(QMainWindow):
         search_layout.addWidget(self.search_input)
         
         main_layout.addWidget(self.search_container)
-        self.search_container.setVisible(True) # Force visibility
+        self.search_container.setVisible(True)
 
-        # Shortcut Ctrl+F to focus search
         self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
         self.search_shortcut.activated.connect(self.focus_search)
 
-        
-        # Shortcut Esc to clear focus/search
         self.esc_shortcut = QShortcut(QKeySequence("Esc"), self)
         self.esc_shortcut.activated.connect(self.clear_search_focus)
 
@@ -156,7 +151,6 @@ class BudgetTrackerWindow(QMainWindow):
 
         main_layout.addWidget(self.tab_widget)
         
-        # Initialize search state for current tab (search bar code moved to top)
         QTimer.singleShot(100, lambda: self.on_tab_changed(self.tab_widget.currentIndex()))
 
 
@@ -170,7 +164,6 @@ class BudgetTrackerWindow(QMainWindow):
         if not current_widget:
             return
             
-        # Check if widget has a controller attached (for dialog-based tabs)
         controller = getattr(current_widget, 'searchable_controller', current_widget)
         
         if hasattr(controller, 'filter_content'):
@@ -187,19 +180,14 @@ class BudgetTrackerWindow(QMainWindow):
         if self.search_input.hasFocus():
             self.search_input.clear()
             self.search_input.clearFocus() 
-            # Optionally give focus back to table? 
-            # For now just unfocus search.
 
     def on_tab_changed(self, index):
         """Called when user switches tabs - Handles search and data refresh"""
         if index < 0 or index >= self.tab_widget.count():
             return
 
-        # Clear search when switching tabs
         self.search_input.clear()
         
-        # White-list of tabs where search is enabled
-        # note: distinct items in tab_defs are tuples (widget, title, tip)
         searchable_tabs = [
             self.tab_defs['overview'][0],
             self.tab_defs['performance'][0],
@@ -218,8 +206,6 @@ class BudgetTrackerWindow(QMainWindow):
         if is_searchable:
             self.search_input.setFocus()
 
-
-        # Refresh tab data
         try:
             current_widget = self.tab_widget.widget(index)
             
@@ -230,7 +216,6 @@ class BudgetTrackerWindow(QMainWindow):
                     self.transactions_dialog_ref.load_transactions()
             elif hasattr(self, 'account_perspective_tab_widget') and current_widget == self.account_perspective_tab_widget:
                 if hasattr(self, 'account_perspective_dialog_ref'):
-                    # Check if refresh_data exists, otherwise skip or implement it
                     if hasattr(self.account_perspective_dialog_ref, 'refresh_data'):
                         self.account_perspective_dialog_ref.refresh_data()
             elif hasattr(self, 'budget_tab_widget') and current_widget == self.budget_tab_widget:
@@ -852,7 +837,6 @@ class BudgetTrackerWindow(QMainWindow):
         buttons_layout.addStretch()
         main_layout.addLayout(buttons_layout)
 
-        # Connect Enter key to add_transaction
         self.amount_input.returnPressed.connect(self.add_transaction)
         self.to_amount_input.returnPressed.connect(self.add_transaction)
         self.notes_input.returnPressed.connect(self.add_transaction)
@@ -898,7 +882,6 @@ class BudgetTrackerWindow(QMainWindow):
         self.transactions_dialog_ref = TransactionsDialog(
             self.budget_app, self)
         
-        # Attach controller for search
         tab.searchable_controller = self.transactions_dialog_ref
 
         dialog_layout = self.transactions_dialog_ref.layout()
@@ -923,7 +906,6 @@ class BudgetTrackerWindow(QMainWindow):
         self.account_perspective_dialog_ref = AccountPerspectiveDialog(
             self.budget_app, self)
         
-        # Attach controller for search
         tab.searchable_controller = self.account_perspective_dialog_ref
 
         dialog_layout = self.account_perspective_dialog_ref.layout()
@@ -968,7 +950,6 @@ class BudgetTrackerWindow(QMainWindow):
         from accounts_dialog import AccountsDialog
         self.accounts_dialog_ref = AccountsDialog(self.budget_app, self)
         
-        # Attach controller for search
         tab.searchable_controller = self.accounts_dialog_ref
 
         dialog_layout = self.accounts_dialog_ref.layout()
@@ -996,7 +977,6 @@ class BudgetTrackerWindow(QMainWindow):
         from categories_dialog import CategoriesDialog
         self.categories_dialog_ref = CategoriesDialog(self.budget_app, self)
 
-        # Attach controller for search
         tab.searchable_controller = self.categories_dialog_ref
 
         dialog_layout = self.categories_dialog_ref.layout()
@@ -1057,7 +1037,6 @@ class BudgetTrackerWindow(QMainWindow):
         self.investment_performance_tab_ref = InvestmentPerformanceTab(
             self.budget_app, self)
         
-        # Attach controller for search
         tab.searchable_controller = self.investment_performance_tab_ref
         
         layout.addWidget(self.investment_performance_tab_ref)
@@ -1319,12 +1298,10 @@ class BudgetTrackerWindow(QMainWindow):
         if prediction:
             main_category, sub_category = prediction
             
-            # Update Main Category
             index = self.parent_category_combo.findText(main_category)
             if index >= 0:
                 self.parent_category_combo.setCurrentIndex(index)
                 
-                # Update Sub Category (after main category triggers update)
                 index_sub = self.sub_category_combo.findText(sub_category)
                 if index_sub >= 0:
                     self.sub_category_combo.setCurrentIndex(index_sub)
@@ -1541,7 +1518,6 @@ class BudgetTrackerWindow(QMainWindow):
         if hasattr(self, 'exchange_rates_tab_ref'):
             self.exchange_rates_tab_ref.refresh_data()
 
-        # Update category dropdowns in Add Transaction tab
         if hasattr(self, 'income_radio'):
             trans_type = 'income' if self.income_radio.isChecked() else 'expense'
             self.update_parent_categories(trans_type)

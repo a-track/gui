@@ -381,7 +381,6 @@ class InvestmentTab(QWidget):
                     text = item.text().strip()
 
                     try:
-                        # Clean currency formatting
                         clean_text = text.replace("'", "").replace(",", "")
                         val = float(clean_text)
                         if val < 0:

@@ -108,8 +108,6 @@ class CategoriesDialog(QDialog):
         self.header_view.set_filters_enabled(False)
         self.table.setHorizontalHeader(self.header_view)
 
-        # self.header_view.set_filter_enabled(4, False) # No longer needed if all disabled
-
         self.header_view.set_column_types({
             0: 'number'
         })
@@ -200,7 +198,6 @@ class CategoriesDialog(QDialog):
                 try:
 
                     id_item = NumericTableWidgetItem(str(category.id))
-                    # Allow editing ID
                     id_item.setFlags(id_item.flags() | Qt.ItemFlag.ItemIsEditable)
                     id_item.setToolTip("Double click to change ID")
                     id_item.setBackground(QColor(240, 240, 240))
@@ -296,7 +293,6 @@ class CategoriesDialog(QDialog):
                 return
 
             if column == 0:
-                # Handle ID change
                 delete_btn = self.table.cellWidget(row, 4).findChild(QPushButton)
                 if not delete_btn:
                      QTimer.singleShot(0, self.load_categories)
@@ -314,7 +310,6 @@ class CategoriesDialog(QDialog):
                 if old_id == new_id:
                     return
 
-                # Pre-check existence using full list scan for robustness
                 all_cats = self.budget_app.get_all_categories()
                 existing_cat = next((c for c in all_cats if c.id == new_id), None)
                 
@@ -335,7 +330,6 @@ class CategoriesDialog(QDialog):
                     success, msg = self.budget_app.update_category_id(old_id, new_id)
                     if success:
                          self.show_status(f'Category ID updated to {new_id}')
-                         # Delay reload to avoid commitData warning
                          QTimer.singleShot(0, self.load_categories)
                          if hasattr(self.parent_window, 'refresh_global_state'):
                             self.parent_window.refresh_global_state()

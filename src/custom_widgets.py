@@ -28,7 +28,6 @@ class CheckableComboBox(NoScrollComboBox):
         self.setModel(QStandardItemModel(self))
         self.is_programmatic_change = False
         
-        # Keep popup open when clicking checks
         self.view().viewport().installEventFilter(self)
 
     def eventFilter(self, obj, event):
@@ -42,11 +41,10 @@ class CheckableComboBox(NoScrollComboBox):
                     else:
                         item.setCheckState(Qt.CheckState.Checked)
                     self.update_display_text()
-                    return True # Eat the event to prevent closing
+                    return True
         return super().eventFilter(obj, event)
 
     def handle_item_pressed(self, index):
-        # Handled in eventFilter now
         pass
 
     def addItem(self, text, data=None):
@@ -67,10 +65,6 @@ class CheckableComboBox(NoScrollComboBox):
             item = self.model().item(i)
             if item.checkState() == Qt.CheckState.Checked:
                 userData = item.data(Qt.ItemDataRole.UserRole)
-                # If no user data, return text (or index?) - consistency with standard addItem
-                # Standard addItem stores text. UserRole is extra.
-                # Let's return UserRole if present, else text? 
-                # or just return list of data. 
                 checked_data.append(userData if userData is not None else item.text())
         return checked_data
         
@@ -79,7 +73,6 @@ class CheckableComboBox(NoScrollComboBox):
                 if self.model().item(i).checkState() == Qt.CheckState.Checked]
 
     def update_display_text(self):
-        # Use line edit to display summary
         if not self.isEditable():
             self.setEditable(True)
             self.lineEdit().setReadOnly(True)
@@ -96,6 +89,5 @@ class CheckableComboBox(NoScrollComboBox):
 
     def showPopup(self):
         super().showPopup()
-        # Optional: could update checking here if needed
 
 

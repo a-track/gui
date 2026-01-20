@@ -51,7 +51,6 @@ class InvestmentAccountFilterDialog(QDialog):
 
     def populate_list(self):
         accounts = self.budget_app.get_all_accounts()
-        # Filter for investment accounts only
         inv_accounts = [acc for acc in accounts if getattr(acc, 'is_investment', False)]
         
         for acc in inv_accounts:
@@ -105,7 +104,7 @@ class InvestmentProfitTab(QWidget):
         self.current_start_date = None
         self.current_end_date = None
         self.chart_data = None
-        self.filter_account_ids = None # None means all
+        self.filter_account_ids = None
         self.init_ui()
 
     def showEvent(self, event):
@@ -131,7 +130,6 @@ class InvestmentProfitTab(QWidget):
         self.range_combo.currentIndexChanged.connect(self.on_range_changed)
         header_layout.addWidget(self.range_combo)
         
-        # Date Inputs
         self.date_range_widget = QWidget()
         date_layout = QHBoxLayout(self.date_range_widget)
         date_layout.setContentsMargins(0, 0, 0, 0)
@@ -177,7 +175,6 @@ class InvestmentProfitTab(QWidget):
 
         self.canvas.mpl_connect("motion_notify_event", self.on_hover)
         
-        # Initial populate
         self.populate_years()
 
     def open_filter_dialog(self):
@@ -207,7 +204,7 @@ class InvestmentProfitTab(QWidget):
         if index >= 0:
             self.range_combo.setCurrentIndex(index)
         else:
-            self.range_combo.setCurrentIndex(0) # Default Last 12
+            self.range_combo.setCurrentIndex(0)
 
         self.range_combo.blockSignals(False)
         self.on_range_changed()
@@ -232,7 +229,6 @@ class InvestmentProfitTab(QWidget):
             if s > e: s = e
             return s.toString("yyyy-MM-dd"), e.toString("yyyy-MM-dd")
         else:
-            # Year
             try:
                 year = int(mode)
                 return f"{year}-01-01", f"{year}-12-31"
@@ -276,11 +272,9 @@ class InvestmentProfitTab(QWidget):
             self.canvas.draw()
             return
 
-        # Sort keys YYYY-MM
         sorted_keys = sorted(data.keys())
         x_vals = range(len(sorted_keys))
         
-        # Create Labels
         labels = []
         for k in sorted_keys:
             parts = k.split('-')
@@ -292,52 +286,27 @@ class InvestmentProfitTab(QWidget):
         gains = []
         losses = [] 
         
-        # Details are not as granular as before? `get_investment_gains_history`
-        # returns {'net', 'gain', 'loss'} but NOT details breakdown (Fees, Divs, Depos).
-        # My implementation of `get_investment_gains_history` stored 'net', 'gain', 'loss'.
-        # It did NOT store 'details' dictionary.
-        # This means I CANNOT plot Dividends vs Capital Growth separately unless I update `models.py`.
-        # The previous visualization relied on 'total_income', 'total_deposits' etc.
-        # My `get_investment_gains_history` ONLY computed Net Gain/Loss logic: (End-Start)-Flows.
-        # It did NOT break down flows into Deposits/Divs/Fees.
-        
-        # HMM. This reduces functionality (Tooltip details lost).
-        # User asked for "range filter logic", implied same richness.
-        # I should probably ENRICH `get_investment_gains_history` to return these details.
-        
-        # However, for now, I will plot Net Gain/Loss and Cumulative P&L.
-        # If I want to match the previous chart (Stacked Bars of Sources), I need that data.
-        # For this turn, I will implement a simpler "Waterfall" or Net Gain/Loss chart.
-        # OR I can update `models.py` again.
-        # Given constraint, I'll stick to what I have in `models.py` (Net, Gain, Loss) 
-        # and plot simplified bars (Green Gain, Red Loss) + Cumulative Line.
-        
         cumulative_return = []
         running = 0.0
         
         for k in sorted_keys:
             val = data[k]
-            # Val has 'gain' (positive part) and 'loss' (positive magnitude of loss)
             g = val.get('gain', 0.0)
-            l = val.get('loss', 0.0) # Absolute value
+            l = val.get('loss', 0.0)
             
-            # Net = gain - loss
             net = val.get('net', 0.0)
             
             gains.append(g)
-            losses.append(-l) # Plot negative
+            losses.append(-l) 
             
             running += net
             cumulative_return.append(running)
 
-        # Plot Bars
         ax.bar(x_vals, gains, color='#4CAF50', label='Gain', alpha=0.7)
         ax.bar(x_vals, losses, color='#F44336', label='Loss', alpha=0.7)
         
-        # Cumulative Line
         ax.plot(x_vals, cumulative_return, color='#2196F3', marker='o', linewidth=2, label='Cumulative P&L')
 
-        # Annotations
         for i, val in enumerate(cumulative_return):
             if abs(val) > 1:
                ax.annotate(format_currency(val, precision=0), xy=(x_vals[i], val), xytext=(0, 5) if val>=0 else (0,-10), 
@@ -345,7 +314,6 @@ class InvestmentProfitTab(QWidget):
         
         ax.axhline(0, color='black', linewidth=0.8)
         
-        # Title
         total_pl = cumulative_return[-1] if cumulative_return else 0.0
         ax.set_title(f"Investment Performance ({self.current_start_date} - {self.current_end_date})\nTotal P&L: {'+' if total_pl>0 else ''}{format_currency(total_pl)}")
         
@@ -360,7 +328,6 @@ class InvestmentProfitTab(QWidget):
         self.canvas.draw()
         
     def on_hover(self, event):
-        # Simplified tooltip
         if not self.figure.axes or event.inaxes != self.figure.axes[0]:
             QToolTip.hideText()
             return

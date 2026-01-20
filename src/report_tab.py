@@ -45,7 +45,6 @@ class ReportTab(QWidget):
         self.range_combo.currentIndexChanged.connect(self.on_range_changed)
         header_layout.addWidget(self.range_combo)
 
-        # Custom Date Range Inputs
         self.date_range_widget = QWidget()
         date_layout = QHBoxLayout(self.date_range_widget)
         date_layout.setContentsMargins(0, 0, 0, 0)
@@ -61,14 +60,13 @@ class ReportTab(QWidget):
         self.to_date.setDisplayFormat("yyyy-MM-dd")
         self.to_date.setDate(QDate.currentDate())
         
-        # Default 'From' to 1 year ago
         self.from_date.setDate(QDate.currentDate().addMonths(-12))
 
         date_layout.addWidget(self.from_date)
         date_layout.addWidget(self.to_date)
         
         header_layout.addWidget(self.date_range_widget)
-        self.date_range_widget.setVisible(False) # Default hidden
+        self.date_range_widget.setVisible(False)
 
         refresh_btn = QPushButton("🔄 Refresh")
         refresh_btn.clicked.connect(self.refresh_data)
@@ -86,7 +84,6 @@ class ReportTab(QWidget):
         self.message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.message_label)
         
-        # Initial populate
         self.populate_years()
         self.refresh_data()
 
@@ -131,16 +128,14 @@ class ReportTab(QWidget):
         elif mode == 'custom':
             s = self.from_date.date()
             e = self.to_date.date()
-            if s > e: s = e # Basic validation
+            if s > e: s = e
             return s.toString("yyyy-MM-dd"), e.toString("yyyy-MM-dd")
             
         else:
-            # Specific Year
             try:
                 year = int(mode)
                 return f"{year}-01-01", f"{year}-12-31"
             except:
-                # Fallback
                 return today.addMonths(-12).toString("yyyy-MM-dd"), today.toString("yyyy-MM-dd")
 
     def refresh_data(self):
@@ -155,7 +150,6 @@ class ReportTab(QWidget):
         self.message_label.hide()
 
         try:
-            # Fetch continuous history
             data = self.budget_app.get_net_worth_history(start_date, end_date)
             self.plot_graph(data, start_date, end_date)
         except Exception as e:
@@ -171,8 +165,6 @@ class ReportTab(QWidget):
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
-        # data is {YYYY-MM: val}
-        # Sort keys
         sorted_keys = sorted(data.keys())
         if not sorted_keys:
             self.message_label.setText("No data for selected range")
@@ -183,13 +175,10 @@ class ReportTab(QWidget):
         x_vals = range(len(sorted_keys))
         y_vals = [data[k] for k in sorted_keys]
         
-        # Plot Line
         line = ax.plot(x_vals, y_vals, marker='o', linewidth=2, color='#2196F3', label='Net Worth')
         
-        # Fill area under line
         ax.fill_between(x_vals, y_vals, color='#2196F3', alpha=0.1)
 
-        # Annotate last value
         if y_vals:
             last_val = y_vals[-1]
             last_x = x_vals[-1]
@@ -200,10 +189,8 @@ class ReportTab(QWidget):
         ax.set_title(f'Balance Evolution ({start_date} to {end_date})')
         ax.set_ylabel('Net Worth (CHF)')
         
-        # X-Axis Labels
         labels = []
         for k in sorted_keys:
-            # k is YYYY-MM. Convert to nicer format e.g. "Jan '24"
             parts = k.split('-')
             year_short = parts[0][2:]
             month_idx = int(parts[1]) - 1
@@ -215,9 +202,8 @@ class ReportTab(QWidget):
         
         ax.grid(True, linestyle=':', alpha=0.6)
         
-        # Y-Axis formatting
         ax.get_yaxis().set_major_formatter(
-            plt.FuncFormatter(lambda x, p: format(int(x), ",").replace(",", "'"))) # Simple Swiss format for axis
+            plt.FuncFormatter(lambda x, p: format(int(x), ",").replace(",", "'"))) 
 
         self.figure.tight_layout()
         self.canvas.draw()

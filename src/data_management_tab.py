@@ -185,7 +185,6 @@ class DataManagementTab(QWidget):
         import_group.setLayout(import_layout)
         layout.addWidget(import_group)
 
-        # --- Access / Power BI Export ---
         access_group = QGroupBox("Power BI / Access Export")
         access_group.setStyleSheet("""
             QGroupBox {
@@ -387,19 +386,15 @@ class DataManagementTab(QWidget):
         if not file_path.lower().endswith('.accdb'):
             file_path += '.accdb'
             
-        # Save directory for next time
         settings.setValue("last_access_export_dir", os.path.dirname(file_path))
 
-        # Determine SQL folder path
         if getattr(sys, 'frozen', False):
             base_path = os.path.dirname(sys.executable)
         else:
-            # src/../sql -> resolve absolute
             base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         
         sql_path = os.path.join(base_path, 'sql')
         
-        # Verify SQL folder exists
         if not os.path.exists(sql_path):
             QMessageBox.critical(self, "Error", f"SQL folder not found at:\n{sql_path}")
             return
@@ -410,11 +405,9 @@ class DataManagementTab(QWidget):
         QApplication.processEvents()
         
         try:
-            # Define callback for UI updates
             def update_status(msg):
                 print(f"Status: {msg}") 
                 self.progress_bar.setFormat(f"{msg}")
-                # Simple pulsing
                 val = self.progress_bar.value()
                 if val < 90:
                     self.progress_bar.setValue(val + 5)

@@ -33,11 +33,9 @@ class AccountPerspectiveDialog(QDialog):
 
         layout = QVBoxLayout()
 
-        # --- Top Section: Account Selection & Balance ---
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(0, 0, 0, 10)
 
-        # Account Selection Area
         acc_widget = QWidget()
         acc_widget.setStyleSheet(".QWidget { background-color: #f5f5f5; border-radius: 6px; border: 1px solid #e0e0e0; }")
         acc_layout = QHBoxLayout(acc_widget)
@@ -56,7 +54,6 @@ class AccountPerspectiveDialog(QDialog):
         top_bar.addWidget(acc_widget)
         top_bar.addStretch()
 
-        # Balance Area
         balance_widget = QWidget()
         balance_widget.setStyleSheet("""
             .QWidget {
@@ -114,11 +111,9 @@ class AccountPerspectiveDialog(QDialog):
         top_bar.addWidget(balance_widget)
         layout.addLayout(top_bar)
 
-        # --- Second Section: Filters & Actions ---
         action_bar = QHBoxLayout()
         action_bar.setContentsMargins(0, 0, 0, 10)
 
-        # Filters
         filter_widget = QWidget()
         filter_layout = QHBoxLayout(filter_widget)
         filter_layout.setContentsMargins(0, 0, 0, 0)
@@ -136,16 +131,6 @@ class AccountPerspectiveDialog(QDialog):
         self.month_combo = CheckableComboBox()
         self.month_combo.setMinimumWidth(120)
         self.populate_months()
-        # Connect to model dataChanged or similar if possible, or just use a custom signal if we added one.
-        # But for now, we can rely on manual "confirm" or maybe hook into internal model changes?
-        # Simpler: Connect a signal that fires when checked state changes.
-        # Our CheckableComboBox implementation toggles state in handle_item_pressed.
-        # We should emit a signal there or just connect to pressed/activated?
-        # Let's add a "Apply Filter" button or update dynamically?
-        # Dynamic is better. We can connect to view().clicked / pressed?
-        # self.month_combo.view().pressed.connect(lambda: QTimer.singleShot(100, self.apply_filters))
-        # Better: CheckableComboBox should signal.
-        # Let's use `model().dataChanged`?
         self.month_combo.model().dataChanged.connect(self.apply_filters)
         filter_layout.addWidget(self.month_combo)
 
@@ -159,7 +144,6 @@ class AccountPerspectiveDialog(QDialog):
         action_bar.addWidget(filter_widget)
         action_bar.addStretch()
 
-        # Action Buttons
         self.confirm_all_button = QPushButton('Confirm All Visible Transactions')
         self.confirm_all_button.setStyleSheet('''
             QPushButton {
@@ -197,11 +181,6 @@ class AccountPerspectiveDialog(QDialog):
         action_bar.addWidget(self.all_confirmed_label)
 
         action_bar.addSpacing(10)
-
-        # self.reset_filters_btn = QPushButton("Reset Filters")
-        # self.reset_filters_btn.clicked.connect(self.reset_filters)
-        # self.reset_filters_btn.setStyleSheet("padding: 8px 16px;")
-        # action_bar.addWidget(self.reset_filters_btn)
 
         layout.addLayout(action_bar)
 
@@ -373,14 +352,13 @@ class AccountPerspectiveDialog(QDialog):
         self.year_combo.addItems([str(year) for year in years])
 
     def populate_months(self):
-        self.month_combo.addItem('All') # Index 0
+        self.month_combo.addItem('All')
         months = [
             'January', 'February', 'March', 'April', 'May', 'June',
             'July', 'August', 'September', 'October', 'November', 'December'
         ]
         self.month_combo.addItems(months)
         
-        # Default: Unchecked (will be set by set_current_month_year)
         self.month_combo.update_display_text()
 
     def set_current_month_year(self):
@@ -391,22 +369,18 @@ class AccountPerspectiveDialog(QDialog):
         if index >= 0:
             self.year_combo.setCurrentIndex(index)
 
-        # Set current month checked, others unchecked
-        current_month = now.month # 1-12
+        current_month = now.month
         model = self.month_combo.model()
         model.blockSignals(True)
-        # Uncheck all first
         for i in range(model.rowCount()):
              model.item(i).setCheckState(Qt.CheckState.Unchecked)
         
-        # Check current month (Index 1 is Jan, so index matches month number)
         if 1 <= current_month < model.rowCount():
              model.item(current_month).setCheckState(Qt.CheckState.Checked)
              
         model.blockSignals(False)
         self.month_combo.update_display_text()
 
-    # Removed format_swiss_number, using utils.format_currency instead
 
     def get_account_name_by_id(self, account_id):
         if account_id is None:
@@ -444,7 +418,6 @@ class AccountPerspectiveDialog(QDialog):
         try:
             account_id = self.selected_account_id
             
-            # Optimized fetch with SQL window functions
             self.all_transactions_for_account, self.running_balance_history = \
                 self.budget_app.get_account_transactions_with_balance(account_id)
 
@@ -465,10 +438,7 @@ class AccountPerspectiveDialog(QDialog):
         if self._updating_month_selection:
             return
             
-        # Check if CheckStateRole changed
         if roles and Qt.ItemDataRole.CheckStateRole not in roles:
-            # For StandardItemModel, roles might be empty on some changes?
-            # Safe to proceed.
             pass
 
         model = self.month_combo.model()
@@ -477,12 +447,11 @@ class AccountPerspectiveDialog(QDialog):
         
         self._updating_month_selection = True
         try:
-            if row == 0: # "All" item changed
+            if row == 0:
                 new_state = item.checkState()
                 for i in range(1, model.rowCount()):
                     model.item(i).setCheckState(new_state)
-            else: # A month changed
-                # Update "All" based on others
+            else:
                 all_checked = True
                 for i in range(1, model.rowCount()):
                     if model.item(i).checkState() != Qt.CheckState.Checked:
@@ -501,16 +470,12 @@ class AccountPerspectiveDialog(QDialog):
 
         show_all_dates = self.show_all_dates_checkbox.isChecked()
         selected_year = int(self.year_combo.currentText())
-        # selected_month_text = self.month_combo.currentText() # Not really needed now
 
         transactions_to_display = []
 
         checked_indices = self.month_combo.get_checked_indices() 
-        # Index 0 is "All", 1-12 are Jan-Dec.
         
-        # Filter indices to just months (subtract 1 to get 1-12 based or 0-11 based)
-        # We need actual month numbers 1-12 for filtering.
-        selected_months_0based = [] # 0 (Jan) to 11 (Dec)
+        selected_months_0based = [] 
         
         for idx in checked_indices:
             if idx == 0: continue
@@ -524,7 +489,7 @@ class AccountPerspectiveDialog(QDialog):
                     transactions_to_display.append(trans)
             filter_info = "All Dates"
 
-        elif len(selected_months_0based) == 12 or not selected_months_0based: # All months selected
+        elif len(selected_months_0based) == 12 or not selected_months_0based:
             for trans in self.all_transactions_for_account:
                 try:
                     if hasattr(trans, 'date') and trans.date:
@@ -539,7 +504,6 @@ class AccountPerspectiveDialog(QDialog):
                     continue
             filter_info = f"All months {selected_year}"
         else:
-            # Filter by selected months
             selected_month_names = []
             for idx in selected_months_0based:
                  target_month = idx + 1
@@ -556,7 +520,6 @@ class AccountPerspectiveDialog(QDialog):
                                 trans_date, '%Y-%m-%d').date()
 
                         if trans_date.year == selected_year:
-                             # Check if month is in selected_months (which are 0-based indices)
                              if (trans_date.month - 1) in selected_months_0based:
                                  transactions_to_display.append(trans)
                 except (ValueError, AttributeError):
@@ -618,19 +581,16 @@ class AccountPerspectiveDialog(QDialog):
             last_transaction_id = list(self.running_balance_history.keys())[0]
             total_balance = self.running_balance_history[last_transaction_id]
 
-        # Start Period Calculation (Always calculate)
         period_start_date = None
         if not show_all_dates:
-             if len(selected_months_0based) == 12 or not selected_months_0based: # All months
+             if len(selected_months_0based) == 12 or not selected_months_0based:
                  period_start_date = datetime.date(selected_year, 1, 1)
              elif selected_months_0based:
-                 # Earliest selected month
-                 min_idx = min(selected_months_0based) # 0-based
+                 min_idx = min(selected_months_0based)
                  period_start_date = datetime.date(selected_year, min_idx + 1, 1)
         
         period_start_balance = 0.0
         if period_start_date:
-            # Find latest transaction BEFORE period_start_date
             candidates_start = []
             for t in self.all_transactions_for_account:
                  if not (t.date and t.type and t.amount is not None): continue
@@ -650,11 +610,9 @@ class AccountPerspectiveDialog(QDialog):
         if transaction_history:
             period_end_balance = transaction_history[0]['running_balance']
         else:
-            # End Period Calculation (Only needed if no visible transactions)
-            if len(selected_months_0based) == 12 or not selected_months_0based: # All
+            if len(selected_months_0based) == 12 or not selected_months_0based:
                 period_end_date = datetime.date(selected_year, 12, 31)
             elif selected_months_0based:
-                # Latest selected month end
                 max_idx = max(selected_months_0based)
                 next_month = datetime.date(selected_year + 1, 1, 1) if max_idx == 11 else datetime.date(selected_year, max_idx + 2, 1)
                 period_end_date = next_month - datetime.timedelta(days=1)
@@ -686,7 +644,7 @@ class AccountPerspectiveDialog(QDialog):
 
         total_color = '#4CAF50' if total_balance >= 0 else '#f44336'
         period_color = '#2e7d32' if period_end_balance >= 0 else '#c62828'
-        start_color = '#333333' # Neutral or same logic? Let's use neutral or dark green/red. 333 is fine or logic.
+        start_color = '#333333'
         start_color = '#2e7d32' if period_start_balance >= 0 else '#c62828'
 
         if currency:
@@ -725,56 +683,26 @@ class AccountPerspectiveDialog(QDialog):
             if not item:
                 return
 
-            # Ignore updates to the Confirmed column (triggered by ON/OFF toggle)
             if column == 8:
                 return
 
-            # Sorting-safe: get ID from column 0 user data
             trans_id_item = self.table.item(row, 0)
             if not trans_id_item: return
             
-            # Use data role for safe ID access, fallback to text if needed but data is safer if we set it
-            # In populate_table below, I will ensure column 0 has `Qt.UserRole` with the ID or object.
-            # But wait, looking at populate_table, column 0 is date. I can attach ID there.
-            # OR I can check `self.transaction_history_map[row]` IF I disable sorting while editing?
-            # No, user might sort then edit.
-            # Safest is to attach `trans_id` to every editable item or at least col 0.
-            
-            # Let's rely on `trans_id` property from checkboxes/buttons for specific actions,
-            # but for cell edits we need to know WHICH transaction.
-            # Using `transaction_history_map` is inherently unsafe if rows move.
-            # Better approach: Map row -> trans_id is unsafe after sort.
-            # Better: `self.table.item(row, 0).data(Qt.UserRole)` should hold the `trans_id`.
-            
-            # Let's grab trans_id from the hidden data I will add to Col 0
             trans_id = trans_id_item.data(Qt.ItemDataRole.UserRole)
             
-            # If we haven't updated populate yet, this might be None.
-            # I will update populate_table to set this.
             if trans_id is None:
-                 # Fallback to map if not set (legacy or before refresh)
-                 # This is risky but better than crash.
                  if row in self.transaction_history_map:
                     trans_id = self.transaction_history_map[row].id
             
             if trans_id is None: return
-
-            # Find transaction object (need a map for this too or search)
-            # self.transaction_history_map is row-based. 
-            # I need an ID-based map for `account_perspective` too.
-            # Let's build it on the fly or maintain it.
-            # Actually `self.all_transactions_for_account` + `running_balance_history` is available.
-            # Let's search `self.all_transactions_for_account` or better, build a dict.
-            # Efficient: `self.trans_id_map` built in `populate_table`.
             
             trans = getattr(self, 'trans_id_map', {}).get(trans_id)
             if not trans:
-                # Fallback search
                 trans = next((t for t in self.all_transactions_for_account if t.id == trans_id), None)
             
             if not trans: return
 
-            # Prevent modification of confirmed transactions (except confirmation checkbox)
             if hasattr(trans, 'confirmed') and trans.confirmed:
                 self.show_status("Cannot edit confirmed transaction", error=True)
                 QMessageBox.warning(self, "Transaction Confirmed",
@@ -799,7 +727,6 @@ class AccountPerspectiveDialog(QDialog):
                     return
 
             elif column == 2:
-                # Resolve sub_category name to category_id
                 categories = self.budget_app.get_all_categories()
                 category_match = next((c for c in categories if c.sub_category == new_value), None)
                 
@@ -858,7 +785,7 @@ class AccountPerspectiveDialog(QDialog):
 
     def populate_table(self, transaction_history):
         self.transaction_history_map = {}
-        self.trans_id_map = {} # New ID-based map
+        self.trans_id_map = {}
         self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
         self.table.setSortingEnabled(False)
@@ -869,62 +796,52 @@ class AccountPerspectiveDialog(QDialog):
             for row, data in enumerate(transaction_history):
                 trans = data['transaction']
                 self.transaction_history_map[row] = trans
-                self.trans_id_map[trans.id] = trans # Populate ID map
+                self.trans_id_map[trans.id] = trans
                 
                 transaction_amount = data['transaction_amount']
                 effect = data['effect']
                 running_balance = data['running_balance']
                 other_account = data['other_account']
 
-                # 0: Date - Store ID here for retrieval
                 date_item = QTableWidgetItem(str(trans.date))
                 date_item.setData(Qt.ItemDataRole.UserRole, trans.id)
                 date_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 0, date_item)
 
-                # 1: Type
                 type_item = QTableWidgetItem(str(trans.type).capitalize())
                 type_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
                 self.table.setItem(row, 1, type_item)
 
-                # 2: Category
                 cat_item = QTableWidgetItem(trans.sub_category or "")
-                # Category typically editable
                 cat_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 2, cat_item)
 
-                # 3: Payee
                 payee_item = QTableWidgetItem(trans.payee or "")
                 payee_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 3, payee_item)
 
-                # 4: Other Account
                 other_item = QTableWidgetItem(other_account)
                 other_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
                 self.table.setItem(row, 4, other_item)
 
-                # 5: Notes
                 note_item = QTableWidgetItem(trans.notes or "")
                 note_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 5, note_item)
 
-                # 6: Transaction Amount
                 amount_str = f"{effect}{format_currency(abs(transaction_amount))}"
                 amt_item = NumericTableWidgetItem(amount_str)
                 amt_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 if effect == '+':
-                    amt_item.setForeground(QColor("#2e7d32")) # Green
+                    amt_item.setForeground(QColor("#2e7d32"))
                 else:
-                    amt_item.setForeground(QColor("#c62828")) # Red
+                    amt_item.setForeground(QColor("#c62828"))
                 self.table.setItem(row, 6, amt_item)
 
-                # 7: Running Balance
                 bal_item = NumericTableWidgetItem(format_currency(running_balance))
                 bal_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 bal_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
                 self.table.setItem(row, 7, bal_item)
 
-                # 8: Confirmed
                 chk_widget = QWidget()
                 chk_layout = QHBoxLayout()
                 chk_layout.setContentsMargins(0, 0, 0, 0)
@@ -932,13 +849,11 @@ class AccountPerspectiveDialog(QDialog):
                 chk = QCheckBox()
                 chk.setChecked(trans.confirmed)
                 chk.setProperty('trans_id', trans.id)
-                # Note: on_checkbox_changed expects sender() to be the checkbox
                 chk.clicked.connect(self.on_checkbox_changed) 
                 chk_layout.addWidget(chk)
                 chk_widget.setLayout(chk_layout)
                 self.table.setCellWidget(row, 8, chk_widget)
 
-                # 9: Delete
                 del_widget = QWidget()
                 del_layout = QHBoxLayout()
                 del_layout.setContentsMargins(0, 0, 0, 0)
@@ -1037,7 +952,6 @@ class AccountPerspectiveDialog(QDialog):
             self.budget_app.toggle_confirmation(trans_id)
             self.show_status(f'Transaction #{trans_id} confirmation toggled!')
             
-            # Sync local model via ID lookup (sorting safe)
             if hasattr(self, 'trans_id_map') and trans_id in self.trans_id_map:
                  self.trans_id_map[trans_id].confirmed = checkbox.isChecked()
 
@@ -1079,10 +993,8 @@ class AccountPerspectiveDialog(QDialog):
             button = self.sender()
             trans_id = button.property('trans_id')
 
-            # Look up by ID directly (safe)
             trans = getattr(self, 'trans_id_map', {}).get(trans_id)
             if not trans:
-                # Fallback
                  trans = next((t for t in self.all_transactions_for_account if t.id == trans_id), None)
             
             if trans and hasattr(trans, 'confirmed') and trans.confirmed:

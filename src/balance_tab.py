@@ -44,19 +44,16 @@ class BalanceTab(QWidget):
         header_layout.addWidget(QLabel("Range:"))
         self.range_combo = NoScrollComboBox()
         self.range_combo.setMinimumWidth(150)
-        self.range_combo.addItem("Current (All Time)", "last_12") # Reusing 'last_12' as 'Current' logic (Today)
+        self.range_combo.addItem("Current (All Time)", "last_12")
         self.range_combo.currentIndexChanged.connect(self.on_range_changed)
         header_layout.addWidget(self.range_combo)
 
-        # Custom Date Range Inputs (Hidden by default, used for 'Custom' or specific year end)
         self.date_range_widget = QWidget()
         date_layout = QHBoxLayout(self.date_range_widget)
         date_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Balance only cares about "As Of", typically End Date.
-        # But for consistency with savings tab UI, we keep the widgets, but mainly use 'To' date.
         
-        date_layout.addWidget(QLabel("As Of:")) # Changed label to be clearer for Balance
+        date_layout.addWidget(QLabel("As Of:"))
         self.to_date = QDateEdit()
         self.to_date.setCalendarPopup(True)
         self.to_date.setDisplayFormat("yyyy-MM-dd")
@@ -160,7 +157,6 @@ class BalanceTab(QWidget):
             else:
                 for col in range(cols):
                     item = self.balance_table.item(row, col)
-                    # Skip widget checks if they complicate logic, just check text
                     if item and search_text in item.text().lower():
                         should_show = True
                         break
@@ -172,14 +168,12 @@ class BalanceTab(QWidget):
         today = QDate.currentDate()
         
         if mode == 'last_12':
-            # "Current" balance is effectively today (or all time)
-            return None # None means no filter (all time)
+            return None
             
         elif mode == 'custom':
             return self.to_date.date().toString("yyyy-MM-dd")
             
         else:
-            # Specific Year
             try:
                 year = int(mode)
                 return f"{year}-12-31"
@@ -338,9 +332,9 @@ class BalanceTab(QWidget):
 
                 for c, curr in enumerate(sorted_currencies):
                     val = data['currencies'].get(curr, 0.0)
-                    if abs(val) >= 0.001: # Changed 'balance' to 'val'
-                        formatted_balance = format_currency(val) # Changed 'balance' to 'val'
-                        item = NumericTableWidgetItem(f"{formatted_balance} {curr}") # Changed 'balance_item' to 'item' and added currency
+                    if abs(val) >= 0.001:
+                        formatted_balance = format_currency(val)
+                        item = NumericTableWidgetItem(f"{formatted_balance} {curr}")
                         item.setTextAlignment(
                             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                         if val < 0:
@@ -382,12 +376,11 @@ class BalanceTab(QWidget):
             l_item.setFont(bold_font)
             self.balance_table.setItem(0, 0, l_item)
 
-            # Re-calculating total_by_currency based on col_grand_totals
             total_by_currency = col_grand_totals
             
-            for c, curr in enumerate(sorted_currencies): # Iterating through sorted_currencies to match column order
+            for c, curr in enumerate(sorted_currencies): 
                 val = total_by_currency[curr]
-                item = NumericTableWidgetItem(f"{format_currency(val)} {curr}") # Corrected to use 'val' and 'curr'
+                item = NumericTableWidgetItem(f"{format_currency(val)} {curr}")
                 item.setData(TOTAL_ROW_ROLE, True)
                 item.setFont(bold_font)
                 item.setTextAlignment(

@@ -17,7 +17,6 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
         progress_callback (func): Optional callback for status updates (msg).
     """
     
-    # Lazy import pyodbc to avoid startup crash if not installed
     try:
         import pyodbc
     except ImportError:
@@ -29,7 +28,6 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
             progress_callback(msg)
 
     try:
-        # Normalize paths for Windows
         duckdb_path = os.path.abspath(duckdb_path)
         access_db_path = os.path.abspath(access_db_path)
         sql_folder_path = os.path.abspath(sql_folder_path)
@@ -38,19 +36,15 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
         log(f"Access DB path: {access_db_path}")
         log(f"SQL folder: {sql_folder_path}")
         
-        # Ensure target directory exists
         os.makedirs(os.path.dirname(access_db_path), exist_ok=True)
         
-        # Check if access database exists
         if not os.path.exists(access_db_path):
             log(f"Creating new Access database at: {access_db_path}")
             created = False
             
-            # Try ADOX via COM (standard on Windows with Office/Access Engine)
             try:
                 import win32com.client
                 catalog = win32com.client.Dispatch('ADOX.Catalog')
-                # Try creating compatible version (Access 2007+)
                 catalog.Create(f"Provider=Microsoft.ACE.OLEDB.12.0;Data Source={access_db_path};")
                 log("Created new Access database file using ADOX.")
                 created = True
@@ -73,16 +67,13 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
         else:
              log("Access database file already exists.")
         
-        # Connect to DuckDB
         log("\nConnecting to DuckDB...")
         with duckdb.connect(duckdb_path) as duck_conn:
             
-            # 1. Execute SQL Scripts
             log("Executing SQL scripts...")
             if os.path.exists(sql_folder_path):
                 sql_files = [f for f in os.listdir(sql_folder_path) if f.endswith('.sql')]
                 
-                # Retry mechanism for dependencies
                 pending_files = sql_files.copy()
                 max_retries = 3
                 
@@ -101,21 +92,16 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                             with open(file_path, 'r', encoding='utf-8') as f:
                                 sql_content = f.read()
                             
-                            # Handle 'budget.' schema prefix stripping
                             sql_content = re.sub(r'budget\.(\w+)', r'\1', sql_content)
                             
-                            # Create table/view
                             duck_conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS {sql_content}")
                             log(f"    - created {table_name}")
                             
                         except Exception as e:
-                            # If it's a dependency error, add to next pass
-                            # DuckDB error usually contains "Catalog Error" or "Table ... does not exist"
                             if "Catalog Error" in str(e) or "does not exist" in str(e):
                                 next_pending.append(sql_file)
                             else:
                                 log(f"    ERROR executing {sql_file}: {e}")
-                                # If it's a syntax error, don't retry, just fail this file
                     
                     if len(next_pending) == len(pending_files):
                          log("  WARNING: No progress made in this pass. Stopping execution loop.")
@@ -128,7 +114,6 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
             else:
                 log(f"WARNING: SQL folder not found at {sql_folder_path}")
 
-            # 2. Export to Access
             conn_str = (
                 r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
                 f"DBQ={access_db_path};"
@@ -136,12 +121,10 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
             
             try:
                 log("\nConnecting to Access database...")
-                # Connect with autocommit=False for transaction performance
                 access_conn = pyodbc.connect(conn_str, autocommit=False)
                 access_cursor = access_conn.cursor()
                 log("Connected.")
                 
-                # Get list of tables to export (api_*)
                 tables = duck_conn.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'api_%'"
                 ).fetchall()
@@ -153,11 +136,9 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                 
                 log(f"Found tables to export: {', '.join(table_names)}")
                 
-                # Prepare for Batch CSV Export & Import
                 csv_exports = []
                 
                 for table_name in table_names:
-                     # Check if table exists first to decide if we MUST drop it
                     table_exists = False
                     try:
                         access_cursor.execute(f"SELECT 1 FROM [{table_name}] WHERE 1=0")
@@ -174,28 +155,21 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                             log(f"ERROR: Could not drop table [{table_name}]. It might be open in another program (e.g. Power BI or Access). Error: {e}")
                             raise e 
                     
-                    # Fetch data and columns without pandas
-                    # fetchall returns list of tuples
                     rows = duck_conn.execute(f"SELECT * FROM {table_name}").fetchall()
                     
-                    # Get column info
-                    # PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
                     columns_info = duck_conn.execute(f"PRAGMA table_info({table_name})").fetchall()
                     
-                    if len(rows) >= 0: # Even if empty, create structure
+                    if len(rows) >= 0:
                         log(f"Exporting {table_name} ({len(rows)} rows)...")
                         
-                        # Build CREATE TABLE
                         create_cols = []
                         db_cols = []
                         
                         for col_info in columns_info:
-                            # col_info is tuple: (cid, name, type, ...)
                             col_name = col_info[1]
                             col_type = col_info[2].upper()
                             db_cols.append(col_name)
                             
-                            # Type mapping
                             if 'INT' in col_type:
                                 acc_type = "INTEGER"
                             elif 'FLOAT' in col_type or 'DOUBLE' in col_type or 'DECIMAL' in col_type:
@@ -215,8 +189,6 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                         access_cursor.execute(create_sql)
                         access_conn.commit()
                         
-                        # Data Transfer Strategy
-                        # We will try to queue up a CSV export for this table
                         try:
                             import tempfile
                             temp_dir = tempfile.gettempdir()
@@ -225,20 +197,17 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                             csv_path = os.path.normpath(csv_path)
                             csv_path_sql = csv_path.replace('\\', '/')
                             
-                            # DuckDB COPY
                             duck_conn.execute(f"COPY (SELECT * FROM {table_name}) TO '{csv_path_sql}' (FORMAT CSV, HEADER, DATEFORMAT '%Y-%m-%d', TIMESTAMPFORMAT '%Y-%m-%d %H:%M:%S')")
                             
                             csv_exports.append({
                                 'table': table_name,
                                 'csv': csv_path,
-                                'rows': rows, # Keep rows in memory just in case rollback is needed (memory heavy but safe)
+                                'rows': rows,
                                 'cols': db_cols
                             })
                             
                         except Exception as e:
                             log(f"  ERROR generating CSV for {table_name}: {e}")
-                            # If CSV fails, we can't do COM import. We might need immediate fallback?
-                            # For simplicity, let's just log it and rely on fallback loop later if 'csv' not in item?
                             csv_exports.append({
                                 'table': table_name,
                                 'rows': rows,
@@ -246,10 +215,8 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                                 'error': str(e)
                             })
 
-                # ODBC Work Done. 
-                # Now try Batch COM Import
                 access_cursor.close()
-                access_conn.close() # Close ODBC to free locks for Access App
+                access_conn.close()
 
                 log("\nStarting Batch Import into Access...")
                 
@@ -265,7 +232,6 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                             c_path = item['csv']
                             log(f"  - Importing {t_name} via Direct Access...")
                             acc_app.DoCmd.TransferText(0, "", t_name, c_path, True)
-                            # Cleanup CSV immediately
                             try:
                                 os.remove(c_path)
                             except:
@@ -282,10 +248,6 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                     log(f"Batch COM Import failed: {e}")
                     log("Switching to fallback method...")
 
-                # Fallback / Cleanup Loop
-                # If COM failed, or specific CSVs failed, we use ODBC row-by-row
-                
-                # Check if we need to reconnect
                 needs_fallback = any(not item.get('imported', False) for item in csv_exports)
                 
                 if needs_fallback:
@@ -312,7 +274,6 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                                 access_conn.commit()
                                 log(f"    - committed {t_name}")
                             
-                            # Cleanup CSV if it exists but wasn't imported
                             if 'csv' in item and os.path.exists(item['csv']):
                                 try:
                                     os.remove(item['csv'])
@@ -337,8 +298,6 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
         return False, str(e)
 
 if __name__ == "__main__":
-    # Test run
-    # Assuming config still exists or we manually set paths
     try:
         import config
         print("Running in test mode...")

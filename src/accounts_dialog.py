@@ -135,8 +135,6 @@ class AccountsDialog(QDialog):
         self.header_view.set_filters_enabled(False)
         self.table.setHorizontalHeader(self.header_view)
 
-        # self.header_view.set_filter_enabled(9, False) # No longer needed
-
         self.header_view.set_column_types({
             0: 'number'
         })
@@ -198,7 +196,6 @@ class AccountsDialog(QDialog):
                 try:
 
                     id_item = NumericTableWidgetItem(str(account.id))
-                    # Allow editing ID
                     id_item.setFlags(id_item.flags() | Qt.ItemFlag.ItemIsEditable)
                     id_item.setBackground(QColor(240, 240, 240))
                     id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -325,15 +322,7 @@ class AccountsDialog(QDialog):
             if not item:
                 return
 
-            # Special handling for ID change (Column 0)
             if column == 0:
-                # We need the OLD ID to perform the update.
-                # However, since the cell just changed, we can't easily get the old ID from the table directly
-                # unless we stored it. But we can infer it if we assume the user didn't change sorting/filtering
-                # concurrently.
-                # BETTER APPROACH: Use the 'account_id' property we stored on widgtes in this row?
-                # Actually, the buttons/checkboxes have the property.
-                # Let's try to get it from the checkbox in column 5.
                 checkbox_widget = self.table.cellWidget(row, 5)
                 if not checkbox_widget:
                     return
@@ -348,20 +337,19 @@ class AccountsDialog(QDialog):
                     self.show_status("Invalid ID format", error=True)
                 except ValueError:
                     self.show_status("Invalid ID format", error=True)
-                    QTimer.singleShot(0, self.load_accounts) # Revert
+                    QTimer.singleShot(0, self.load_accounts)
                     return
                 
                 if old_id == new_id:
                     return
 
-                # Pre-check if ID exists to avoid unnecessary confirmation dialog
                 existing_account = self.budget_app.get_account_by_id(new_id)
                 if existing_account:
                     self.show_status(f"Account ID {new_id} already exists", error=True)
                     QMessageBox.warning(self, "ID Exists", f"Account ID {new_id} already exists.\nPlease choose a unique ID.")
                     self.show_status(f"Account ID {new_id} already exists", error=True)
                     QMessageBox.warning(self, "ID Exists", f"Account ID {new_id} already exists.\nPlease choose a unique ID.")
-                    QTimer.singleShot(0, self.load_accounts) # Revert
+                    QTimer.singleShot(0, self.load_accounts)
                     return
 
                 reply = QMessageBox.question(
@@ -377,15 +365,14 @@ class AccountsDialog(QDialog):
                         self.show_status(f'ID updated from {old_id} to {new_id}')
                     if success:
                         self.show_status(f'ID updated from {old_id} to {new_id}')
-                        # Delay reload to avoid commitData warning since we are in the middle of editing
                         QTimer.singleShot(0, self.load_accounts) 
                         if hasattr(self.parent_window, 'refresh_global_state'):
                             self.parent_window.refresh_global_state()
                     else:
                         self.show_status(f'Error: {msg}', error=True)
-                        QTimer.singleShot(0, self.load_accounts) # Revert
+                        QTimer.singleShot(0, self.load_accounts)
                 else:
-                    QTimer.singleShot(0, self.load_accounts) # Revert
+                    QTimer.singleShot(0, self.load_accounts)
                 
                 return
 
@@ -611,11 +598,8 @@ class AccountsDialog(QDialog):
             else:
                 for col in range(cols):
                     item = self.table.item(row, col)
-                    # Check standard items
                     if item and search_text in item.text().lower():
                         should_show = True
                         break
                     
-                    # Check cell widgets (checkboxes, combos) if needed, or rely on underlying data
-                    # For simple search, text check is usually enough if data is in items
             self.table.setRowHidden(row, not should_show)

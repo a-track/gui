@@ -13,14 +13,12 @@ print(conn.execute("SELECT date FROM transactions LIMIT 5").fetchall())
 print("\n--- Sample Count by Type ---")
 print(conn.execute("SELECT type, COUNT(*) FROM transactions GROUP BY type").fetchall())
 
-# Test the params and query
 year = 2025
 year_start = f"{year}-01-01"
 year_end = f"{year}-12-31"
 
 print(f"\n--- Testing Opening Balance Query ({year_start}) ---")
 try:
-    # Simplified version of the query I wrote
     opening = conn.execute("""
         SELECT 
             account_id, 
@@ -39,7 +37,6 @@ except Exception as e:
 
 print(f"\n--- Testing Delta Query ({year_start} to {year_end}) ---")
 try:
-    # The one with CAST
     deltas = conn.execute("""
         SELECT 
             MONTH(CAST(date AS DATE)),

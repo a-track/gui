@@ -23,7 +23,6 @@ class BudgetDialog(QDialog):
 
         layout = QVBoxLayout()
 
-        # --- Top Controls (Fixed) ---
         period_layout = QHBoxLayout()
         period_layout.addWidget(QLabel('Year:'))
         self.year_combo = NoScrollComboBox()
@@ -49,20 +48,18 @@ class BudgetDialog(QDialog):
         period_layout.addStretch()
         layout.addLayout(period_layout)
 
-        # --- Scrollable Content Area ---
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
         
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(0, 0, 10, 0) # Right margin for scrollbar
+        self.content_layout.setContentsMargins(0, 0, 10, 0)
 
         self.summary_label = QLabel('')
         self.summary_label.setStyleSheet('color: #666; padding: 5px;')
         self.content_layout.addWidget(self.summary_label)
 
-        # --- EXPENSES SECTION ---
         lbl_expenses = QLabel("Expenses")
         lbl_expenses.setStyleSheet("font-size: 14px; font-weight: bold; color: #333; margin-top: 10px;")
         self.content_layout.addWidget(lbl_expenses)
@@ -71,7 +68,6 @@ class BudgetDialog(QDialog):
         self.setup_table(self.table_expenses)
         self.content_layout.addWidget(self.table_expenses)
 
-        # --- INCOME SECTION ---
         lbl_income = QLabel("Income")
         lbl_income.setStyleSheet("font-size: 14px; font-weight: bold; color: #333; margin-top: 20px;")
         self.content_layout.addWidget(lbl_income)
@@ -80,12 +76,11 @@ class BudgetDialog(QDialog):
         self.setup_table(self.table_income)
         self.content_layout.addWidget(self.table_income)
         
-        self.content_layout.addStretch() # Push content to top if empty
+        self.content_layout.addStretch()
 
         self.scroll_area.setWidget(self.content_widget)
         layout.addWidget(self.scroll_area)
 
-        # --- Bottom Controls (Fixed) ---
         set_budgets_btn = QPushButton('Set Monthly Budgets')
         set_budgets_btn.clicked.connect(self.show_set_budgets_dialog)
         set_budgets_btn.setStyleSheet(
@@ -101,7 +96,6 @@ class BudgetDialog(QDialog):
         self.load_budget_data()
 
     def setup_table(self, table):
-        # Disable internal scrolling to allow the outer scroll area to handle it
         table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
@@ -158,7 +152,7 @@ class BudgetDialog(QDialog):
         header = table.horizontalHeader()
         for col in range(10):
             header.setSectionResizeMode(
-                col, QHeaderView.ResizeMode.Interactive) # Changed from ResizeToContents for performance
+                col, QHeaderView.ResizeMode.Interactive)
 
         table.verticalHeader().setDefaultSectionSize(35)
 
@@ -171,7 +165,6 @@ class BudgetDialog(QDialog):
         try:
             year, month = self.get_selected_period()
 
-            # --- EXPENSES DATA ---
             exp_budgets = self.budget_app.get_all_budgets('Expense')
             exp_actuals = self.budget_app.get_budget_vs_actual(year, month, 'Expense', 'expense')
             exp_l12m = self.budget_app.get_l12m_breakdown(year, month, 'Expense', 'expense')
@@ -179,7 +172,6 @@ class BudgetDialog(QDialog):
             exp_data, exp_totals, exp_grand = self.prepare_data(exp_budgets, exp_actuals, exp_l12m)
             self.populate_table(self.table_expenses, exp_data, exp_totals, exp_grand, is_income=False)
 
-            # --- INCOME DATA ---
             inc_budgets = self.budget_app.get_all_budgets('Income')
             inc_actuals = self.budget_app.get_budget_vs_actual(year, month, 'Income', 'income')
             inc_l12m = self.budget_app.get_l12m_breakdown(year, month, 'Income', 'income')
@@ -187,7 +179,6 @@ class BudgetDialog(QDialog):
             inc_data, inc_totals, inc_grand = self.prepare_data(inc_budgets, inc_actuals, inc_l12m)
             self.populate_table(self.table_income, inc_data, inc_totals, inc_grand, is_income=True)
             
-            # Summary (Net)
             total_inc_actual = inc_grand['actual']
             total_exp_actual = exp_grand['actual']
             net_saved = total_inc_actual - total_exp_actual
@@ -218,7 +209,6 @@ class BudgetDialog(QDialog):
             'l12m_budget': 0.0, 'l12m_actual': 0.0, 'l12m_remaining': 0.0
         }
 
-        # Union of all keys
         all_sub_categories = set(monthly_budgets.keys())
         all_sub_categories.update(current_actuals.keys())
         all_sub_categories.update(l12m_actuals.keys())
@@ -256,7 +246,6 @@ class BudgetDialog(QDialog):
                 'l12m_percentage': (l12m_actual / l12m_budget * 100) if l12m_budget > 0 else 0
             })
 
-            # Update Category Totals
             vals = {
                 'budget': budget_amount,
                 'actual': actual_amount,
@@ -272,7 +261,6 @@ class BudgetDialog(QDialog):
         return category_data, category_totals, grand_totals
 
     def get_income_by_category(self, year, month):
-        # Deprecated: Logic moved to generic loading
         return {}
 
     def populate_table(self, table, category_data, category_totals, grand_totals, is_income=False):
@@ -283,7 +271,6 @@ class BudgetDialog(QDialog):
             for category, items in category_data.items():
                 total_rows += 1 + len(items) + 1
             
-            # Add 1 row for Grand Total + 1 spacer row potentially
             total_rows += 2 
 
             table.setRowCount(total_rows)
@@ -295,13 +282,9 @@ class BudgetDialog(QDialog):
             for category in sorted_categories:
                 items = category_data[category]
                 
-                # Category Header
                 category_item = QTableWidgetItem(category)
                 category_item.setBackground(QColor(240, 240, 240))
                 font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-                # ... check if font needs to be created every time?
-                # Optimization: create strict fonts once outside loop? 
-                # Keeping it simple for now, object creation is fast in Python relative to Qt paint.
                 category_item.setFont(font)
                 table.setItem(current_row, 0, category_item)
                 table.setSpan(current_row, 0, 1, 10)
@@ -325,10 +308,8 @@ class BudgetDialog(QDialog):
 
                     current_row += 1
 
-                # Category Footer
                 totals = category_totals[category]
                 
-                # Recalculate percentages for totals
                 total_budget = totals['budget']
                 total_actual = totals['actual']
                 total_pct = (total_actual / total_budget * 100) if total_budget > 0 else 0
@@ -337,7 +318,6 @@ class BudgetDialog(QDialog):
                 total_l12m_actual = totals['l12m_actual']
                 total_l12m_pct = (total_l12m_actual / total_l12m_budget * 100) if total_l12m_budget > 0 else 0
                 
-                # Fill row
                 bg = QColor(220, 220, 220)
                 font_bold = QFont("Segoe UI", 10, QFont.Weight.Bold)
                 
@@ -352,11 +332,8 @@ class BudgetDialog(QDialog):
                 self.set_diff_item(table, current_row, 9, total_l12m_pct, is_income, True, bg, font_bold)
 
                 current_row += 1
-            
-            # Spacer Row
             current_row += 1
 
-            # Grand Total Row
             gt_item = QTableWidgetItem("TOTAL")
             bg_color = QColor(220, 220, 220) 
             gt_item.setBackground(bg_color)
@@ -385,17 +362,13 @@ class BudgetDialog(QDialog):
 
             table.resizeColumnsToContents()
             
-            # Disable internal scrollbars to ensure outer QScrollArea handles scrolling
             table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
-            # Calculate exact required height based on header and rows
-            # Use verticalHeader().length() for accurate pixel height of all rows
             header_height = table.horizontalHeader().height()
             rows_height = table.verticalHeader().length()
-            total_height = header_height + rows_height + 4 # Small buffer for borders
+            total_height = header_height + rows_height + 4
             
-            # Force height to match content
             table.setMinimumHeight(total_height)
             table.setMaximumHeight(total_height)
         finally:
@@ -420,51 +393,34 @@ class BudgetDialog(QDialog):
         if font:
             item.setFont(font)
             
-        # Color Logic
-        # Expense: Remaining < 0 is Bad (Red). Usage > 100 is Bad (Red).
-        # Income: Actual > Budget (Remaining < 0? No, Remaining = Budget - Actual. 
-        #   If Budget 100, Actual 120, Remaining = -20. This is Good!
-        #   If Budget 100, Actual 80, Remaining = 20. This is Bad/neutral.
-        
-        # So for Income: Remaining < 0 is Good (Green). Remaining >= 0 is Red/Warning?
-        # Let's say we want to meet income target. So Actual >= Budget is Green.
         
         color = None
         if is_pct:
-            # Usage %
-            # Expense: > 100 Red, 85-100 Orange, < 85 Green
-            # Income: > 100 Green (Exceeded target), 85-100 Orange, < 85 Red?
             
             if not is_income:
                 if val <= 85: color = QColor(0, 128, 0)
                 elif val <= 100: color = QColor(255, 165, 0)
                 else: color = QColor(255, 0, 0)
             else:
-                if val >= 100: color = QColor(0, 128, 0) # Met/Exceeded target
+                if val >= 100: color = QColor(0, 128, 0)
                 elif val >= 85: color = QColor(255, 165, 0)
-                else: color = QColor(255, 0, 0) # Missed target bad
+                else: color = QColor(255, 0, 0)
         else:
-            # Remaining Amount = Budget - Actual
             if not is_income:
-                # Expense: Remaining > 0 is Good (Green)
                 if val >= 0: color = QColor(0, 128, 0)
                 else: color = QColor(255, 0, 0)
             else:
-                # Income: Remaining < 0 implies Actual > Budget (Good)
-                # Remaining > 0 implies Actual < Budget (Missed target)
                 if val <= 0: color = QColor(0, 128, 0)
                 else: color = QColor(255, 0, 0)
         
         if color:
             item.setForeground(color)
         else:
-            # Fallback for neutral?
             pass
 
         table.setItem(row, col, item)
 
     def populate_table_grouped(self, category_data, category_totals, grand_totals):
-         # Shim for backward compatibility if I missed any calls, or redirect
          self.populate_table(self.table_expenses, category_data, category_totals, grand_totals, is_income=False)
 
     def show_set_budgets_dialog(self):
