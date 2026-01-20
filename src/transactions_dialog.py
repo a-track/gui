@@ -278,7 +278,9 @@ class TransactionsDialog(QDialog):
         self.table.setSortingEnabled(True)
 
         self.table.setEditTriggers(
-            QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.AnyKeyPressed)
+            QTableWidget.EditTrigger.DoubleClicked |
+            QTableWidget.EditTrigger.AnyKeyPressed |
+            QTableWidget.EditTrigger.SelectedClicked)
         self.table.cellChanged.connect(self.on_cell_changed)
 
         self.table.setAlternatingRowColors(True)
@@ -341,6 +343,14 @@ class TransactionsDialog(QDialog):
         self.category_delegate = ComboBoxDelegate(
             self.table, self.get_category_options)
         self.table.setItemDelegateForColumn(10, self.category_delegate)
+
+        self.table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(
+            QTableWidget.SelectionMode.ExtendedSelection)
+        self.table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.table.itemSelectionChanged.connect(
+            self.update_selection_totals)
 
         layout.addWidget(self.table)
 
@@ -450,6 +460,7 @@ class TransactionsDialog(QDialog):
         else:
             self.update_count_label()
 
+        self.update_selection_totals()
         self.update_confirm_all_button_state()
 
     def update_count_label(self):
@@ -478,6 +489,7 @@ class TransactionsDialog(QDialog):
 
         self.info_label.setText(text)
         self.update_confirm_all_button_state()
+        self.update_selection_totals()
 
     def apply_filters(self):
 
@@ -669,6 +681,7 @@ class TransactionsDialog(QDialog):
             self.table.blockSignals(False)
             self.table.setSortingEnabled(True)
             self.table.setUpdatesEnabled(True)
+            self.update_selection_totals()
 
     def on_cell_changed(self, row, column):
         try:
@@ -869,6 +882,137 @@ class TransactionsDialog(QDialog):
                 return f'{account.account} {account.currency}'
         return ""
 
+    def _build_account_currency_cache(self):
+        """Build or refresh a cache of account_id -> currency."""
+        try:
+            accounts = self.budget_app.get_all_accounts(show_inactive=True)
+            self._account_currency_cache = {
+                acc.id: (acc.currency or "") for acc in accounts
+            }
+        except Exception:
+            self._account_currency_cache = {}
+
+    def _get_account_currency(self, account_id):
+        """Return the currency code for a given account_id."""
+        if not hasattr(self, '_account_currency_cache'):
+            self._account_currency_cache = None
+
+        if self._account_currency_cache is None:
+            self._build_account_currency_cache()
+
+        if account_id is None:
+            return ""
+
+        return self._account_currency_cache.get(account_id, "")
+
+    def _restore_totals_text(self):
+        """Restore the last computed totals text after transient status messages."""
+        try:
+            text = getattr(self, '_last_totals_text', '')
+            self.status_label.setStyleSheet('color: #666; padding: 5px;')
+            self.status_label.setText(text)
+        except RuntimeError:
+            pass
+
+    def _compute_totals_for_rows(self, rows):
+        """Compute per-currency totals for the given table row indices."""
+        amount_totals = {}      # currency -> float
+        to_amount_totals = {}   # currency -> float
+
+        for row in rows:
+            id_item = self.table.item(row, 0)
+            if not id_item:
+                continue
+
+            try:
+                trans_id = int(id_item.text())
+            except (TypeError, ValueError):
+                continue
+
+            trans = self.get_transaction_by_id(trans_id)
+            if not trans:
+                continue
+
+            if getattr(trans, 'amount', None) is not None:
+                cur = self._get_account_currency(getattr(trans, 'account_id', None))
+                if cur:
+                    amount_totals[cur] = amount_totals.get(cur, 0.0) + float(trans.amount or 0.0)
+
+            if getattr(trans, 'to_amount', None) is not None:
+                cur_to = self._get_account_currency(getattr(trans, 'to_account_id', None))
+                if cur_to:
+                    to_amount_totals[cur_to] = to_amount_totals.get(cur_to, 0.0) + float(trans.to_amount or 0.0)
+
+        return amount_totals, to_amount_totals
+
+    def _visible_rows(self):
+        return [
+            row for row in range(self.table.rowCount())
+            if not self.table.isRowHidden(row)
+        ]
+
+    def update_selection_totals(self):
+        """
+        Calculate Excel-like sums for selected rows and show them in the status bar.
+
+        Sums are grouped per currency for both Amount and Amount To columns.
+        """
+        try:
+            visible_rows = self._visible_rows()
+            if not visible_rows:
+                self._last_totals_text = ''
+                self._restore_totals_text()
+                return
+
+            selected_ranges = self.table.selectedRanges()
+            selected_rows = set()
+            for r in selected_ranges:
+                for row in range(r.topRow(), r.bottomRow() + 1):
+                    if 0 <= row < self.table.rowCount() and not self.table.isRowHidden(row):
+                        selected_rows.add(row)
+
+            if len(selected_rows) == 1 and not getattr(self, '_suppress_single_row_deselect', False):
+                self._suppress_single_row_deselect = True
+                try:
+                    row = next(iter(selected_rows))
+                    cur_col = max(0, self.table.currentColumn())
+                    self.table.setCurrentCell(row, cur_col)
+                    self.table.clearSelection()
+                finally:
+                    self._suppress_single_row_deselect = False
+                selected_rows = set()
+
+            show_selected = len(selected_rows) >= 2
+            rows_to_sum = sorted(selected_rows) if show_selected else visible_rows
+
+            amount_totals, to_amount_totals = self._compute_totals_for_rows(rows_to_sum)
+
+            parts = []
+            if show_selected:
+                parts.append(f"Selected {len(selected_rows)} row(s)")
+            else:
+                parts.append(f"Visible {len(visible_rows)} row(s)")
+
+            if amount_totals:
+                amt_str = ", ".join(
+                    f"{cur} {format_currency(total)}"
+                    for cur, total in sorted(amount_totals.items())
+                )
+                parts.append(f"Amount: {amt_str}")
+
+            if to_amount_totals:
+                to_amt_str = ", ".join(
+                    f"{cur} {format_currency(total)}"
+                    for cur, total in sorted(to_amount_totals.items())
+                )
+                parts.append(f"Amount To: {to_amt_str}")
+
+            self._last_totals_text = " | ".join(parts)
+            self._restore_totals_text()
+
+        except Exception as e:
+            print(f"Error updating selection totals: {e}")
+
     def color_row_by_type(self, row, trans_type):
         color_map = {
             'income': QColor(230, 255, 230),
@@ -1021,6 +1165,7 @@ class TransactionsDialog(QDialog):
         self.show_status('Table refreshed!')
 
     def show_status(self, message, error=False):
+        self._last_totals_text = getattr(self, '_last_totals_text', '')
         self.status_label.setText(message)
         if error:
             self.status_label.setStyleSheet(
@@ -1028,7 +1173,7 @@ class TransactionsDialog(QDialog):
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
 
-        QTimer.singleShot(5000, lambda: self.status_label.setText(''))
+        QTimer.singleShot(5000, self._restore_totals_text)
 
     def get_account_options(self):
         accs = self.budget_app.get_all_accounts()
