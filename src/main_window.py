@@ -13,7 +13,6 @@ from budget_dialog import BudgetDialog
 from balance_dialog import BalanceDialog
 from utils import safe_eval_math
 
-
 class BudgetTrackerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -77,7 +76,7 @@ class BudgetTrackerWindow(QMainWindow):
 
         self.starting_balance_layout = QHBoxLayout()
         self.starting_balance_checkbox = QCheckBox(
-            'This is a starting balance transaction')
+            )
         self.starting_balance_checkbox.toggled.connect(self.update_ui_for_type)
         self.starting_balance_layout.addWidget(self.starting_balance_checkbox)
         self.starting_balance_layout.addStretch()
@@ -97,7 +96,7 @@ class BudgetTrackerWindow(QMainWindow):
 
         self.from_amount_currency_label = QLabel('CHF')
         self.from_amount_currency_label.setStyleSheet(
-            'font-weight: bold; color: #666; min-width: 40px;')
+            )
         amount_layout.addWidget(self.from_amount_currency_label)
 
         self.amount_input = QLineEdit()
@@ -148,18 +147,18 @@ class BudgetTrackerWindow(QMainWindow):
 
         self.to_amount_currency_label = QLabel('')
         self.to_amount_currency_label.setStyleSheet(
-            'font-weight: bold; color: #666; min-width: 40px;')
+            )
         self.to_amount_layout.addWidget(self.to_amount_currency_label)
 
         self.to_amount_input = QLineEdit()
         self.to_amount_input.setPlaceholderText(
-            'Receiving amount (for different currency)')
+            )
         self.to_amount_input.setMinimumWidth(150)
         self.to_amount_layout.addWidget(self.to_amount_input)
 
         self.exchange_rate_label = QLabel('Exchange Rate: 1.0000')
         self.exchange_rate_label.setStyleSheet(
-            'color: #666; font-style: italic; min-width: 150px;')
+            )
         self.exchange_rate_label.setMinimumWidth(150)
         self.to_amount_layout.addWidget(self.exchange_rate_label)
 
@@ -170,7 +169,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.qty_layout.addWidget(QLabel('Quantity:'))
         self.qty_input = QLineEdit()
         self.qty_input.setPlaceholderText(
-            'Optional - for investment transfers')
+            )
         self.qty_input.setMinimumWidth(150)
         self.qty_layout.addWidget(self.qty_input)
         self.qty_layout.addStretch()
@@ -215,7 +214,7 @@ class BudgetTrackerWindow(QMainWindow):
 
         self.status_label = QLabel('')
         self.status_label.setStyleSheet(
-            'color: #4CAF50; padding: 5px; font-weight: bold;')
+            )
         main_layout.addWidget(self.status_label)
 
         buttons_layout = QHBoxLayout()
@@ -400,7 +399,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.to_account_combo.adjustSize()
 
     def update_payee_combo(self):
-        """Update payee dropdown with most used payees first"""
+        
         payee_counts = self.transaction_counts['payees']
 
         sorted_payees = sorted(payee_counts.items(),
@@ -681,7 +680,7 @@ class BudgetTrackerWindow(QMainWindow):
                 return
         except ValueError:
             self.show_status(
-                'Please enter a valid number or expression', error=True)
+                , error=True)
             return
 
         date = self.date_input.date().toString("yyyy-MM-dd")
@@ -696,7 +695,7 @@ class BudgetTrackerWindow(QMainWindow):
                 qty = float(qty_text)
             except ValueError:
                 self.show_status(
-                    'Please enter a valid number for quantity', error=True)
+                    , error=True)
                 return
 
         is_starting_balance = self.starting_balance_checkbox.isChecked()
@@ -722,7 +721,7 @@ class BudgetTrackerWindow(QMainWindow):
 
             if account_id == to_account_id:
                 self.show_status(
-                    'Cannot transfer to the same account', error=True)
+                    , error=True)
                 return
 
             from_currency = self.get_currency_for_account(account_id)
@@ -737,7 +736,7 @@ class BudgetTrackerWindow(QMainWindow):
                         to_amount = float(to_amount_text)
                     except ValueError:
                         self.show_status(
-                            'Please enter a valid number for To Amount', error=True)
+                            , error=True)
                         return
                 else:
                     to_amount = amount
@@ -794,10 +793,10 @@ class BudgetTrackerWindow(QMainWindow):
         self.status_label.setText(message)
         if error:
             self.status_label.setStyleSheet(
-                'color: #f44336; padding: 5px; font-weight: bold;')
+                )
         else:
             self.status_label.setStyleSheet(
-                'color: #4CAF50; padding: 5px; font-weight: bold;')
+                )
 
         QTimer.singleShot(5000, lambda: self.status_label.setText(''))
 

@@ -11,7 +11,6 @@ from utils import format_currency
 
 from delegates import DateDelegate
 
-
 class RestrictedExcelHeaderView(ExcelHeaderView):
     def mouseReleaseEvent(self, event):
         logicalIndex = self.logicalIndexAt(event.pos())
@@ -23,7 +22,6 @@ class RestrictedExcelHeaderView(ExcelHeaderView):
     def paintSection(self, painter, rect, logicalIndex):
 
         QHeaderView.paintSection(self, painter, rect, logicalIndex)
-
 
 class InvestmentTab(QWidget):
     def __init__(self, budget_app, parent=None):
@@ -69,7 +67,7 @@ class InvestmentTab(QWidget):
             }
         """)
         self.save_btn.setToolTip(
-            "Commit all changes to the database. Unsaved changes will be lost on refresh.")
+            )
         self.save_btn.clicked.connect(self.save_changes)
         self.save_btn.setEnabled(False)
         btn_layout.addWidget(self.save_btn)
@@ -77,7 +75,7 @@ class InvestmentTab(QWidget):
         layout.addLayout(btn_layout)
 
         info_label = QLabel(
-            "Enter valuations based on the account's Valuation Method (Total Value or Price/Qty). Changes valid only after Save.")
+            )
         info_label.setStyleSheet("color: #666; font-style: italic;")
         layout.addWidget(info_label)
 
@@ -124,7 +122,7 @@ class InvestmentTab(QWidget):
         layout.addWidget(self.status_label)
 
     def get_tracked_accounts(self):
-        """Fetch investment accounts configured for tracking."""
+        
         all_accounts = self.budget_app.get_all_accounts()
 
         tracked = [
@@ -139,7 +137,6 @@ class InvestmentTab(QWidget):
         self.table.setUpdatesEnabled(False)
         self.table.blockSignals(True)
         
-
         self.save_btn.setEnabled(False)
         self.table.clear()
 
@@ -168,7 +165,7 @@ class InvestmentTab(QWidget):
             self.table.horizontalHeader().setVisible(True)
 
             self.table.horizontalHeader().setToolTip(
-                "Double-click cells to edit. Right-click rows to delete.")
+                )
             for i, acc in enumerate(self.tracked_accounts):
                 if acc.valuation_strategy == 'Price/Qty':
                     tip = f"Valuation Method: Price/Qty\nEnter the price per single share/unit.\nTotal Value will be calculated as Price * Quantity."
@@ -327,7 +324,7 @@ class InvestmentTab(QWidget):
             conn = self.budget_app._get_connection()
             try:
                 conn.execute(
-                    "DELETE FROM investment_valuations WHERE date = ?", (date_str,))
+                    , (date_str,))
                 conn.commit()
                 self.table.removeRow(row)
                 QMessageBox.information(self, "Deleted", "Entries deleted.")
@@ -396,7 +393,7 @@ class InvestmentTab(QWidget):
                 try:
                     for old_date in dates_to_delete:
                         conn.execute(
-                            "DELETE FROM investment_valuations WHERE date = ?", (old_date,))
+                            , (old_date,))
                     conn.commit()
                 finally:
                     conn.close()
@@ -431,7 +428,7 @@ class InvestmentTab(QWidget):
         return self.save_btn.isEnabled()
 
     def filter_content(self, text):
-        """Filter table rows based on text matching."""
+        
         search_text = text.lower()
         rows = self.table.rowCount()
         cols = self.table.columnCount()

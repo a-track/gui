@@ -4,8 +4,6 @@ import time
 import duckdb
 from datetime import datetime, date, timedelta
 
-
-
 class Transaction:
     def __init__(self, trans_id: int, date: str, type: str,
                  sub_category: str = None, amount: float = None,
@@ -27,7 +25,6 @@ class Transaction:
         self.to_amount = to_amount
         self.confirmed = confirmed
 
-
 class Account:
     def __init__(self, id, account, type, company, currency, show_in_balance=True, is_active=True, is_investment=False, valuation_strategy=None):
         self.id = id
@@ -40,14 +37,12 @@ class Account:
         self.is_investment = is_investment
         self.valuation_strategy = valuation_strategy
 
-
 class Category:
     def __init__(self, id: int, sub_category: str, category: str, category_type: str = "Expense"):
         self.id = id
         self.sub_category = sub_category
         self.category = category
         self.category_type = category_type
-
 
 class BudgetApp:
     def __init__(self, db_path=None):
@@ -80,7 +75,7 @@ class BudgetApp:
         self.get_or_create_starting_balance_account()
 
     def close(self):
-        """Explicitly close the anchor connection to release the file lock."""
+        
         try:
             if self._anchor_conn:
                 self._anchor_conn.close()
@@ -127,7 +122,7 @@ class BudgetApp:
                         id INTEGER PRIMARY KEY,
                         date DATE NOT NULL,
                         type VARCHAR NOT NULL,
-                        amount DECIMAL(10, 2),
+                        amount DECIMAL(18, 2),
                         account_id INTEGER,
                         category_id INTEGER,
                         payee VARCHAR,
@@ -135,7 +130,7 @@ class BudgetApp:
                         invest_account_id INTEGER,
                         qty DECIMAL(10, 4),
                         to_account_id INTEGER,
-                        to_amount DECIMAL(10, 2),
+                        to_amount DECIMAL(18, 2),
                         confirmed BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
@@ -153,7 +148,7 @@ class BudgetApp:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS budgets (
                         category_id INTEGER PRIMARY KEY,
-                        budget_amount DECIMAL(10, 2) NOT NULL,
+                        budget_amount DECIMAL(18, 2) NOT NULL,
                         FOREIGN KEY (category_id) REFERENCES categories(id)
                     )
                 """)
@@ -226,15 +221,12 @@ class BudgetApp:
             conn.close()
 
     def add_exchange_rates_bulk(self, rates_data: list):
-        """
-        Bulk add exchange rates efficiently.
-        rates_data: list of tuples (date, currency, rate)
-        """
+        
         conn = self._get_connection()
         try:
 
             new_id_res = conn.execute(
-                "SELECT COALESCE(MAX(id), 0) FROM exchange_rates").fetchone()
+                ).fetchone()
             current_max_id = new_id_res[0] if new_id_res else 0
 
             for i, (date, currency, rate) in enumerate(rates_data):
@@ -271,10 +263,7 @@ class BudgetApp:
             conn.close()
 
     def delete_exchange_rates_bulk(self, rates_data: list):
-        """
-        Bulk delete exchange rates.
-        rates_data: list of tuples (date, currency)
-        """
+        
         if not rates_data:
             return True
 
@@ -282,7 +271,7 @@ class BudgetApp:
         try:
             for date, currency in rates_data:
                 conn.execute(
-                    "DELETE FROM exchange_rates WHERE date = ? AND currency = ?", (date, currency))
+                    , (date, currency))
             conn.commit()
             return True
         except Exception as e:
@@ -292,10 +281,7 @@ class BudgetApp:
             conn.close()
 
     def get_exchange_rate_for_date(self, currency: str, target_date: str = None):
-        """
-        Get the effective exchange rate for a currency at a specific date.
-        SCD2 logic: valid from date until next record.
-        """
+        
         if currency == 'CHF':
             return 1.0
 
@@ -330,11 +316,7 @@ class BudgetApp:
             conn.close()
 
     def get_exchange_rates_map(self, target_date: str = None) -> dict:
-        """
-        Get a dictionary of {currency: rate} for all known currencies at a specific date.
-        Efficient bulk fetch to avoid multiple DB connections.
-        Ensures valid rates are taken up to the very end of the target_date (SCD2).
-        """
+        
         if target_date is None:
             today = datetime.now().date()
             target_date_str = today.strftime('%Y-%m-%d')
@@ -355,7 +337,7 @@ class BudgetApp:
         try:
 
             currencies = conn.execute(
-                "SELECT DISTINCT currency FROM exchange_rates").fetchall()
+                ).fetchall()
             currencies = [c[0] for c in currencies]
 
             rates_map = {'CHF': 1.0}
@@ -391,10 +373,7 @@ class BudgetApp:
             conn.close()
 
     def get_history_matrix_data(self):
-        """
-        Fetch all exchange rates raw data for Matrix UI construction.
-        Returns: list of (date_str, currency, rate) sorted by date DESC.
-        """
+        
         conn = self._get_connection()
         try:
             return conn.execute("""
@@ -414,23 +393,23 @@ class BudgetApp:
 
             try:
                 tables = conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+                    ).fetchall()
                 table_names = [t[0] for t in tables]
 
                 if 'categories' not in table_names and 'categories_new' in table_names:
                     print("Recovering categories table...")
                     conn.execute(
-                        "ALTER TABLE categories_new RENAME TO categories")
+                        )
 
                 if 'transactions' not in table_names and 'transactions_new' in table_names:
                     print("Recovering transactions table...")
                     conn.execute(
-                        "ALTER TABLE transactions_new RENAME TO transactions")
+                        )
 
                 if 'budgets' not in table_names and 'budgets_new_schema' in table_names:
                     print("Recovering budgets table...")
                     conn.execute(
-                        "ALTER TABLE budgets_new_schema RENAME TO budgets")
+                        )
 
                 if 'budgets' not in table_names and 'budgets_new' in table_names:
                     print("Recovering budgets table (from budgets_new)...")
@@ -444,16 +423,16 @@ class BudgetApp:
             conn.execute("DROP TABLE IF EXISTS categories_new")
 
             conn.execute(
-                "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS show_in_balance BOOLEAN DEFAULT TRUE")
+                )
             conn.execute(
-                "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
+                )
             conn.execute(
-                "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS valuation_strategy VARCHAR DEFAULT NULL")
+                )
             conn.execute(
-                "ALTER TABLE categories ADD COLUMN IF NOT EXISTS category_type VARCHAR DEFAULT 'Expense'")
+                )
 
             columns_result = conn.execute(
-                "PRAGMA table_info(categories)").fetchall()
+                ).fetchall()
             has_id = any(col[1] == 'id' for col in columns_result)
 
             if not has_id:
@@ -479,7 +458,7 @@ class BudgetApp:
                         id INTEGER PRIMARY KEY,
                         date DATE NOT NULL,
                         type VARCHAR NOT NULL,
-                        amount DECIMAL(10, 2),
+                        amount DECIMAL(18, 2),
                         account_id INTEGER,
                         category_id INTEGER,
                         payee VARCHAR,
@@ -487,7 +466,7 @@ class BudgetApp:
                         invest_account_id INTEGER,
                         qty DECIMAL(10, 4),
                         to_account_id INTEGER,
-                        to_amount DECIMAL(10, 2),
+                        to_amount DECIMAL(18, 2),
                         confirmed BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
@@ -513,7 +492,7 @@ class BudgetApp:
                 conn.execute("""
                     CREATE TABLE budgets_new_schema (
                         category_id INTEGER PRIMARY KEY,
-                        budget_amount DECIMAL(10, 2) NOT NULL,
+                        budget_amount DECIMAL(18, 2) NOT NULL,
                         FOREIGN KEY (category_id) REFERENCES categories_new(id)
                     )
                 """)
@@ -558,24 +537,24 @@ class BudgetApp:
                     )
                 """)
                 conn.execute(
-                    "INSERT INTO categories SELECT * FROM categories_new")
+                    )
 
                 conn.execute("""
                     CREATE TABLE budgets (
                         category_id INTEGER PRIMARY KEY,
-                        budget_amount DECIMAL(10, 2) NOT NULL,
+                        budget_amount DECIMAL(18, 2) NOT NULL,
                         FOREIGN KEY (category_id) REFERENCES categories(id)
                     )
                 """)
                 conn.execute(
-                    "INSERT INTO budgets SELECT * FROM budgets_new_schema")
+                    )
 
                 conn.execute("""
                     CREATE TABLE transactions (
                         id INTEGER PRIMARY KEY,
                         date DATE NOT NULL,
                         type VARCHAR NOT NULL,
-                        amount DECIMAL(10, 2),
+                        amount DECIMAL(18, 2),
                         account_id INTEGER,
                         category_id INTEGER,
                         payee VARCHAR,
@@ -583,7 +562,7 @@ class BudgetApp:
                         invest_account_id INTEGER,
                         qty DECIMAL(10, 4),
                         to_account_id INTEGER,
-                        to_amount DECIMAL(10, 2),
+                        to_amount DECIMAL(18, 2),
                         confirmed BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
@@ -594,7 +573,7 @@ class BudgetApp:
                     )
                 """)
                 conn.execute(
-                    "INSERT INTO transactions SELECT * FROM transactions_new")
+                    )
 
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS exchange_rates (
@@ -750,12 +729,12 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             exists = conn.execute(
-                "SELECT 1 FROM accounts WHERE id = ?", [new_id]).fetchone()
+                , [new_id]).fetchone()
             if exists:
                 return False, f"Account ID {new_id} already exists."
 
             old_account = conn.execute(
-                "SELECT account, type, company, currency, show_in_balance, is_active, is_investment, valuation_strategy FROM accounts WHERE id = ?",
+                ,
                 [old_id]
             ).fetchone()
 
@@ -768,11 +747,11 @@ class BudgetApp:
             """, [new_id, *old_account])
 
             conn.execute(
-                "UPDATE transactions SET account_id = ? WHERE account_id = ?", (new_id, old_id))
+                , (new_id, old_id))
             conn.execute(
-                "UPDATE transactions SET to_account_id = ? WHERE to_account_id = ?", (new_id, old_id))
+                , (new_id, old_id))
             conn.execute(
-                "UPDATE transactions SET invest_account_id = ? WHERE invest_account_id = ?", (new_id, old_id))
+                , (new_id, old_id))
 
             conn.execute("DELETE FROM accounts WHERE id = ?", [old_id])
 
@@ -890,16 +869,16 @@ class BudgetApp:
                          (next_id, final_sub, final_cat, final_type))
 
             conn.execute(
-                "UPDATE transactions SET category_id = ? WHERE category_id = ?", (next_id, cat_id))
+                , (next_id, cat_id))
 
             budget_row = conn.execute(
-                "SELECT budget_amount FROM budgets WHERE category_id = ?", [cat_id]).fetchone()
+                , [cat_id]).fetchone()
             if budget_row:
                 amt = budget_row[0]
                 conn.execute(
-                    "INSERT INTO budgets (category_id, budget_amount) VALUES (?, ?)", (next_id, amt))
+                    , (next_id, amt))
                 conn.execute(
-                    "DELETE FROM budgets WHERE category_id = ?", [cat_id])
+                    , [cat_id])
 
             conn.execute("DELETE FROM categories WHERE id = ?", [cat_id])
 
@@ -1101,11 +1080,11 @@ class BudgetApp:
 
             for account in accounts:
                 balances[account.id] = {
-                    'account_name': account.account,
-                    'balance': 0.0,
-                    'type': account.type,
-                    'count': 0,
-                    'is_investment': getattr(account, 'is_investment', False)
+                    : account.account,
+                    : 0.0,
+                    : account.type,
+                    : 0,
+                    : getattr(account, 'is_investment', False)
                 }
      
             date_filter = ""
@@ -1275,7 +1254,7 @@ class BudgetApp:
             conn.close()
 
     def get_account_id_from_name_currency(self, account_str):
-        """Helper to get account ID from 'Name Currency' string format"""
+        
         conn = self._get_connection()
         try:
 
@@ -1305,7 +1284,7 @@ class BudgetApp:
             conn.close()
 
     def get_transaction_counts(self):
-        """Get counts of transactions by account, category, and payee"""
+        
         conn = self._get_connection()
         try:
             account_counts = {}
@@ -1347,9 +1326,9 @@ class BudgetApp:
                 payee_counts[payee] = count
 
             return {
-                'accounts': account_counts,
-                'categories': category_counts,
-                'payees': payee_counts
+                : account_counts,
+                : category_counts,
+                : payee_counts
             }
         except Exception as e:
             print(f"Error getting transaction counts: {e}")
@@ -1358,10 +1337,7 @@ class BudgetApp:
             conn.close()
 
     def get_account_transactions_with_balance(self, account_id):
-        """
-        Fetch all transactions for an account with running balance calculated in SQL.
-        Returns: (list[Transaction], dict{trans_id: running_balance})
-        """
+        
         conn = self._get_connection()
         try:
             query = """
@@ -1436,10 +1412,10 @@ class BudgetApp:
                 print(f"Cleanup warning: {e}")
 
             trans_ids = [row[0] for row in conn.execute(
-                "SELECT id FROM transactions WHERE category_id = ?", [old_id]).fetchall()]
+                , [old_id]).fetchall()]
             
             budget_row = conn.execute(
-                "SELECT budget_amount FROM budgets WHERE category_id = ?", [old_id]).fetchone()
+                , [old_id]).fetchone()
 
             try:
                 conn.execute("BEGIN TRANSACTION")
@@ -1499,13 +1475,7 @@ class BudgetApp:
             conn.close()
 
     def get_account_cash_flows(self, account_id: int):
-        """
-        Get all external cash flows for an account for XIRR calculation.
-        Returns list of (date_obj, amount).
-        Perspective: EXTERNAL view.
-        - Money causing Account Value to rise (Deposit) = NEGATIVE flow (Investment).
-        - Money leaving Account (Withdrawal) = POSITIVE flow (Return).
-        """
+        
         conn = self._get_connection()
         try:
             flows = []
@@ -1537,11 +1507,7 @@ class BudgetApp:
         finally:
             conn.close()
     def get_investment_valuation_history(self, account_id: int):
-        """
-        Get all valuation history for an account.
-        Returns list of (date_obj, value).
-        Sorted by date ASC.
-        """
+        
         conn = self._get_connection()
         try:
             rows = conn.execute("""
@@ -1564,10 +1530,7 @@ class BudgetApp:
             conn.close()
 
     def get_qty_changes(self, account_id: int):
-        """
-        Get all quantity changes for an account to reconstruct history.
-        Returns list of (date_obj, qty_delta).
-        """
+        
         conn = self._get_connection()
         try:
             changes = []
@@ -1617,7 +1580,7 @@ class BudgetApp:
         conn = self._get_connection()
         try:
             row = conn.execute(
-                "SELECT id, sub_category, category, category_type FROM categories WHERE id = ?", [category_id]).fetchone()
+                , [category_id]).fetchone()
             if row:
                 return Category(*row)
             return None
@@ -1653,7 +1616,7 @@ class BudgetApp:
             """, [start_date, end_date]).fetchall()
 
             sub_breakdown = [{'sub': row[0], 'main': row[1],
-                              'amount': (row[2] or 0.0)} for row in result_sub]
+                              : (row[2] or 0.0)} for row in result_sub]
 
             return {'main': main_breakdown, 'sub': sub_breakdown}
         except Exception as e:
@@ -1663,10 +1626,7 @@ class BudgetApp:
             conn.close()
 
     def get_expenses_breakdown(self, year, month, category_ids=None):
-        """
-        Get hierarchical expenses breakdown for a specific month.
-        Returns: { 'Category Name': {'total': float, 'subs': {'Sub Name': float}} }
-        """
+        
         conn = self._get_connection()
         try:
             start_date, end_date = self._get_date_range(year, month)
@@ -1729,10 +1689,7 @@ class BudgetApp:
             conn.close()
 
     def get_monthly_expense_trend(self, end_year, end_month, category_ids=None):
-        """
-        Get monthly total expenses for the trailing 12 months ending at end_year-end_month.
-        Returns: [ {'month_str': 'Jan 2024', 'amount': 100.0, 'year': 2024, 'month': 1}, ... ]
-        """
+        
         conn = self._get_connection()
         try:
 
@@ -1789,16 +1746,16 @@ class BudgetApp:
 
             trend_data = []
             month_names = ["", "Jan", "Feb", "Mar", "Apr", "May",
-                           "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                           , "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
             for y, m in months_list:
                 amt = data_map.get((y, m), 0.0)
                 label = f"{month_names[m]} {y}"
                 trend_data.append({
-                    'month_str': label,
-                    'amount': amt,
-                    'year': y,
-                    'month': m
+                    : label,
+                    : amt,
+                    : y,
+                    : m
                 })
 
             return trend_data
@@ -1877,11 +1834,7 @@ class BudgetApp:
         return start_date, end_date
 
     def get_accumulated_dividends(self):
-        """
-        Calculate total dividends (income attributed to investment account) per investment account.
-        Returns: { invest_account_id: {'total': total_amount_in_chf, 'years': {...}} }
-        Uses Historical Exchange Rates to match Profit Chart logic.
-        """
+        
         conn = self._get_connection()
         try:
             result = conn.execute("""
@@ -1915,7 +1868,7 @@ class BudgetApp:
 
                     if year not in income_summary[invest_acc_id]['years']:
                         income_summary[invest_acc_id]['years'][year] = {
-                            'total': 0.0, 'breakdown': {}}
+                            : 0.0, 'breakdown': {}}
 
                     year_data = income_summary[invest_acc_id]['years'][year]
                     year_data['total'] += val_chf
@@ -1933,11 +1886,7 @@ class BudgetApp:
             conn.close()
 
     def get_accumulated_expenses(self):
-        """
-        Calculate total expenses (fees/taxes attributed to investment account) per investment account.
-        Returns: { invest_account_id: {'total': total_amount_in_chf, 'years': {...}} }
-        Uses Historical Exchange Rates to match Profit Chart logic.
-        """
+        
         conn = self._get_connection()
         try:
             result = conn.execute("""
@@ -1964,7 +1913,7 @@ class BudgetApp:
             for invest_acc_id, val_chf, category_name, year in result:
                 if invest_acc_id not in expense_summary:
                     expense_summary[invest_acc_id] = {
-                        'total': 0.0, 'years': {}}
+                        : 0.0, 'years': {}}
 
                 if val_chf:
                     val_chf = float(val_chf)
@@ -1972,7 +1921,7 @@ class BudgetApp:
 
                     if year not in expense_summary[invest_acc_id]['years']:
                         expense_summary[invest_acc_id]['years'][year] = {
-                            'total': 0.0, 'breakdown': {}}
+                            : 0.0, 'breakdown': {}}
 
                     year_data = expense_summary[invest_acc_id]['years'][year]
                     year_data['total'] += val_chf
@@ -1990,7 +1939,7 @@ class BudgetApp:
             conn.close()
 
     def add_or_update_budget(self, sub_category: str, budget_amount: float):
-        """Add or update a monthly budget for a subcategory"""
+        
         conn = self._get_connection()
         try:
 
@@ -2013,7 +1962,7 @@ class BudgetApp:
             conn.close()
 
     def get_all_budgets(self, category_type='Expense'):
-        """Get all monthly budgets for specified category type"""
+        
         conn = self._get_connection()
         try:
             result = conn.execute("""
@@ -2034,10 +1983,7 @@ class BudgetApp:
             conn.close()
 
     def get_l12m_breakdown(self, end_year: int, end_month: int, category_type='Expense', transaction_type='expense') -> dict:
-        """
-        Get total amounts per sub-category for the last 12 months using Python-based optimization.
-        Returns: {sub_category: total_amount}
-        """
+        
         conn = self._get_connection()
         try:
             if end_month == 12:
@@ -2111,7 +2057,7 @@ class BudgetApp:
         return self.get_l12m_breakdown(end_year, end_month, 'Expense', 'expense')
 
     def delete_budget(self, sub_category: str):
-        """Delete a budget"""
+        
         conn = self._get_connection()
         try:
 
@@ -2134,7 +2080,7 @@ class BudgetApp:
             conn.close()
 
     def get_budget_vs_actual(self, year: int, month: int, category_type='Expense', transaction_type='expense'):
-        """Get budget vs actual amounts for a given month using Python-based optimization"""
+        
         conn = self._get_connection()
         try:
             start_date_str = f"{year}-{month:02d}-01"
@@ -2218,11 +2164,11 @@ class BudgetApp:
             percentage = (actual_val / budget_val * 100) if budget_val > 0 else 0
             
             final_result[sub] = {
-                'category': cat_name,
-                'budget': budget_val,
-                'actual': actual_val,
-                'remaining': remaining,
-                'percentage': percentage
+                : cat_name,
+                : budget_val,
+                : actual_val,
+                : remaining,
+                : percentage
             }
             
         return final_result
@@ -2231,10 +2177,7 @@ class BudgetApp:
         return self.get_budget_vs_actual(year, month, 'Expense', 'expense')
 
     def get_investment_history_matrix_data(self):
-        """
-        Fetch all investment valuations raw data for Matrix UI construction.
-        Returns: list of (date_str, account_id, value) sorted by date DESC.
-        """
+        
         conn = self._get_connection()
         try:
             return conn.execute("""
@@ -2249,15 +2192,12 @@ class BudgetApp:
             conn.close()
 
     def add_investment_valuations_bulk(self, valuations_data: list):
-        """
-        Bulk add investment valuations.
-        valuations_data: list of tuples (date, account_id, value)
-        """
+        
         conn = self._get_connection()
         try:
 
             new_id_res = conn.execute(
-                "SELECT COALESCE(MAX(id), 0) FROM investment_valuations").fetchone()
+                ).fetchone()
             current_max_id = new_id_res[0] if new_id_res else 0
 
             for i, (date, account_id, value) in enumerate(valuations_data):
@@ -2277,10 +2217,7 @@ class BudgetApp:
             conn.close()
 
     def delete_investment_valuations_bulk(self, valuations_data: list):
-        """
-        Bulk delete investment valuations.
-        valuations_data: list of tuples (date, account_id)
-        """
+        
         if not valuations_data:
             return True
 
@@ -2288,7 +2225,7 @@ class BudgetApp:
         try:
             for date, account_id in valuations_data:
                 conn.execute(
-                    "DELETE FROM investment_valuations WHERE date = ? AND account_id = ?", (date, account_id))
+                    , (date, account_id))
             conn.commit()
             return True
         except Exception as e:
@@ -2298,11 +2235,7 @@ class BudgetApp:
             conn.close()
 
     def get_investment_valuation_for_date(self, account_id: int, target_date: str = None) -> float:
-        """
-        Get the effective valuation for an account at a specific date.
-        Uses SCD2-like logic: valid from date until next record.
-        Ensures strict End-Of-Day inclusion.
-        """
+        
         if target_date is None:
             today = datetime.now().date()
 
@@ -2343,7 +2276,7 @@ class BudgetApp:
             conn.close()
 
     def get_subcategories_by_category(self):
-        """Get all subcategories grouped by category"""
+        
         categories = self.get_all_categories()
         result = {}
         for category in categories:
@@ -2353,7 +2286,7 @@ class BudgetApp:
         return result
 
     def get_available_years(self):
-        """Get list of years that have transactions"""
+        
         conn = self._get_connection()
         try:
             result = conn.execute("""
@@ -2376,12 +2309,7 @@ class BudgetApp:
             conn.close()
 
     def get_monthly_balances(self, year: int) -> dict:
-        """
-        Calculate the total net worth (of show_in_balance accounts)
-        at the end of each month for the given year.
-        Optimized to use batched queries and in-memory aggregation.
-        Returns: {month_int: total_balance_float}
-        """
+        
         conn = self._get_connection()
         try:
             import bisect
@@ -2399,11 +2327,11 @@ class BudgetApp:
             acc_meta = {}
             for row in accounts:
                 acc_meta[row[0]] = {
-                    'curr': row[1], 
-                    'is_inv': bool(row[2]) if row[2] else False, 
-                    'strat': row[3], 
-                    'bal': 0.0, 
-                    'qty': 0.0
+                    : row[1], 
+                    : bool(row[2]) if row[2] else False, 
+                    : row[3], 
+                    : 0.0, 
+                    : 0.0
                 }
 
             year_start = date(year, 1, 1).strftime('%Y-%m-%d')
@@ -2552,10 +2480,7 @@ class BudgetApp:
             conn.close()
 
     def get_net_worth_history(self, start_date: str, end_date: str) -> dict:
-        """
-        Calculate the total net worth history for a given date range.
-        Returns: {'YYYY-MM': total_net_worth_float}
-        """
+        
         conn = self._get_connection()
         try:
             from datetime import datetime, timedelta
@@ -2573,11 +2498,11 @@ class BudgetApp:
             acc_meta = {}
             for row in accounts:
                 acc_meta[row[0]] = {
-                    'curr': row[1], 
-                    'is_inv': bool(row[2]) if row[2] else False, 
-                    'strat': row[3], 
-                    'bal': 0.0, 
-                    'qty': 0.0
+                    : row[1], 
+                    : bool(row[2]) if row[2] else False, 
+                    : row[3], 
+                    : 0.0, 
+                    : 0.0
                 }
 
             opening_rows = conn.execute("""
@@ -2734,11 +2659,7 @@ class BudgetApp:
             conn.close()
 
     def get_monthly_investment_gains(self, year: int, account_ids: list = None) -> dict:
-        """
-        Calculate monthly investment gains/losses for all investment accounts.
-        Returns: {month: {'total_gain': float, 'total_loss': float, 'net': float, 
-                          'details': {'gains': {acc: amt}, 'losses': {acc: amt}}}}
-        """
+        
         import calendar
         import bisect
         conn = self._get_connection()
@@ -2949,7 +2870,6 @@ class BudgetApp:
                         flows_chf[to_aid] += val_to_chf
                         deposits_chf[to_aid] += val_to_chf
 
-                        
                 curr_valuations = {aid: calculate_account_valuation_chf(aid, state[aid], month_end_str) for aid in inv_ids}
                 
                 income_named_details = {}
@@ -2965,20 +2885,20 @@ class BudgetApp:
                         expense_named_details[name] = val
 
                 month_res = {
-                    'total_gain': 0.0, 
-                    'total_loss': 0.0, 
-                    'net': 0.0, 
-                    'total_income': sum(income_chf.values()),
-                    'total_expense': sum(expense_chf.values()),
-                    'total_deposits': sum(deposits_chf.values()),
-                    'total_withdrawals': sum(withdrawals_chf.values()),
-                    'net_flow': sum(flows_chf.values()),
-                    'details': {
-                        'gains': {}, 
-                        'losses': {}, 
-                        'flows': {},
-                        'income': income_named_details,
-                        'expense': expense_named_details
+                    : 0.0, 
+                    : 0.0, 
+                    : 0.0, 
+                    : sum(income_chf.values()),
+                    : sum(expense_chf.values()),
+                    : sum(deposits_chf.values()),
+                    : sum(withdrawals_chf.values()),
+                    : sum(flows_chf.values()),
+                    : {
+                        : {}, 
+                        : {}, 
+                        : {},
+                        : income_named_details,
+                        : expense_named_details
                     }
                 }
                 
@@ -3009,10 +2929,7 @@ class BudgetApp:
             conn.close()
 
     def get_investment_gains_history(self, start_date: str, end_date: str, account_ids: list = None) -> dict:
-        """
-        Calculate total investment gains/losses history (realized + unrealized) for a date range.
-        Returns: { 'YYYY-MM': {'net': float, 'gain': float, 'loss': float} }
-        """
+        
         conn = self._get_connection()
         try:
             from datetime import datetime, timedelta
@@ -3176,9 +3093,9 @@ class BudgetApp:
                 gain = (end_val_chf - start_val_chf) - net_invested_chf
                 
                 history[ym] = {
-                    'net': gain,
-                    'gain': gain if gain > 0 else 0,
-                    'loss': abs(gain) if gain < 0 else 0
+                    : gain,
+                    : gain if gain > 0 else 0,
+                    : abs(gain) if gain < 0 else 0
                 }
                 
             return history
@@ -3186,11 +3103,7 @@ class BudgetApp:
             conn.close()
 
     def get_historical_cost_basis(self, account_id: int):
-        """
-        Calculate the Historical Cost Basis (Net Invested Capital) for an account.
-        Converting all inflows/outflows at their HISTORICAL exchange rates.
-        Returns: float (Amount in CHF)
-        """
+        
         conn = self._get_connection()
         try:
             d_val = conn.execute("""
@@ -3238,20 +3151,7 @@ class BudgetApp:
             conn.close()
 
     def get_cashflow_data(self, start_date: str, end_date: str) -> dict:
-        """
-        Calculate total monthly cashflow (Income vs Expenses) in CHF for a date range.
-        Returns {
-            'YYYY-MM': {
-                'income': float,
-                'expense': float,
-                'invested': float,
-                'details': {
-                    'income': {'Category': {'total': float, 'subs': {'Sub': float}}},
-                    'expense': ...
-                }
-            }
-        }
-        """
+        
         conn = self._get_connection()
         try:
             tx_query = """
@@ -3267,7 +3167,7 @@ class BudgetApp:
                 tx_query, [start_date, end_date]).fetchall()
 
             all_rates = conn.execute(
-                "SELECT date, currency, rate FROM exchange_rates ORDER BY date ASC").fetchall()
+                ).fetchall()
 
             rates_history = {}
             for r_date, r_curr, r_rate in all_rates:
@@ -3308,8 +3208,8 @@ class BudgetApp:
                 
                 if month_key not in monthly_data:
                     monthly_data[month_key] = {
-                        'income': 0.0, 'expense': 0.0, 'invested': 0.0, 
-                        'details': {'income': {}, 'expense': {}}
+                        : 0.0, 'expense': 0.0, 'invested': 0.0, 
+                        : {'income': {}, 'expense': {}}
                     }
 
                 rate = get_rate_at(t_date_str, currency)
@@ -3365,8 +3265,8 @@ class BudgetApp:
 
                 if month_key not in monthly_data:
                     monthly_data[month_key] = {
-                        'income': 0.0, 'expense': 0.0, 'invested': 0.0, 
-                        'details': {'income': {}, 'expense': {}}
+                        : 0.0, 'expense': 0.0, 'invested': 0.0, 
+                        : {'income': {}, 'expense': {}}
                     }
 
                 if not from_is_inv and to_is_inv:

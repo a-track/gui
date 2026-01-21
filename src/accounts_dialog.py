@@ -7,7 +7,6 @@ from excel_filter import ExcelHeaderView, BooleanTableWidgetItem
 from transactions_dialog import NumericTableWidgetItem
 from custom_widgets import NoScrollComboBox
 
-
 class AccountsDialog(QDialog):
     def __init__(self, budget_app, parent_window=None):
         super().__init__(parent_window)
@@ -68,7 +67,7 @@ class AccountsDialog(QDialog):
         add_btn = QPushButton('Add')
         add_btn.clicked.connect(self.add_account)
         add_btn.setStyleSheet(
-            'background-color: #4CAF50; color: white; padding: 5px 15px;')
+            )
         new_account_layout.addWidget(add_btn)
 
         layout.addLayout(new_account_layout)
@@ -76,21 +75,21 @@ class AccountsDialog(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels([
-            'ID', 'Account Name', 'Type', 'Company', 'Cur',
-            'Show', 'Active', 'Investment', 'Valuation Method', 'Delete'
+            , 'Account Name', 'Type', 'Company', 'Cur',
+            , 'Active', 'Investment', 'Valuation Method', 'Delete'
         ])
 
         header_tooltips = [
-            "System ID",
-            "Account Display Name",
-            "Bank, Cash, Investment, etc.",
-            "Institution Name",
-            "Account Currency",
-            "Show in Balance Tab?",
-            "If checked, account appears in selection lists when adding transactions.",
-            "Is Investment Account?",
-            "Method for calculating value (Total Value / Price per Qty)",
-            "Delete Account"
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            
         ]
         for col, tooltip in enumerate(header_tooltips):
             item = self.table.horizontalHeaderItem(col)
@@ -225,14 +224,14 @@ class AccountsDialog(QDialog):
                         return widget
 
                     self.table.setItem(row, 5, BooleanTableWidgetItem(
-                        "Yes" if getattr(account, 'show_in_balance', True) else "No"))
+                         if getattr(account, 'show_in_balance', True) else "No"))
                     self.table.setCellWidget(row, 5, create_checkbox_widget(
                         getattr(account, 'show_in_balance',
                                 True), 'toggle_show_in_balance', 'show_in_balance'
                     ))
 
                     self.table.setItem(row, 6, BooleanTableWidgetItem(
-                        "Yes" if getattr(account, 'is_active', True) else "No"))
+                         if getattr(account, 'is_active', True) else "No"))
                     self.table.setCellWidget(row, 6, create_checkbox_widget(
                         getattr(account, 'is_active',
                                 True), 'toggle_active', 'is_active'
@@ -250,7 +249,7 @@ class AccountsDialog(QDialog):
                     inv_layout.addWidget(inv_cb)
                     invest_widget.setLayout(inv_layout)
                     self.table.setItem(row, 7, BooleanTableWidgetItem(
-                        "Yes" if getattr(account, 'is_investment', False) else "No"))
+                         if getattr(account, 'is_investment', False) else "No"))
                     self.table.setCellWidget(row, 7, invest_widget)
 
                     strat_widget = QWidget()
@@ -432,7 +431,7 @@ class AccountsDialog(QDialog):
             item = self.table.item(index.row(), 5)
             if item:
                 item.setData(ExcelHeaderView.FILTER_DATA_ROLE,
-                             "Yes" if checked else "No")
+                              if checked else "No")
                 item.setText("")
 
         self.show_status('Updated show in balance')
@@ -452,7 +451,7 @@ class AccountsDialog(QDialog):
             item = self.table.item(index.row(), 6)
             if item:
                 item.setData(ExcelHeaderView.FILTER_DATA_ROLE,
-                             "Yes" if checked else "No")
+                              if checked else "No")
                 item.setText("")
 
         self.show_status('Updated active status')
@@ -496,7 +495,7 @@ class AccountsDialog(QDialog):
             item_inv = self.table.item(row, 7)
             if item_inv:
                 item_inv.setData(ExcelHeaderView.FILTER_DATA_ROLE,
-                                 "Yes" if checked else "No")
+                                  if checked else "No")
                 item_inv.setText("")
 
             item_strat = self.table.item(row, 8)
@@ -529,7 +528,7 @@ class AccountsDialog(QDialog):
 
         if not account_name or not currency or not account_type:
             self.show_status(
-                'Name, Type and Currency are required', error=True)
+                , error=True)
             return
 
         company = self.company_input.text().strip() or None
@@ -580,11 +579,11 @@ class AccountsDialog(QDialog):
     def show_status(self, message, error=False):
         self.status_label.setText(message)
         self.status_label.setStyleSheet(
-            'color: #f44336' if error else 'color: #4CAF50')
+             if error else 'color: #4CAF50')
         QTimer.singleShot(3000, lambda: self.status_label.setText(''))
 
     def filter_content(self, text):
-        """Filter table rows based on text matching."""
+        
         if not hasattr(self, 'table'): return
         
         search_text = text.lower()

@@ -2,12 +2,7 @@ from datetime import date
 import math
 
 def xirr(transactions):
-    """
-    Calculate the Extended Internal Rate of Return.
-    transactions: list of (date, amount) tuples.
-                  Amounts: Negative for investment, Positive for return.
-    Returns: float (0.10 = 10%) or None if didn't converge.
-    """
+    
     if not transactions or len(transactions) < 2:
         return None
     
@@ -53,35 +48,7 @@ def xirr(transactions):
     return None
 
 def calculate_linked_twr(valuations, cashflows):
-    """
-    Calculate Time-Weighted Return using Linked Modified Dietz.
-    valuations: list of (date, value) sorted by date.
-    cashflows: list of (date, amount) sorted by date.
-               Method assumes Flow values are:
-               +External Inflow (Deposit)
-               -External Outflow (Withdrawal) 
-               (Note: This is opposite of XIRR convention usually, but let's standardize)
-               
-    Standardization for this function:
-    - Flows: Positive = Money Added to Portfolio implies we subtract from End Val to isolate return.
-    - Flows: Negative = Money Removed implies we add back to End Val.
     
-    BUT `get_account_cash_flows` returns:
-    - Deposit (In) = Negative
-    - Withdrawal (Out) = Positive
-    (Matches XIRR: -Inv, +Ret)
-    
-    So for TWR:
-    - Deposit (Neg in XIRR list) -> is a Contribution. 
-    - Withdrawal (Pos in XIRR list) -> is a Distribution.
-    
-    Modified Dietz Formula for Period:
-    R = (CurrentVal - StartVal - NetContrib) / (StartVal + WeightedNetContrib)
-    
-    Where NetContrib = Sum(Deposits) - Sum(Withdrawals)
-    Use XIRR flows: NetContrib = -Sum(Flows)  (since Dep is neg)
-    
-    """
     if not valuations or len(valuations) < 2:
         return None
 
@@ -91,7 +58,6 @@ def calculate_linked_twr(valuations, cashflows):
         start_date, start_val = valuations[i]
         end_date, end_val = valuations[i+1]
 
-        
         period_flows = [f for f in cashflows if start_date < f[0] <= end_date]
         
         net_contrib = 0.0

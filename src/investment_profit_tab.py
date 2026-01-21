@@ -17,7 +17,6 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
-
 class InvestmentAccountFilterDialog(QDialog):
     def __init__(self, budget_app, selected_ids=None, parent=None):
         super().__init__(parent)
@@ -81,7 +80,6 @@ class InvestmentAccountFilterDialog(QDialog):
         for i in range(self.list_widget.count()):
             self.list_widget.item(i).setCheckState(Qt.CheckState.Unchecked)
 
-
 class InvestmentProfitLoaderThread(QThread):
     finished = pyqtSignal(dict)
 
@@ -95,7 +93,6 @@ class InvestmentProfitLoaderThread(QThread):
     def run(self):
         data = self.budget_app.get_investment_gains_history(self.start_date, self.end_date, self.filter_ids)
         self.finished.emit(data)
-
 
 class InvestmentProfitTab(QWidget):
     def __init__(self, budget_app, parent=None):
@@ -236,7 +233,7 @@ class InvestmentProfitTab(QWidget):
                 return today.addMonths(-12).toString("yyyy-MM-dd"), today.toString("yyyy-MM-dd")
 
     def refresh_data(self):
-        """Called when tab becomes active"""
+        
         self.load_data()
 
     def load_data(self):

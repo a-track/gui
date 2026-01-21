@@ -6,7 +6,6 @@ from PyQt6.QtCore import Qt, QSettings
 from main_window_tabbed import BudgetTrackerWindow
 from startup_dialog import StartupDialog
 
-
 def create_placeholder_splash():
 
     pixmap = QPixmap(500, 300)
@@ -31,7 +30,6 @@ def create_placeholder_splash():
 
     painter.end()
     return pixmap
-
 
 def main():
     print("Starting Budget Tracker v4.4...")
@@ -91,7 +89,7 @@ def main():
 
                         dm = DataManager(db_path)
                         splash.showMessage(
-                            "Generating sample data...", Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter, QColor("black"))
+                            , Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter, QColor("black"))
                         app.processEvents()
 
                         success, msg = dm.load_sample_data()
@@ -139,7 +137,6 @@ def main():
             except:
                 pass
             sys.exit(1)
-
 
 if __name__ == '__main__':
     main()

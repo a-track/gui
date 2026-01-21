@@ -1,4 +1,3 @@
-
 import duckdb
 from datetime import date
 db_path = "c:/Users/wibby/Desktop/Andrin/Git/gui/src/budget_tracker.duckdb"

@@ -3,12 +3,8 @@ import os
 import ast
 import operator
 
-
 def safe_eval_math(expression):
-    """
-    Safely evaluate a mathematical expression from a string.
-    Supported operators: +, -, *, /
-    """
+    
     if not isinstance(expression, str):
         return float(expression)
 
@@ -54,9 +50,8 @@ def safe_eval_math(expression):
     except (SyntaxError, ValueError, ZeroDivisionError) as e:
         raise ValueError(f"Invalid expression: {e}")
 
-
 def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
+    
     try:
 
         base_path = sys._MEIPASS
@@ -66,15 +61,12 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 def format_currency(value, precision=2):
-    """
-    Format a number with Swiss thousands separator (').
-    precision: Number of decimal places (default 2).
-    """
+    
     try:
         if value is None:
             value = 0.0
         
-        format_str = f"{{:,.{precision}f}}"
+        format_str = f"{ :,.{precision}f} "
         return format_str.format(float(value)).replace(",", "'")
     except (ValueError, TypeError):
         return f"0.{'0'*precision}"

@@ -1,17 +1,7 @@
-"""
-Wrapper classes to convert existing dialogs into tab widgets for the tabbed interface.
-These classes extract the content from dialog classes and present them as tabs.
-"""
-
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
-
 def create_tab_from_dialog(dialog_class, budget_app, parent):
-    """
-    Generic function to create a tab widget from a dialog class.
-    Extracts the dialog's content and returns it as a QWidget suitable for tabs.
-    """
-
+    
     dialog = dialog_class(budget_app, parent)
 
     tab_widget = QWidget()

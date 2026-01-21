@@ -2,26 +2,16 @@ from PyQt6.QtWidgets import QComboBox, QStyledItemDelegate
 from PyQt6.QtGui import QStandardItemModel, QStandardItem, QPalette, QBrush, QColor
 from PyQt6.QtCore import Qt, QEvent
 
-
 class NoScrollComboBox(QComboBox):
-    """
-    A QComboBox that ignores wheel events to prevent accidental
-    value changes when scrolling through a form.
-    """
-
+    
     def __init__(self, parent=None):
         super().__init__(parent)
 
     def wheelEvent(self, event):
         event.ignore()
 
-
 class CheckableComboBox(NoScrollComboBox):
-    """
-    A ComboBox that allows multiple items to be selected via checkboxes.
-    Populated with a list of strings. 'All' functionality can be handled implicitly (none checked = all).
-    """
-
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.view().pressed.connect(self.handle_item_pressed)
@@ -89,5 +79,3 @@ class CheckableComboBox(NoScrollComboBox):
 
     def showPopup(self):
         super().showPopup()
-
-

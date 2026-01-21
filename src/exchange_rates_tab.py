@@ -9,7 +9,6 @@ from transactions_dialog import NumericTableWidgetItem
 from excel_filter import ExcelHeaderView
 from delegates import DateDelegate
 
-
 class RestrictedExcelHeaderView(ExcelHeaderView):
     def mouseReleaseEvent(self, event):
         logicalIndex = self.logicalIndexAt(event.pos())
@@ -21,7 +20,6 @@ class RestrictedExcelHeaderView(ExcelHeaderView):
     def paintSection(self, painter, rect, logicalIndex):
 
         QHeaderView.paintSection(self, painter, rect, logicalIndex)
-
 
 class ExchangeRatesTab(QWidget):
     def __init__(self, budget_app, parent=None):
@@ -63,7 +61,7 @@ class ExchangeRatesTab(QWidget):
             }
         """)
         self.save_btn.setToolTip(
-            "Commit all changes to the database. Unsaved changes will be lost on refresh.")
+            )
         self.save_btn.clicked.connect(self.save_changes)
         self.save_btn.setEnabled(False)
         btn_layout.addWidget(self.save_btn)
@@ -113,7 +111,7 @@ class ExchangeRatesTab(QWidget):
         layout.addWidget(self.status_label)
 
     def get_display_currencies(self):
-        """Fetch active currencies (excluding CHF/MULTI) used as columns."""
+        
         accounts = self.budget_app.get_all_accounts()
         currencies = set()
         for acc in accounts:
@@ -289,7 +287,7 @@ class ExchangeRatesTab(QWidget):
             conn = self.budget_app._get_connection()
             try:
                 conn.execute(
-                    "DELETE FROM exchange_rates WHERE date = ?", (date_str,))
+                    , (date_str,))
                 conn.commit()
                 self.table.removeRow(row)
                 QMessageBox.information(self, "Deleted", "Rates deleted.")
@@ -360,7 +358,7 @@ class ExchangeRatesTab(QWidget):
                 try:
                     for old_date in dates_to_delete:
                         conn.execute(
-                            "DELETE FROM exchange_rates WHERE date = ?", (old_date,))
+                            , (old_date,))
                     conn.commit()
                 finally:
                     conn.close()

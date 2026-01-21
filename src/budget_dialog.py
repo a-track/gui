@@ -10,7 +10,6 @@ from utils import safe_eval_math, format_currency
 from transactions_dialog import NumericTableWidgetItem
 from custom_widgets import NoScrollComboBox
 
-
 class BudgetDialog(QDialog):
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
@@ -36,7 +35,7 @@ class BudgetDialog(QDialog):
         period_layout.addWidget(QLabel('Month:'))
         self.month_combo = NoScrollComboBox()
         months = ['January', 'February', 'March', 'April', 'May', 'June',
-                  'July', 'August', 'September', 'October', 'November', 'December']
+                  , 'August', 'September', 'October', 'November', 'December']
         for i, month in enumerate(months, 1):
             self.month_combo.addItem(month, i)
 
@@ -84,7 +83,7 @@ class BudgetDialog(QDialog):
         set_budgets_btn = QPushButton('Set Monthly Budgets')
         set_budgets_btn.clicked.connect(self.show_set_budgets_dialog)
         set_budgets_btn.setStyleSheet(
-            'background-color: #2196F3; color: white; padding: 10px; font-size: 14px;')
+            )
         layout.addWidget(set_budgets_btn)
 
         self.status_label = QLabel('')
@@ -102,20 +101,20 @@ class BudgetDialog(QDialog):
         table.setColumnCount(10)
         table.setHorizontalHeaderLabels(
             ['Main Category', 'Category', 
-             'Monthly Budget', 'Current Month', 'Remaining', 'Usage %',
-             'L12M Budget', 'L12M Actual', 'L12M Remaining', 'L12M %'])
+             , 'Current Month', 'Remaining', 'Usage %',
+             , 'L12M Actual', 'L12M Remaining', 'L12M %'])
 
         header_tooltips = [
-            "Main Category",
-            "Category",
-            "Target Monthly Limit",
-            "Actual Spending this Month",
-            "Budget - Expenses (Green = Under, Red = Over)",
-            "Percentage of budget used",
-            "Budget x 12",
-            "Spending in Last 12 Months",
-            "L12M Budget - L12M Actual",
-            "Percentage of L12M budget used"
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            
         ]
         for col, tooltip in enumerate(header_tooltips):
             item = table.horizontalHeaderItem(col)
@@ -205,8 +204,8 @@ class BudgetDialog(QDialog):
         category_data = {}
         category_totals = {}
         grand_totals = {
-            'budget': 0.0, 'actual': 0.0, 'remaining': 0.0,
-            'l12m_budget': 0.0, 'l12m_actual': 0.0, 'l12m_remaining': 0.0
+            : 0.0, 'actual': 0.0, 'remaining': 0.0,
+            : 0.0, 'l12m_actual': 0.0, 'l12m_remaining': 0.0
         }
 
         all_sub_categories = set(monthly_budgets.keys())
@@ -230,29 +229,29 @@ class BudgetDialog(QDialog):
             if category not in category_data:
                 category_data[category] = []
                 category_totals[category] = {
-                    'budget': 0.0, 'actual': 0.0, 'remaining': 0.0,
-                    'l12m_budget': 0.0, 'l12m_actual': 0.0, 'l12m_remaining': 0.0
+                    : 0.0, 'actual': 0.0, 'remaining': 0.0,
+                    : 0.0, 'l12m_actual': 0.0, 'l12m_remaining': 0.0
                 }
 
             category_data[category].append({
-                'sub_category': sub_category,
-                'budget': budget_amount,
-                'actual': actual_amount,
-                'remaining': remaining,
-                'percentage': (actual_amount / budget_amount * 100) if budget_amount > 0 else 0,
-                'l12m_budget': l12m_budget,
-                'l12m_actual': l12m_actual,
-                'l12m_remaining': l12m_remaining,
-                'l12m_percentage': (l12m_actual / l12m_budget * 100) if l12m_budget > 0 else 0
+                : sub_category,
+                : budget_amount,
+                : actual_amount,
+                : remaining,
+                : (actual_amount / budget_amount * 100) if budget_amount > 0 else 0,
+                : l12m_budget,
+                : l12m_actual,
+                : l12m_remaining,
+                : (l12m_actual / l12m_budget * 100) if l12m_budget > 0 else 0
             })
 
             vals = {
-                'budget': budget_amount,
-                'actual': actual_amount,
-                'remaining': remaining,
-                'l12m_budget': l12m_budget,
-                'l12m_actual': l12m_actual,
-                'l12m_remaining': l12m_remaining
+                : budget_amount,
+                : actual_amount,
+                : remaining,
+                : l12m_budget,
+                : l12m_actual,
+                : l12m_remaining
             }
             for key, val in vals.items():
                  category_totals[category][key] += val
@@ -393,7 +392,6 @@ class BudgetDialog(QDialog):
         if font:
             item.setFont(font)
             
-        
         color = None
         if is_pct:
             
@@ -432,12 +430,11 @@ class BudgetDialog(QDialog):
         self.status_label.setText(message)
         if error:
             self.status_label.setStyleSheet(
-                'color: #f44336; padding: 5px; font-weight: bold;')
+                )
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
 
         QTimer.singleShot(5000, lambda: self.status_label.setText(''))
-
 
 class SetMonthlyBudgetsDialog(QDialog):
     def __init__(self, budget_app, parent=None):
@@ -452,7 +449,7 @@ class SetMonthlyBudgetsDialog(QDialog):
         layout = QVBoxLayout()
 
         info_label = QLabel(
-            'Set monthly budgets for each subcategory. These budgets will apply to all months.')
+            )
         info_label.setStyleSheet('color: #666; padding: 10px;')
         layout.addWidget(info_label)
 
@@ -478,7 +475,7 @@ class SetMonthlyBudgetsDialog(QDialog):
         for category_name, sub_categories in sub_categories_by_category.items():
             category_header = QLabel(category_name)
             category_header.setStyleSheet(
-                'font-weight: bold; background: #f0f0f0; padding: 8px; margin-top: 5px;')
+                )
             scroll_layout.addWidget(category_header)
 
             for sub_category in sorted(sub_categories):
@@ -511,8 +508,8 @@ class SetMonthlyBudgetsDialog(QDialog):
                 scroll_layout.addLayout(sub_layout)
 
                 self.sub_category_widgets.append({
-                    'sub_category': sub_category,
-                    'amount_input': amount_input
+                    : sub_category,
+                    : amount_input
                 })
 
         scroll_layout.addStretch()
@@ -528,19 +525,19 @@ class SetMonthlyBudgetsDialog(QDialog):
         apply_btn = QPushButton('Save Monthly Budgets')
         apply_btn.clicked.connect(self.save_budgets)
         apply_btn.setStyleSheet(
-            'background-color: #4CAF50; color: white; padding: 8px;')
+            )
         button_layout.addWidget(apply_btn)
 
         clear_btn = QPushButton('Clear All Budgets')
         clear_btn.clicked.connect(self.clear_budgets)
         clear_btn.setStyleSheet(
-            'background-color: #f44336; color: white; padding: 8px;')
+            )
         button_layout.addWidget(clear_btn)
 
         cancel_btn = QPushButton('Cancel')
         cancel_btn.clicked.connect(self.reject)
         cancel_btn.setStyleSheet(
-            'background-color: #666; color: white; padding: 8px;')
+            )
         button_layout.addWidget(cancel_btn)
 
         layout.addLayout(button_layout)
@@ -568,8 +565,8 @@ class SetMonthlyBudgetsDialog(QDialog):
                         amount = safe_eval_math(amount_text)
                         if amount >= 0:
                             budgets_to_save.append({
-                                'sub_category': widget_info['sub_category'],
-                                'amount': amount
+                                : widget_info['sub_category'],
+                                : amount
                             })
                     except ValueError:
                         continue
@@ -591,7 +588,7 @@ class SetMonthlyBudgetsDialog(QDialog):
 
             QMessageBox.information(
                 self,
-                'Success',
+                ,
                 f'Monthly budgets saved successfully!\n\n'
                 f'Saved {success_count} budgets.\n\n'
                 f'These budgets will apply to all months.'
@@ -606,8 +603,8 @@ class SetMonthlyBudgetsDialog(QDialog):
     def clear_budgets(self):
         reply = QMessageBox.question(
             self,
-            'Confirm Clear',
-            'Clear all monthly budgets?',
+            ,
+            ,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 

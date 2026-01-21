@@ -1,5 +1,3 @@
-
-
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QDateEdit)
 from PyQt6.QtCore import Qt, QDate
@@ -15,7 +13,6 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
-
 class ReportTab(QWidget):
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
@@ -29,7 +26,7 @@ class ReportTab(QWidget):
         if not MATPLOTLIB_AVAILABLE:
             error_label = QLabel("⚠️ Matplotlib is not installed.")
             error_label.setStyleSheet(
-                "font-size: 16px; font-weight: bold; color: #f44336;")
+                )
             error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addStretch()
             layout.addWidget(error_label)
@@ -88,7 +85,7 @@ class ReportTab(QWidget):
         self.refresh_data()
 
     def populate_years(self):
-        """Populate year range combo"""
+        
         years = self.budget_app.get_available_years()
         current_text = self.range_combo.currentText()
         

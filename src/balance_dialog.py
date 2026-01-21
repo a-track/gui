@@ -5,7 +5,6 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from utils import format_currency
 
-
 class BalanceLoaderThread(QThread):
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
@@ -20,7 +19,6 @@ class BalanceLoaderThread(QThread):
             self.finished.emit(balances)
         except Exception as e:
             self.error.emit(str(e))
-
 
 class BalanceDialog(QDialog):
     def __init__(self, budget_app, parent=None):
@@ -42,7 +40,7 @@ class BalanceDialog(QDialog):
         header_layout = QHBoxLayout()
         balance_label = QLabel('Account Balances')
         balance_label.setStyleSheet(
-            'font-weight: bold; font-size: 18px; margin-bottom: 10px;')
+            )
         header_layout.addWidget(balance_label)
         header_layout.addStretch()
 
@@ -105,7 +103,7 @@ class BalanceDialog(QDialog):
 
         self.status_label = QLabel('')
         self.status_label.setStyleSheet(
-            'color: #4CAF50; padding: 5px; font-weight: bold;')
+            )
         layout.addWidget(self.status_label)
 
         button_layout = QHBoxLayout()
@@ -288,13 +286,11 @@ class BalanceDialog(QDialog):
             self.balance_table.blockSignals(False)
             self.balance_table.setUpdatesEnabled(True)
 
-
-
     def show_status(self, message, error=False):
         self.status_label.setText(message)
         if error:
             self.status_label.setStyleSheet(
-                'color: #f44336; padding: 5px; font-weight: bold;')
+                )
         else:
             self.status_label.setStyleSheet(
-                'color: #4CAF50; padding: 5px; font-weight: bold;')
+                )

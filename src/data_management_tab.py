@@ -7,7 +7,6 @@ import access_writer
 import sys
 from models import BudgetApp
 
-
 class DataManagementTab(QWidget):
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
@@ -50,7 +49,7 @@ class DataManagementTab(QWidget):
         db_path_field = QLineEdit(self.budget_app.db_path)
         db_path_field.setReadOnly(True)
         db_path_field.setStyleSheet(
-            "background-color: #f5f5f5; color: #333; padding: 5px;")
+            )
         db_layout.addWidget(db_path_field)
 
         switch_btn = QPushButton("Switch Database...")
@@ -68,7 +67,7 @@ class DataManagementTab(QWidget):
             }
         """)
         switch_btn.setToolTip(
-            "Select a different database file (.db) to open.")
+            )
         db_layout.addWidget(switch_btn)
 
         db_group.setLayout(db_layout)
@@ -94,7 +93,7 @@ class DataManagementTab(QWidget):
         export_layout.setSpacing(10)
 
         export_desc = QLabel(
-            "Export all your data (Accounts, Categories, Transactions, Budgets) to an Excel file.")
+            )
         export_desc.setWordWrap(True)
         export_layout.addWidget(export_desc)
 
@@ -113,7 +112,7 @@ class DataManagementTab(QWidget):
         """)
         export_btn.clicked.connect(self.export_data)
         export_btn.setToolTip(
-            "Export all Accounts, Transactions, Budgets, and Settings to an Excel file.")
+            )
         export_layout.addWidget(export_btn)
 
         export_group.setLayout(export_layout)
@@ -139,7 +138,7 @@ class DataManagementTab(QWidget):
         import_layout.setSpacing(10)
 
         import_desc = QLabel("Import data from an Excel file into a NEW database.\n"
-                             "This will create a fresh database file.")
+                             )
         import_desc.setStyleSheet("color: #D32F2F;")
         import_desc.setWordWrap(True)
         import_layout.addWidget(import_desc)
@@ -159,13 +158,13 @@ class DataManagementTab(QWidget):
         """)
         import_btn.clicked.connect(self.import_data)
         import_btn.setToolTip(
-            "Overwrite current database with data from an Excel file.\nA backup will be created automatically.")
+            )
         import_layout.addWidget(import_btn)
 
         template_btn = QPushButton("Download Sample Template")
         template_btn.clicked.connect(self.download_template)
         template_btn.setToolTip(
-            "Generate an empty Excel file with the correct structure for importing data.")
+            )
         template_btn.setStyleSheet("""
             QPushButton {
                 background-color: #607D8B;
@@ -205,8 +204,7 @@ class DataManagementTab(QWidget):
         access_layout.setSpacing(10)
 
         access_desc = QLabel(
-            "Export data to a Microsoft Access Database (.accdb) for use in Power BI.\n"
-            "Requires Microsoft Access or Access Database Engine installed."
+            
         )
         access_desc.setWordWrap(True)
         access_layout.addWidget(access_desc)
@@ -247,7 +245,7 @@ class DataManagementTab(QWidget):
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Export Data",
             os.path.expanduser("~/Desktop/budget_export.xlsx"),
-            "Excel Files (*.xlsx)"
+            
         )
 
         if not file_path:
@@ -281,7 +279,7 @@ class DataManagementTab(QWidget):
         new_db_path, _ = QFileDialog.getSaveFileName(
             self, "Create New Database for Import",
             os.path.expanduser("~/Documents/my_budget.duckdb"),
-            "DuckDB Database (*.duckdb)"
+            
         )
 
         if not new_db_path:
@@ -290,7 +288,7 @@ class DataManagementTab(QWidget):
         excel_path, _ = QFileDialog.getOpenFileName(
             self, "Select Excel File to Import",
             os.path.expanduser("~/Desktop"),
-            "Excel Files (*.xlsx)"
+            
         )
 
         if not excel_path:
@@ -338,7 +336,7 @@ class DataManagementTab(QWidget):
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Save Template",
             os.path.expanduser("~/Desktop/budget_template.xlsx"),
-            "Excel Files (*.xlsx)"
+            
         )
 
         if not file_path:
@@ -357,8 +355,8 @@ class DataManagementTab(QWidget):
     def switch_database(self):
         reply = QMessageBox.question(
             self, 'Switch Database',
-            "Are you sure you want to switch databases?\n"
-            "The application will restart and ask for a database location.",
+            
+            ,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
@@ -377,7 +375,7 @@ class DataManagementTab(QWidget):
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Export to Access Database",
             os.path.join(last_dir, "budget_export.accdb"),
-            "Microsoft Access Database (*.accdb)"
+            
         )
 
         if not file_path:
