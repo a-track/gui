@@ -12,12 +12,16 @@ from excel_filter import ExcelHeaderView
 import re
 from custom_widgets import NoScrollComboBox
 
-TOTAL_ROW_ROLE = Qt.ItemDataRole.UserRole + 1
 
 TOTAL_ROW_ROLE = Qt.ItemDataRole.UserRole + 1
+
+
+TOTAL_ROW_ROLE = Qt.ItemDataRole.UserRole + 1
+
 
 class TotalAwareTableWidgetItem(QTableWidgetItem):
-    
+    """Base class that ensures the Total row stays at the top/bottom as pinned."""
+
     def __lt__(self, other):
         try:
 
@@ -50,8 +54,11 @@ class TotalAwareTableWidgetItem(QTableWidgetItem):
     def actual_lt(self, other):
         return super().__lt__(other)
 
+
 class StringTableWidgetItem(TotalAwareTableWidgetItem):
-    
+    """For text columns that need to respect the Total Row."""
+
+
 class NumericTableWidgetItem(TotalAwareTableWidgetItem):
     def actual_lt(self, other):
 
@@ -66,11 +73,15 @@ class NumericTableWidgetItem(TotalAwareTableWidgetItem):
 
         return get_val(self.text()) < get_val(other.text())
 
+
 class AlwaysTopTableWidgetItem(NumericTableWidgetItem):
     pass
 
+
 class ConfirmedTableWidgetItem(TotalAwareTableWidgetItem):
-    
+    """
+    Shows no text but sorts/filters based on hidden data.
+    """
     FILTER_ROLE = Qt.ItemDataRole.UserRole + 99
 
     def __init__(self, value):
@@ -85,6 +96,7 @@ class ConfirmedTableWidgetItem(TotalAwareTableWidgetItem):
             return val_self < val_other
         except:
             return super().__lt__(other)
+
 
 class TransactionLoaderThread(QThread):
     finished = pyqtSignal(list)
@@ -107,6 +119,7 @@ class TransactionLoaderThread(QThread):
         except Exception as e:
             print(f"Error loading transactions: {e}")
             self.finished.emit([])
+
 
 class TransactionsDialog(QDialog):
 
@@ -156,13 +169,15 @@ class TransactionsDialog(QDialog):
 
         self.transactions_table = QTableWidget()
         
+
+
         filter_layout.addStretch()
 
         layout.addLayout(filter_layout)
 
         self.info_label = QLabel('Loading transactions...')
         self.info_label.setStyleSheet(
-            )
+            'color: #666; font-style: italic; padding: 5px;')
         layout.addWidget(self.info_label)
 
         self.progress_bar = QProgressBar()
@@ -172,7 +187,7 @@ class TransactionsDialog(QDialog):
         filter_controls_layout = QHBoxLayout()
 
         self.confirm_all_button = QPushButton(
-            )
+            'Confirm All Visible Transactions')
         self.confirm_all_button.setStyleSheet('''
             QPushButton {
                 background-color: #4CAF50;
@@ -217,8 +232,8 @@ class TransactionsDialog(QDialog):
 
         self.table.setColumnCount(14)
         self.table.setHorizontalHeaderLabels([
-            , 'Date', 'Type', 'Amount', 'Amount To', 'Qty', 'Account', 'Account To', 'Inv. Acc', 'Payee',
-            , 'Notes', 'Confirmed', 'Delete'
+            'ID', 'Date', 'Type', 'Amount', 'Amount To', 'Qty', 'Account', 'Account To', 'Inv. Acc', 'Payee',
+            'Category', 'Notes', 'Confirmed', 'Delete'
         ])
 
         self.header_view = ExcelHeaderView(self.table)
@@ -240,20 +255,20 @@ class TransactionsDialog(QDialog):
         self.header_view.filterChanged.connect(self.update_count_label)
 
         header_tooltips = [
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            
+            "Unique transaction identifier",
+            "Date the transaction occurred",
+            "Income, Expense, or Transfer",
+            "Transaction value (Source Currency)",
+            "Transaction value (Destination Currency)",
+            "Number of shares/units (for Investments)",
+            "Source Account",
+            "Destination Account (for Transfers)",
+            "Associated Investment Account",
+            "Recipient or Payer",
+            "Budget Category",
+            "Additional notes",
+            "Verify this transaction against your real bank statement.\n(Optional - for your own tracking)",
+            "Delete transaction"
         ]
         for col, tooltip in enumerate(header_tooltips):
             item = self.table.horizontalHeaderItem(col)
@@ -373,8 +388,8 @@ class TransactionsDialog(QDialog):
 
     def populate_months(self):
         months = ['All'] + [
-            , 'February', 'March', 'April', 'May', 'June',
-            , 'August', 'September', 'October', 'November', 'December'
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
         ]
         self.month_combo.addItems(months)
 
@@ -486,11 +501,11 @@ class TransactionsDialog(QDialog):
         self.load_transactions()
 
     def is_loading(self):
-        
+        """Check if background loader is running"""
         return hasattr(self, 'loader_thread') and self.loader_thread.isRunning()
 
     def cleanup(self):
-        
+        """Cleanup resources before closing"""
         if hasattr(self, 'loader_thread') and self.loader_thread.isRunning():
             self.loader_thread.quit()
             self.loader_thread.wait()
@@ -677,6 +692,7 @@ class TransactionsDialog(QDialog):
             if column == 12:
                 return
 
+
             trans_id_item = self.table.item(row, 0)
             if not trans_id_item:
                 return
@@ -689,8 +705,8 @@ class TransactionsDialog(QDialog):
             if hasattr(trans, 'confirmed') and trans.confirmed:
                 self.show_status("Cannot edit confirmed transaction", error=True)
                 QMessageBox.warning(self, "Transaction Confirmed",
-                                    
-                                    )
+                                    "This transaction is confirmed and cannot be modified.\n"
+                                    "Please uncheck the confirmation box first.")
                 self.revert_cell(row, column)
                 return
 
@@ -816,7 +832,7 @@ class TransactionsDialog(QDialog):
             self.revert_cell(row, column)
 
     def revert_cell(self, row, column):
-        
+        """Revert cell to value from local model"""
         try:
             self.table.blockSignals(True)
             trans_id_item = self.table.item(row, 0)
@@ -867,7 +883,7 @@ class TransactionsDialog(QDialog):
         return ""
 
     def _build_account_currency_cache(self):
-        
+        """Build or refresh a cache of account_id -> currency."""
         try:
             accounts = self.budget_app.get_all_accounts(show_inactive=True)
             self._account_currency_cache = {
@@ -877,7 +893,7 @@ class TransactionsDialog(QDialog):
             self._account_currency_cache = {}
 
     def _get_account_currency(self, account_id):
-        
+        """Return the currency code for a given account_id."""
         if not hasattr(self, '_account_currency_cache'):
             self._account_currency_cache = None
 
@@ -890,7 +906,7 @@ class TransactionsDialog(QDialog):
         return self._account_currency_cache.get(account_id, "")
 
     def _restore_totals_text(self):
-        
+        """Restore the last computed totals text after transient status messages."""
         try:
             text = getattr(self, '_last_totals_text', '')
             self.status_label.setStyleSheet('color: #666; padding: 5px;')
@@ -899,9 +915,9 @@ class TransactionsDialog(QDialog):
             pass
 
     def _compute_totals_for_rows(self, rows):
-        
-        amount_totals = {}      
-        to_amount_totals = {}   
+        """Compute per-currency totals for the given table row indices."""
+        amount_totals = {}      # currency -> float
+        to_amount_totals = {}   # currency -> float
 
         for row in rows:
             id_item = self.table.item(row, 0)
@@ -936,7 +952,11 @@ class TransactionsDialog(QDialog):
         ]
 
     def update_selection_totals(self):
-        
+        """
+        Calculate Excel-like sums for selected rows and show them in the status bar.
+
+        Sums are grouped per currency for both Amount and Amount To columns.
+        """
         try:
             visible_rows = self._visible_rows()
             if not visible_rows:
@@ -995,10 +1015,10 @@ class TransactionsDialog(QDialog):
 
     def color_row_by_type(self, row, trans_type):
         color_map = {
-            : QColor(230, 255, 230),
-            : QColor(255, 230, 230),
-            : QColor(230, 230, 255),
-            : QColor(255, 255, 230)
+            'income': QColor(230, 255, 230),
+            'expense': QColor(255, 230, 230),
+            'transfer': QColor(230, 230, 255),
+            'investment': QColor(255, 255, 230)
         }
 
         if trans_type in color_map:
@@ -1053,12 +1073,12 @@ class TransactionsDialog(QDialog):
 
             if not unconfirmed_transactions:
                 self.show_status(
-                    )
+                    'All visible transactions are already confirmed!')
                 return
 
             reply = QMessageBox.question(
                 self,
-                ,
+                'Confirm All Transactions',
                 f'Are you sure you want to confirm all {len(unconfirmed_transactions)} unconfirmed transactions?',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
@@ -1117,13 +1137,13 @@ class TransactionsDialog(QDialog):
             if trans and hasattr(trans, 'confirmed') and trans.confirmed:
                  self.show_status("Cannot delete confirmed transaction", error=True)
                  QMessageBox.warning(self, "Transaction Confirmed",
-                                    
-                                    )
+                                    "This transaction is confirmed and cannot be deleted.\n"
+                                    "Please uncheck the confirmation box first.")
                  return
 
             reply = QMessageBox.question(
                 self,
-                ,
+                'Confirm Delete',
                 f'Delete transaction #{trans_id}?',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
@@ -1149,7 +1169,7 @@ class TransactionsDialog(QDialog):
         self.status_label.setText(message)
         if error:
             self.status_label.setStyleSheet(
-                )
+                'color: #f44336; padding: 5px; font-weight: bold;')
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
 
@@ -1167,7 +1187,7 @@ class TransactionsDialog(QDialog):
         return [""] + options
 
     def cleanup(self):
-        
+        """Cleanup threads before closing"""
         if hasattr(self, 'loader_thread') and self.loader_thread.isRunning():
             self.loader_thread.quit()
             self.loader_thread.wait(1000)
@@ -1187,7 +1207,7 @@ class TransactionsDialog(QDialog):
         return None
 
     def filter_content(self, text):
-        
+        """Filter table rows based on text matching."""
         search_text = text.lower()
         rows = self.table.rowCount()
         cols = self.table.columnCount()

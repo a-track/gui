@@ -6,12 +6,14 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QColor
 import datetime
 
+
 from delegates import ComboBoxDelegate, DateDelegate
 import datetime
 from excel_filter import ExcelHeaderView
 from transactions_dialog import NumericTableWidgetItem
 from custom_widgets import NoScrollComboBox, CheckableComboBox
 from utils import format_currency
+
 
 class AccountPerspectiveDialog(QDialog):
 
@@ -183,18 +185,18 @@ class AccountPerspectiveDialog(QDialog):
         layout.addLayout(action_bar)
 
         info_label = QLabel(
-            )
+            'Showing all transactions where this account is involved. Click checkbox to confirm transaction.')
         info_label.setStyleSheet(
-            )
+            'color: #666; font-style: italic; padding: 5px; background-color: #f0f0f0;')
         layout.addWidget(info_label)
 
         self.table = QTableWidget()
 
         self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels([
-            , 'Type', 'Category', 'Payee',
-            , 'Notes', 'Transaction Amount', 'Running Balance',
-            , 'Delete'
+            'Date', 'Type', 'Category', 'Payee',
+            'Other Account', 'Notes', 'Transaction Amount', 'Running Balance',
+            'Confirmed', 'Delete'
         ])
 
         self.header_view = ExcelHeaderView(self.table)
@@ -214,20 +216,20 @@ class AccountPerspectiveDialog(QDialog):
         self.header_view.set_filter_enabled(9, False)
 
         header_tooltips = [
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            
+            "Transaction Date",
+            "Type (Income/Expense/Transfer)",
+            "Budget Category",
+            "Payer/Payee",
+            "Transaction Date",
+            "Type (Income/Expense/Transfer)",
+            "Budget Category",
+            "Payer/Payee",
+            "Counterparty Account (for Transfers)",
+            "Additional Notes",
+            "Amount affecting this account",
+            "Account Balance after this transaction",
+            "Verify this transaction against your real bank statement.\n(Optional - for your own tracking)",
+            "Delete Transaction"
         ]
         for col, tooltip in enumerate(header_tooltips):
             item = self.table.horizontalHeaderItem(col)
@@ -352,8 +354,8 @@ class AccountPerspectiveDialog(QDialog):
     def populate_months(self):
         self.month_combo.addItem('All')
         months = [
-            , 'February', 'March', 'April', 'May', 'June',
-            , 'August', 'September', 'October', 'November', 'December'
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
         ]
         self.month_combo.addItems(months)
         
@@ -378,6 +380,7 @@ class AccountPerspectiveDialog(QDialog):
              
         model.blockSignals(False)
         self.month_combo.update_display_text()
+
 
     def get_account_name_by_id(self, account_id):
         if account_id is None:
@@ -415,7 +418,8 @@ class AccountPerspectiveDialog(QDialog):
         try:
             account_id = self.selected_account_id
             
-            self.all_transactions_for_account, self.running_balance_history =                self.budget_app.get_account_transactions_with_balance(account_id)
+            self.all_transactions_for_account, self.running_balance_history = \
+                self.budget_app.get_account_transactions_with_balance(account_id)
 
             self.apply_filters()
 
@@ -563,11 +567,11 @@ class AccountPerspectiveDialog(QDialog):
                 continue
 
             transaction_history.append({
-                : trans,
-                : transaction_amount,
-                : effect,
-                : running_balance,
-                : other_account
+                'transaction': trans,
+                'transaction_amount': transaction_amount,
+                'effect': effect,
+                'running_balance': running_balance,
+                'other_account': other_account
             })
 
         self.populate_table(transaction_history)
@@ -702,8 +706,8 @@ class AccountPerspectiveDialog(QDialog):
             if hasattr(trans, 'confirmed') and trans.confirmed:
                 self.show_status("Cannot edit confirmed transaction", error=True)
                 QMessageBox.warning(self, "Transaction Confirmed",
-                                    
-                                    )
+                                    "This transaction is confirmed and cannot be modified.\n"
+                                    "Please uncheck the confirmation box first.")
                 self.revert_cell(row, column, item.text()) 
                 self.refresh_data()
                 return
@@ -744,7 +748,7 @@ class AccountPerspectiveDialog(QDialog):
                 try:
 
                     clean_value = new_value.replace("'", "").replace(
-                        , "").replace("CHF", "").strip()
+                        "+", "").replace("CHF", "").strip()
                     amount = float(clean_value)
 
                     field = 'amount'
@@ -909,12 +913,12 @@ class AccountPerspectiveDialog(QDialog):
 
             if not unconfirmed_transactions:
                 self.show_status(
-                    )
+                    'All visible transactions are already confirmed!')
                 return
 
             reply = QMessageBox.question(
                 self,
-                ,
+                'Confirm All Transactions',
                 f'Are you sure you want to confirm all {len(unconfirmed_transactions)} unconfirmed transactions?',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
@@ -996,13 +1000,13 @@ class AccountPerspectiveDialog(QDialog):
             if trans and hasattr(trans, 'confirmed') and trans.confirmed:
                 self.show_status("Cannot delete confirmed transaction", error=True)
                 QMessageBox.warning(self, "Transaction Confirmed",
-                                    
-                                    )
+                                    "This transaction is confirmed and cannot be deleted.\n"
+                                    "Please uncheck the confirmation box first.")
                 return
 
             reply = QMessageBox.question(
                 self,
-                ,
+                'Confirm Delete',
                 f'Delete transaction #{trans_id}?',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
@@ -1030,14 +1034,14 @@ class AccountPerspectiveDialog(QDialog):
         self.status_label.setText(message)
         if error:
             self.status_label.setStyleSheet(
-                )
+                'color: #f44336; padding: 5px; font-weight: bold;')
         else:
             self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
 
         QTimer.singleShot(5000, lambda: self.status_label.setText(''))
 
     def filter_content(self, text):
-        
+        """Filter table rows based on text matching."""
         if not hasattr(self, 'table'): return
         
         search_text = text.lower()

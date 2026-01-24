@@ -8,6 +8,7 @@ from excel_filter import ExcelHeaderView
 from transactions_dialog import NumericTableWidgetItem
 from custom_widgets import NoScrollComboBox
 
+
 class CategoriesDialog(QDialog):
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
@@ -52,7 +53,7 @@ class CategoriesDialog(QDialog):
         add_btn = QPushButton('Add Category')
         add_btn.clicked.connect(self.add_category)
         add_btn.setStyleSheet(
-            )
+            'background-color: #4CAF50; color: white; padding: 8px;')
         sub_category_layout.addWidget(add_btn)
 
         layout.addLayout(sub_category_layout)
@@ -63,11 +64,11 @@ class CategoriesDialog(QDialog):
             ['ID', 'Category Type', 'Main Category', 'Category', 'Delete'])
 
         header_tooltips = [
-            ,
-            ,
-            ,
-            ,
-            
+            "System ID",
+            "Income or Expense",
+            "Main grouping",
+            "Specific item (Category)",
+            "Delete Category"
         ]
         for col, tooltip in enumerate(header_tooltips):
             item = self.table.horizontalHeaderItem(col)
@@ -129,13 +130,14 @@ class CategoriesDialog(QDialog):
         self.load_categories()
 
     def on_category_type_changed(self, category_type):
-        
+        """When category type changes, update the parent categories combo"""
         self.load_parent_categories(category_type)
 
     def on_parent_category_changed(self, parent_category):
-        
+        """When parent category changes - placeholder for future functionality"""
+
     def load_parent_categories(self, category_type=None):
-        
+        """Load parent categories filtered by type"""
         categories = self.budget_app.get_all_categories()
         parent_categories = set()
 
@@ -423,7 +425,7 @@ class CategoriesDialog(QDialog):
 
         if not parent_category or not sub_category:
             self.show_status(
-                , error=True)
+                'Please enter both main category and category', error=True)
             return
 
         success = self.budget_app.add_category(
@@ -452,7 +454,7 @@ class CategoriesDialog(QDialog):
 
             reply = QMessageBox.question(
                 self,
-                ,
+                'Confirm Delete',
                 f'Delete category "{sub_category}"?',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
@@ -474,7 +476,7 @@ class CategoriesDialog(QDialog):
             self.status_label.setText(message)
             if error:
                 self.status_label.setStyleSheet(
-                    )
+                    'color: #f44336; padding: 5px; font-weight: bold;')
             else:
                 self.status_label.setStyleSheet('color: #4CAF50; padding: 5px;')
 
@@ -489,7 +491,7 @@ class CategoriesDialog(QDialog):
             pass
 
     def filter_content(self, text):
-        
+        """Filter table rows based on text matching."""
         if not hasattr(self, 'table'): return
         
         search_text = text.lower()

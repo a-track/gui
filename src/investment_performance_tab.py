@@ -8,6 +8,7 @@ from PyQt6.QtGui import QColor
 from excel_filter import ExcelHeaderView
 from transactions_dialog import NumericTableWidgetItem, StringTableWidgetItem
 
+
 class PerformanceLoaderThread(QThread):
     finished = pyqtSignal(object)
 
@@ -26,14 +27,14 @@ class PerformanceLoaderThread(QThread):
             data = []
 
             total_stats = {
-                : 0.0,
-                : 0.0,
-                : 0.0,
-                : 0.0,
-                : 0.0,
-                : 0.0,
-                : {},
-                : {},
+                'cost_basis': 0.0,
+                'market_val': 0.0,
+                'unrealized': 0.0,
+                'income': 0.0,
+                'fees': 0.0,
+                'return_sum': 0.0,
+                'income_bd': {},
+                'fees_bd': {},
             }
             
             all_value_histories_chf = []
@@ -134,6 +135,7 @@ class PerformanceLoaderThread(QThread):
                 flows_chf_acc = [(d, amt * rate) for d, amt in flows]
                 all_flows_chf.extend(flows_chf_acc)
 
+                
                 history_chf = [(d, v * rate) for d, v in val_history]
                 all_value_histories_chf.append(history_chf)
 
@@ -155,22 +157,22 @@ class PerformanceLoaderThread(QThread):
                 agg_bd(fees_years_data, total_stats['fees_bd'])
 
                 row = {
-                    : name,
-                    : currency,
-                    : qty,
-                    : cost_basis_chf,
-                    : market_val_chf,
-                    : unrealized_pl_chf,
-                    : unrealized_pl_pct,
-                    : income_chf,
-                    : years_data,
-                    : fees_chf,
-                    : fees_years_data,
-                    : total_return_chf,
-                    : total_return_pct,
-                    : irr_pct,
-                    : twr_pct,
-                    : False
+                    'name': name,
+                    'currency': currency,
+                    'qty': qty,
+                    'cost_basis': cost_basis_chf,
+                    'market_value': market_val_chf,
+                    'unrealized_pl': unrealized_pl_chf,
+                    'unrealized_pl_pct': unrealized_pl_pct,
+                    'dividends': income_chf,
+                    'income_breakdown': years_data,
+                    'fees': fees_chf,
+                    'fees_breakdown': fees_years_data,
+                    'total_return': total_return_chf,
+                    'total_return_pct': total_return_pct,
+                    'irr': irr_pct,
+                    'twr': twr_pct,
+                    'is_total': False
                 }
                 data.append(row)
 
@@ -211,22 +213,22 @@ class PerformanceLoaderThread(QThread):
             t_ret_pct = (total_stats['return_sum'] / abs(total_stats['cost_basis']) * 100) if abs(total_stats['cost_basis']) > 0.01 else 0.0
 
             total_row = {
-                : 'TOTAL',
-                : '',
-                : 0,
-                : total_stats['cost_basis'],
-                : total_stats['market_val'],
-                : total_stats['unrealized'],
-                : t_unreal_pct,
-                : total_stats['income'],
-                : total_stats['income_bd'],
-                : total_stats['fees'],
-                : total_stats['fees_bd'],
-                : total_stats['return_sum'],
-                : t_ret_pct,
-                : total_irr_pct,
-                : total_twr_pct,
-                : True
+                'name': 'TOTAL',
+                'currency': '',
+                'qty': 0,
+                'cost_basis': total_stats['cost_basis'],
+                'market_value': total_stats['market_val'],
+                'unrealized_pl': total_stats['unrealized'],
+                'unrealized_pl_pct': t_unreal_pct,
+                'dividends': total_stats['income'],
+                'income_breakdown': total_stats['income_bd'],
+                'fees': total_stats['fees'],
+                'fees_breakdown': total_stats['fees_bd'],
+                'total_return': total_stats['return_sum'],
+                'total_return_pct': t_ret_pct,
+                'irr': total_irr_pct,
+                'twr': total_twr_pct,
+                'is_total': True
             }
 
             if data:
@@ -240,6 +242,7 @@ class PerformanceLoaderThread(QThread):
             traceback.print_exc()
             self.finished.emit([])
 
+
 class InvestmentPerformanceTab(QWidget):
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
@@ -247,7 +250,7 @@ class InvestmentPerformanceTab(QWidget):
         self.init_ui()
         
     def filter_content(self, text):
-        
+        """Filter table rows based on text matching."""
         if not hasattr(self, 'performance_table'): return
         
         search_text = text.lower()
@@ -286,7 +289,7 @@ class InvestmentPerformanceTab(QWidget):
 
         info_label = QLabel(" All monetary values displayed in CHF. IRR/TWR in Native Currency (Total TWR in CHF).")
         info_label.setStyleSheet(
-            )
+            "color: #666; font-style: italic; margin-bottom: 5px;")
         layout.addWidget(info_label)
 
         self.progress_bar = QProgressBar()
@@ -296,11 +299,11 @@ class InvestmentPerformanceTab(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(12) 
         self.table.setHorizontalHeaderLabels([
-            , "Quantity", "Cost Basis", "Market Value",
-            , "Unrealized %",
-            , "Fees",
-            , "Total Return %",
-            , "TWR"
+            "Account", "Quantity", "Cost Basis", "Market Value",
+            "Unrealized P&L", "Unrealized %",
+            "Gains", "Fees",
+            "Total Return", "Total Return %",
+            "IRR", "TWR"
         ])
 
         self.header_view = ExcelHeaderView(self.table)
@@ -308,10 +311,13 @@ class InvestmentPerformanceTab(QWidget):
         self.table.setHorizontalHeader(self.header_view)
 
         self.table.horizontalHeaderItem(10).setToolTip(
-            
+            "Internal Rate of Return (Money-Weighted Return).\n"
+            "Measures your personal performance, accounting for the timing and size of your deposits/withdrawals."
         )
         self.table.horizontalHeaderItem(11).setToolTip(
-            
+            "Time-Weighted Return.\n"
+            "Measures the performance of the asset itself, eliminating the effect of your cash flow timing.\n"
+            "Requires historical quantity/valuation data."
         )
 
         self.table.setSortingEnabled(False)
@@ -518,7 +524,7 @@ class InvestmentPerformanceTab(QWidget):
             self.table.setUpdatesEnabled(True)
 
     def filter_content(self, text):
-        
+        """Filter table rows based on text matching."""
         if not hasattr(self, 'table'): return
         
         search_text = text.lower()

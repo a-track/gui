@@ -5,6 +5,17 @@ import sys
 import re
 
 def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_callback=None):
+    """
+    Export only api_ tables from DuckDB to Microsoft Access database.
+    1. Executes SQL scripts from sql_folder_path in DuckDB to generate tables.
+    2. Exports resulting api_ tables to Access.
+    
+    Args:
+        duckdb_path (str): Path to the DuckDB database.
+        access_db_path (str): Path to the target Access database (.accdb).
+        sql_folder_path (str): Path to the folder containing SQL scripts.
+        progress_callback (func): Optional callback for status updates (msg).
+    """
     
     try:
         import pyodbc
@@ -104,7 +115,7 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                 log(f"WARNING: SQL folder not found at {sql_folder_path}")
 
             conn_str = (
-                
+                r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
                 f"DBQ={access_db_path};"
             )
             
@@ -115,7 +126,7 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                 log("Connected.")
                 
                 tables = duck_conn.execute(
-                    
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'api_%'"
                 ).fetchall()
                 table_names = [t[0] for t in tables]
                 
@@ -189,19 +200,19 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                             duck_conn.execute(f"COPY (SELECT * FROM {table_name}) TO '{csv_path_sql}' (FORMAT CSV, HEADER, DATEFORMAT '%Y-%m-%d', TIMESTAMPFORMAT '%Y-%m-%d %H:%M:%S')")
                             
                             csv_exports.append({
-                                : table_name,
-                                : csv_path,
-                                : rows,
-                                : db_cols
+                                'table': table_name,
+                                'csv': csv_path,
+                                'rows': rows,
+                                'cols': db_cols
                             })
                             
                         except Exception as e:
                             log(f"  ERROR generating CSV for {table_name}: {e}")
                             csv_exports.append({
-                                : table_name,
-                                : rows,
-                                : db_cols,
-                                : str(e)
+                                'table': table_name,
+                                'rows': rows,
+                                'cols': db_cols,
+                                'error': str(e)
                             })
 
                 access_cursor.close()
@@ -279,6 +290,7 @@ def export_to_access(duckdb_path, access_db_path, sql_folder_path, progress_call
                 log(f"\nAccess ODBC Error: {e}")
                 return False, f"Access ODBC Error: {e}"
 
+                
     except Exception as e:
         log(f"\nGeneral Error: {e}")
         import traceback

@@ -1,7 +1,9 @@
+
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton,
                              QFileDialog, QHBoxLayout, QRadioButton, QLineEdit)
 from PyQt6.QtCore import Qt
 import os
+
 
 class StartupDialog(QDialog):
     def __init__(self):
@@ -18,7 +20,7 @@ class StartupDialog(QDialog):
 
         header = QLabel("Welcome! Let's get started.")
         header.setStyleSheet(
-            )
+            "font-size: 18px; font-weight: bold; margin-bottom: 10px;")
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(header)
 
@@ -75,17 +77,17 @@ class StartupDialog(QDialog):
         if self.radio_new.isChecked():
             self.mode = 'new'
             self.path_input.setPlaceholderText(
-                )
+                "Select folder to create 'budget.duckdb'...")
             self.browse_btn.setText("Select Folder...")
         elif self.radio_sample.isChecked():
             self.mode = 'sample'
             self.path_input.setPlaceholderText(
-                )
+                "Select folder to create 'budget_sample.duckdb'...")
             self.browse_btn.setText("Select Folder...")
         else:
             self.mode = 'existing'
             self.path_input.setPlaceholderText(
-                )
+                "Select existing .duckdb file...")
             self.browse_btn.setText("Select File...")
 
     def browse_path(self):

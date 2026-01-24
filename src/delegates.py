@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import QStyledItemDelegate, QDateEdit
 from PyQt6.QtCore import Qt, QDate
 from custom_widgets import NoScrollComboBox
 
+
 class ComboBoxDelegate(QStyledItemDelegate):
     def __init__(self, parent=None, items_getter=None):
         super().__init__(parent)
@@ -35,6 +36,7 @@ class ComboBoxDelegate(QStyledItemDelegate):
     def setModelData(self, editor, model, index):
         value = editor.currentText()
         model.setData(index, value, Qt.ItemDataRole.EditRole)
+
 
 class DateDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):

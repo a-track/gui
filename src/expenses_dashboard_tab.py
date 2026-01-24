@@ -7,6 +7,7 @@ import math
 from custom_widgets import NoScrollComboBox
 from utils import format_currency
 
+
 class CategoryFilterDialog(QDialog):
     def __init__(self, budget_app, selected_ids=None, parent=None):
         super().__init__(parent)
@@ -126,6 +127,7 @@ class CategoryFilterDialog(QDialog):
                 item.child(j).setCheckState(0, state)
         self.tree.blockSignals(False)
 
+
 try:
     from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.figure import Figure
@@ -133,6 +135,7 @@ try:
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
+
 
 class DashboardLoaderThread(QThread):
     finished = pyqtSignal(dict)
@@ -159,29 +162,30 @@ class DashboardLoaderThread(QThread):
             total_expense = sum(cat['total'] for cat in breakdown.values())
 
             data = {
-                : breakdown,
-                : trend_data,
-                : top_payees,
-                : total_expense,
-                : self.year,
-                : self.month
+                'breakdown': breakdown,
+                'trend': trend_data,
+                'top_payees': top_payees,
+                'total_expense': total_expense,
+                'year': self.year,
+                'month': self.month
             }
             self.finished.emit(data)
         except Exception as e:
             print(f"Error in dashboard loader: {e}")
             self.finished.emit({})
 
+
 class KPICard(QFrame):
     def __init__(self, title, value, subtitle="", color="#333", parent=None):
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setStyleSheet(f"""
-            KPICard { 
+            KPICard {{
                 background-color: white;
                 border: 1px solid #e0e0e0;
                 border-radius: 8px;
-            } 
-            QLabel {  border: none; } 
+            }}
+            QLabel {{ border: none; }}
         """)
 
         layout = QVBoxLayout()
@@ -189,7 +193,7 @@ class KPICard(QFrame):
 
         title_lbl = QLabel(title)
         title_lbl.setStyleSheet(
-            )
+            "color: #666; font-size: 14px; font-weight: bold;")
         layout.addWidget(title_lbl)
 
         value_lbl = QLabel(value)
@@ -204,6 +208,7 @@ class KPICard(QFrame):
 
         layout.addStretch()
         self.setLayout(layout)
+
 
 class ExpensesDashboardTab(QWidget):
     def __init__(self, budget_app, parent=None):
@@ -246,7 +251,7 @@ class ExpensesDashboardTab(QWidget):
         self.month_combo = NoScrollComboBox()
 
         months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  , 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
         self.month_combo.addItems(months)
 
         self.month_combo.setCurrentIndex(self.current_month - 1)
@@ -266,9 +271,9 @@ class ExpensesDashboardTab(QWidget):
         self.kpi_layout = QHBoxLayout()
         self.kpi_total = KPICard("Total Expenses", "CHF 0.00", color="#D32F2F")
         self.kpi_avg = KPICard(
-            , "CHF 0.00", "Based on trailing 12m", color="#1976D2")
+            "12-Month Average", "CHF 0.00", "Based on trailing 12m", color="#1976D2")
         self.kpi_top = KPICard("Top Category", "None",
-                               , color="#388E3C")
+                               "CHF 0.00", color="#388E3C")
 
         self.kpi_layout.addWidget(self.kpi_total)
         self.kpi_layout.addWidget(self.kpi_avg)
@@ -306,11 +311,11 @@ class ExpensesDashboardTab(QWidget):
     def wrap_chart(self, title_text, widget):
         frame = QFrame()
         frame.setStyleSheet(
-            )
+            "background-color: white; border-radius: 8px; border: 1px solid #e0e0e0;")
         layout = QVBoxLayout()
         title = QLabel(title_text)
         title.setStyleSheet(
-            )
+            "font-weight: bold; font-size: 14px; border: none; padding-bottom: 5px;")
         layout.addWidget(title)
         layout.addWidget(widget)
         frame.setLayout(layout)
@@ -506,7 +511,7 @@ class ExpensesDashboardTab(QWidget):
         self.fig_bar.clear()
 
         months_names = ["", "Jan", "Feb", "Mar", "Apr", "May",
-                        , "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                        "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         if 1 <= self.current_month <= 12:
             m_name = months_names[self.current_month]
             self.frame_bar.findChild(QLabel).setText(

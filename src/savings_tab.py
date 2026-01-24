@@ -6,6 +6,7 @@ from PyQt6.QtGui import QCursor
 from custom_widgets import NoScrollComboBox
 from utils import format_currency
 
+
 MATPLOTLIB_AVAILABLE = False
 try:
     from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -14,6 +15,7 @@ try:
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
+
 
 class SavingsLoaderThread(QThread):
     finished = pyqtSignal(dict)
@@ -27,6 +29,7 @@ class SavingsLoaderThread(QThread):
     def run(self):
         data = self.budget_app.get_cashflow_data(self.start_date, self.end_date)
         self.finished.emit(data)
+
 
 class SavingsTab(QWidget):
     def __init__(self, budget_app, parent=None):
@@ -125,7 +128,7 @@ class SavingsTab(QWidget):
         self.on_range_changed()
 
     def refresh_data(self):
-        
+        """Called when tab becomes active"""
         self.populate_years()
         self.load_data()
 
@@ -262,6 +265,7 @@ class SavingsTab(QWidget):
         ax.plot(months_x, cumulative_invested, color='#7B1FA2',
                 marker='s', linewidth=2, label='Accumulated Invested')
 
+
         for i, val in enumerate(cumulative_savings):
             step = 1 if len(month_keys) <= 12 else 2
             if i % step == 0:
@@ -321,7 +325,7 @@ class SavingsTab(QWidget):
         self.canvas.draw()
 
     def on_hover(self, event):
-        
+        """Handle mouse hover event for tooltips"""
         if event.inaxes != self.figure.axes[0]:
             return
 

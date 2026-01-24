@@ -6,6 +6,7 @@ import shutil
 from datetime import datetime
 import traceback
 
+
 class DataManager:
     def __init__(self, db_path):
         self.db_path = db_path
@@ -14,7 +15,9 @@ class DataManager:
         return duckdb.connect(self.db_path)
 
     def export_to_excel(self, file_path, progress_callback=None):
-        
+        """
+        Exports all tables (accounts, categories, transactions, budgets) to an Excel file.
+        """
         conn = self._get_connection()
         try:
             workbook = openpyxl.Workbook()
@@ -26,17 +29,17 @@ class DataManager:
                 progress_callback(10)
 
             self._write_table_to_sheet(conn, workbook, 'accounts',
-                                       )
+                                       "SELECT * FROM accounts ORDER BY id")
             if progress_callback:
                 progress_callback(30)
 
             self._write_table_to_sheet(conn, workbook, 'categories',
-                                       )
+                                       "SELECT * FROM categories ORDER BY category, sub_category")
             if progress_callback:
                 progress_callback(50)
 
             self._write_table_to_sheet(conn, workbook, 'transactions',
-                                       )
+                                       "SELECT * FROM transactions ORDER BY date DESC, id DESC")
             if progress_callback:
                 progress_callback(80)
 
@@ -51,7 +54,7 @@ class DataManager:
 
             try:
                 self._write_table_to_sheet(conn, workbook, 'budgets',
-                                           )
+                                           "SELECT * FROM budgets ORDER BY category_id")
             except:
                 pass
 
@@ -89,7 +92,9 @@ class DataManager:
             sheet.column_dimensions[get_column_letter(i+1)].width = 15
 
     def import_from_excel(self, file_path, progress_callback=None, skip_backup=False):
-        
+        """
+        Imports data from an Excel file.
+        """
         if not os.path.exists(file_path):
             return False, "File does not exist."
 
@@ -231,9 +236,13 @@ class DataManager:
             conn.executemany(query, values_batch)
 
     def _export_exchange_rates_matrix(self, conn, workbook):
-        
+        """
+        Exports exchange rates in a matrix format:
+        Date | USD | EUR | ...
+        """
+
         data = conn.execute(
-            ).fetchall()
+            "SELECT date, currency, rate FROM exchange_rates ORDER BY date DESC").fetchall()
 
         currencies = sorted(list(set(r[1] for r in data)))
 
@@ -296,7 +305,7 @@ class DataManager:
                     full_data.append((date_str, currency, float(rate)))
 
         res = conn.execute(
-            ).fetchone()
+            "SELECT COALESCE(MAX(id), 0) FROM exchange_rates").fetchone()
         next_id = (res[0] if res else 0) + 1
 
         final_batch = []
@@ -305,10 +314,15 @@ class DataManager:
             next_id += 1
 
         conn.executemany(
-            , final_batch)
+            "INSERT INTO exchange_rates (id, date, currency, rate) VALUES (?, ?, ?, ?)", final_batch)
 
     def _export_investment_valuations_matrix(self, conn, workbook):
-        
+        """
+        Exports investment valuations in keys:
+        Date | Account 1 | Account 2 | ...
+        Use column names as "Account Name (ID)" to be safe during import map back.
+        """
+
         data = conn.execute("""
             SELECT v.date, a.account, a.id, v.value
             FROM investment_valuations v
@@ -394,7 +408,7 @@ class DataManager:
                     full_data.append((date_str, acc_id, float(val)))
 
         res = conn.execute(
-            ).fetchone()
+            "SELECT COALESCE(MAX(id), 0) FROM investment_valuations").fetchone()
         next_id = (res[0] if res else 0) + 1
 
         final_batch = []
@@ -403,10 +417,12 @@ class DataManager:
             next_id += 1
 
         conn.executemany(
-            , final_batch)
+            "INSERT INTO investment_valuations (id, date, account_id, value) VALUES (?, ?, ?, ?)", final_batch)
 
     def generate_template(self, file_path):
-        
+        """
+        Generates a sample Excel template for the user with rich sample data.
+        """
         try:
             workbook = openpyxl.Workbook()
 
@@ -415,19 +431,19 @@ class DataManager:
 
             sheet = workbook.create_sheet('accounts')
             sheet.append(['id', 'account', 'type', 'company', 'currency', 'is_active',
-                         , 'is_investment', 'valuation_strategy'])
+                         'show_in_balance', 'is_investment', 'valuation_strategy'])
             sheet.append([0, 'Opening Balance', 'System',
                          None, 'CHF', 1, 0, 0, None])
             sheet.append([1, 'Main Bank Account', 'Bank',
-                         , 'CHF', 1, 1, 0, None])
+                         'UBS', 'CHF', 1, 1, 0, None])
             sheet.append([2, 'Cash Wallet', 'Cash',
                          None, 'CHF', 1, 1, 0, None])
             sheet.append(
                 [3, 'Savings', 'Bank', 'Raiffeisen', 'CHF', 1, 1, 0, None])
             sheet.append([4, 'Global ETF Portfolio', 'Asset',
-                         , 'USD', 1, 1, 1, 'Total Value'])
+                         'Interactive Brokers', 'USD', 1, 1, 1, 'Total Value'])
             sheet.append([5, 'McDonalds Stock', 'Asset',
-                         , 'USD', 1, 1, 1, 'Price/Qty'])
+                         'eToro', 'USD', 1, 1, 1, 'Price/Qty'])
 
             for col in sheet.columns:
                 sheet.column_dimensions[col[0].column_letter].width = 20
@@ -450,13 +466,13 @@ class DataManager:
 
             sheet = workbook.create_sheet('transactions')
             headers = ['id', 'date', 'type', 'amount', 'account_id', 'category_id',
-                       , 'notes', 'to_account_id', 'to_amount', 'qty', 'invest_account_id']
+                       'payee', 'notes', 'to_account_id', 'to_amount', 'qty', 'invest_account_id']
             sheet.append(headers)
 
             current_id = 1
 
             sheet.append([current_id, '2025-01-01', 'transfer', 15000.00, 0, None,
-                         , 'Initial Savings', 1, 15000.00, None, None])
+                         'Opening Balance', 'Initial Savings', 1, 15000.00, None, None])
             current_id += 1
             sheet.append([current_id, '2025-01-01', 'transfer', 200.00, 0,
                          None, 'Opening Balance', 'Cash on hand', 2, 200.00, None, None])
@@ -480,7 +496,7 @@ class DataManager:
                              1, 1, 'Landlord', 'Rent', None, None, None, None])
                 current_id += 1
                 sheet.append([current_id, f'{month}-02', 'expense', 350.00, 1, 6,
-                             , 'Health Insurance', None, None, None, None])
+                             'Insurance Co.', 'Health Insurance', None, None, None, None])
                 current_id += 1
                 sheet.append([current_id, f'{month}-05', 'expense', 80.00,
                              1, 5, 'SBB', 'Monthly Pass', None, None, None, None])
@@ -494,7 +510,7 @@ class DataManager:
                              1, 3, 'Coop', 'Weekly Groceries', None, None, None, None])
                 current_id += 1
                 sheet.append([current_id, f'{month}-12', 'expense', 85.00, 1, 4,
-                             , 'Dinner with friends', None, None, None, None])
+                             'Restaurant', 'Dinner with friends', None, None, None, None])
                 current_id += 1
 
                 sheet.append([current_id, f'{month}-15', 'expense', 200.00,
@@ -513,10 +529,10 @@ class DataManager:
                 current_id += 1
 
             sheet.append([current_id, '2025-03-15', 'income', 50.00, 4, 9,
-                         , 'Quarterly Dividend', None, None, None, None])
+                         'Vanguard', 'Quarterly Dividend', None, None, None, None])
             current_id += 1
             sheet.append([current_id, '2025-03-20', 'income', 15.00, 5, 9,
-                         , 'Quarterly Dividend', None, None, None, None])
+                         'McDonalds', 'Quarterly Dividend', None, None, None, None])
             current_id += 1
 
             for col in sheet.columns:
@@ -551,7 +567,9 @@ class DataManager:
             return False, f"Failed to create template: {str(e)}"
 
     def load_sample_data(self):
-        
+        """
+        Generates and imports sample data into the current database.
+        """
         import tempfile
 
         try:

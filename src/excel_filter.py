@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (QHeaderView, QMenu, QWidgetAction, QCheckBox,
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QDate
 from PyQt6.QtGui import QPainter, QColor
 
+
 class NumberFilterDialog(QDialog):
     def __init__(self, col_name, op_text, parent=None):
         super().__init__(parent)
@@ -33,6 +34,7 @@ class NumberFilterDialog(QDialog):
         self.value = self.spin.value()
         self.ok = True
         self.accept()
+
 
 class DateRangeDialog(QDialog):
     def __init__(self, parent=None):
@@ -71,8 +73,13 @@ class DateRangeDialog(QDialog):
         self.ok = True
         self.accept()
 
+
 class ExcelHeaderView(QHeaderView):
-    
+    """
+    A custom QHeaderView that draws a filter icon and opens an Excel-like
+    menu for filtering (Checklist + Date Range + Number Filters).
+    """
+
     filterChanged = pyqtSignal()
 
     FILTER_DATA_ROLE = Qt.ItemDataRole.UserRole + 99
@@ -93,7 +100,7 @@ class ExcelHeaderView(QHeaderView):
         self.filters_enabled = True
 
     def _get_value(self, item):
-        
+        """Get value for filtering/sorting. Checks custom role first, then text."""
         if not item:
             return ""
         val = item.data(self.FILTER_DATA_ROLE)
@@ -102,7 +109,7 @@ class ExcelHeaderView(QHeaderView):
         return item.text()
 
     def set_column_types(self, types):
-        
+        """{col_index: 'date'|'number'|'text'}"""
         self.column_types = types
 
     def set_filter_enabled(self, col, enabled):
@@ -112,7 +119,7 @@ class ExcelHeaderView(QHeaderView):
             self.disabled_filters.remove(col)
 
     def set_filters_enabled(self, enabled):
-        
+        """Enable or disable filter icons and functionality globally."""
         self.filters_enabled = enabled
         self.viewport().update()
 
@@ -227,7 +234,7 @@ class ExcelHeaderView(QHeaderView):
                         self.filters[col] = {}
 
                     self.filters[col]['number_filter'] = {
-                        : op, 'value': dlg.value}
+                        'op': op, 'value': dlg.value}
                     self.apply_filters()
                     self.viewport().update()
 
@@ -301,7 +308,7 @@ class ExcelHeaderView(QHeaderView):
                     nf = f_data['number_filter']
                     try:
                         clean = val.split(' ')[0].replace(
-                            , "").replace(",", "")
+                            "'", "").replace(",", "")
                         num = float(clean)
                         if nf['op'] == 'gt' and not (num > nf['value']):
                             return False
@@ -380,9 +387,9 @@ class ExcelHeaderView(QHeaderView):
         cancel_btn = QPushButton("Cancel")
 
         ok_btn.setStyleSheet(
-            )
+            "background-color: #2196F3; color: white; border: none; padding: 5px 15px; border-radius: 3px;")
         cancel_btn.setStyleSheet(
-            )
+            "background-color: #f0f0f0; border: none; padding: 5px 15px; border-radius: 3px;")
 
         btn_layout.addWidget(ok_btn)
         btn_layout.addWidget(cancel_btn)
@@ -439,7 +446,7 @@ class ExcelHeaderView(QHeaderView):
                     try:
 
                         clean = val.split(' ')[0].replace(
-                            , "").replace(",", "")
+                            "'", "").replace(",", "")
                         num = float(clean)
                         if nf['op'] == 'gt' and not (num > nf['value']):
                             should_hide = True
@@ -480,8 +487,12 @@ class ExcelHeaderView(QHeaderView):
             self.apply_filters()
             self.viewport().update()
 
+
 class BooleanTableWidgetItem(QTableWidgetItem):
-    
+    """
+    Shows no visible text (checkboxes only) but stores value for sorting/filtering.
+    Expects usage with ExcelHeaderView which reads FILTER_DATA_ROLE.
+    """
     FILTER_ROLE = ExcelHeaderView.FILTER_DATA_ROLE
 
     def __init__(self, value, display_text=""):

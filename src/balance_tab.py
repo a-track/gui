@@ -1,3 +1,4 @@
+
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
 from PyQt6.QtWidgets import (QHBoxLayout, QLabel, QPushButton,
@@ -9,8 +10,10 @@ from excel_filter import ExcelHeaderView
 from transactions_dialog import NumericTableWidgetItem, TOTAL_ROW_ROLE, StringTableWidgetItem
 from utils import format_currency
 
+
 class BalanceTab(QWidget):
-    
+    """Tab widget for viewing account balances"""
+
     def __init__(self, budget_app, parent=None):
         super().__init__(parent)
         self.budget_app = budget_app
@@ -23,6 +26,7 @@ class BalanceTab(QWidget):
 
     def init_ui(self):
 
+
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
@@ -33,7 +37,7 @@ class BalanceTab(QWidget):
         header_layout = QHBoxLayout()
         balance_label = QLabel('Account Balances')
         balance_label.setStyleSheet(
-            )
+            'font-weight: bold; font-size: 18px; margin-bottom: 10px;')
         header_layout.addWidget(balance_label)
         header_layout.addStretch()
 
@@ -47,6 +51,7 @@ class BalanceTab(QWidget):
         self.date_range_widget = QWidget()
         date_layout = QHBoxLayout(self.date_range_widget)
         date_layout.setContentsMargins(0, 0, 0, 0)
+        
         
         date_layout.addWidget(QLabel("As Of:"))
         self.to_date = QDateEdit()
@@ -64,6 +69,8 @@ class BalanceTab(QWidget):
         header_layout.addWidget(refresh_btn)
 
         content_layout.addLayout(header_layout)
+
+
 
         self.balance_table = QTableWidget()
         self.balance_table.setEditTriggers(
@@ -101,7 +108,7 @@ class BalanceTab(QWidget):
 
         self.status_label = QLabel('')
         self.status_label.setStyleSheet(
-            )
+            'color: #4CAF50; padding: 5px; font-weight: bold;')
         content_layout.addWidget(self.status_label)
 
         layout.addWidget(content_widget)
@@ -138,7 +145,7 @@ class BalanceTab(QWidget):
             self.refresh_data()
             
     def filter_content(self, text):
-        
+        """Filter table rows based on text matching."""
         search_text = text.lower()
         rows = self.balance_table.rowCount()
         cols = self.balance_table.columnCount()
@@ -174,7 +181,7 @@ class BalanceTab(QWidget):
                 return None
 
     def refresh_data(self):
-        
+        """Reload balance data synchronously"""
         try:
             target_date = self.get_end_date()
             balances = self.budget_app.get_balance_summary(target_date)
@@ -216,7 +223,7 @@ class BalanceTab(QWidget):
 
             if name not in grouped_data:
                 grouped_data[name] = {'total_chf': 0.0,
-                                      : {}, 'tooltips': {}}
+                                      'currencies': {}, 'tooltips': {}}
 
             invested_amount = acc_data['balance']
             qty = acc_data.get('qty', 0.0)
@@ -408,7 +415,7 @@ class BalanceTab(QWidget):
         self.status_label.setText(message)
         if error:
             self.status_label.setStyleSheet(
-                )
+                'color: #f44336; padding: 5px; font-weight: bold;')
         else:
             self.status_label.setStyleSheet(
-                )
+                'color: #4CAF50; padding: 5px; font-weight: bold;')
