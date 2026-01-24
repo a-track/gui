@@ -1487,10 +1487,30 @@ class BudgetTrackerWindow(QMainWindow):
             )
 
         if success:
-            self.show_status('Transaction added successfully! ✓')
+            # Construct a descriptive status message before clearing inputs
+            from_acc_text = self.account_combo.currentText()
+            from_currency = self.get_currency_for_account(account_id)
+            formatted_amount = f"{format_currency(amount)} {from_currency}"
+
+            if is_starting_balance:
+                to_acc_text = self.to_account_combo.currentText()
+                status_msg = f"Starting balance for {to_acc_text} set to {formatted_amount} ✓"
+            elif self.transfer_radio.isChecked():
+                to_acc_text = self.to_account_combo.currentText()
+                to_currency = self.get_currency_for_account(to_account_id)
+                if from_currency != to_currency:
+                    formatted_to = f"{format_currency(to_amount)} {to_currency}"
+                    status_msg = f"Transferred {formatted_amount} from {from_acc_text} to {to_acc_text} ({formatted_to}) ✓"
+                else:
+                    status_msg = f"Transferred {formatted_amount} from {from_acc_text} to {to_acc_text} ✓"
+            elif self.income_radio.isChecked():
+                status_msg = f"Added income: {formatted_amount} to {from_acc_text} from {payee} ({sub_category}) ✓"
+            else:  # expense
+                status_msg = f"Added expense: {formatted_amount} from {from_acc_text} to {payee} ({sub_category}) ✓"
+
+            self.show_status(status_msg)
             self.amount_input.clear()
             self.to_amount_input.clear()
-            self.qty_input.clear()
             self.qty_input.clear()
             self.notes_input.clear()
             self.invest_account_combo.setCurrentIndex(0)
