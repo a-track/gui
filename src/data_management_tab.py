@@ -3,7 +3,6 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel,
 from PyQt6.QtCore import QSettings
 import os
 from import_export import DataManager
-import access_writer
 import sys
 from models import BudgetApp
 
