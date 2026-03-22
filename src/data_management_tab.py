@@ -115,6 +115,38 @@ class DataManagementTab(QWidget):
             "Export all Accounts, Transactions, Budgets, and Settings to an Excel file.")
         export_layout.addWidget(export_btn)
 
+        self.export_access_btn = QPushButton("Refresh MS Access (.accdb)")
+        self.export_access_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #9C27B0;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #7B1FA2;
+            }
+        """)
+        self.export_access_btn.clicked.connect(self.export_to_access)
+        self.export_access_btn.setToolTip("Export semantic views of database to an MS Access file.")
+        export_layout.addWidget(self.export_access_btn)
+
+        change_access_path_btn = QPushButton("Change Access Path...")
+        change_access_path_btn.setStyleSheet("""
+            QPushButton {
+                 background-color: #757575;
+                 color: white;
+                 padding: 5px;
+                 border-radius: 4px;
+            }
+            QPushButton:hover {
+                 background-color: #616161;
+            }
+        """)
+        change_access_path_btn.clicked.connect(self.change_access_path)
+        export_layout.addWidget(change_access_path_btn)
+
         export_group.setLayout(export_layout)
         layout.addWidget(export_group)
 
@@ -225,6 +257,74 @@ class DataManagementTab(QWidget):
             self.progress_bar.hide()
             QMessageBox.critical(
                 self, "Export Error", f"An unexpected error occurred during export: {str(e)}")
+        finally:
+            self.progress_bar.hide()
+            self.progress_bar.setValue(0)
+
+    def change_access_path(self):
+        settings = QSettings()
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Change Access Database Location",
+            os.path.expanduser("~/Desktop/budget_export.accdb"),
+            "Access Database (*.accdb)"
+        )
+        if file_path:
+            if not file_path.endswith('.accdb'):
+                file_path += '.accdb'
+            settings.setValue("last_access_export_path", file_path)
+            QMessageBox.information(self, "Path Updated", f"Access export path updated to:\n{file_path}\n\nClick the Refresh button to export.")
+
+    def export_to_access(self):
+        settings = QSettings()
+        file_path = settings.value("last_access_export_path", "")
+
+        if not file_path:
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "Setup MS Access Export Location",
+                os.path.expanduser("~/Desktop/budget_export.accdb"),
+                "Access Database (*.accdb)"
+            )
+            if not file_path:
+                return
+            if not file_path.endswith('.accdb'):
+                file_path += '.accdb'
+            settings.setValue("last_access_export_path", file_path)
+
+        self.progress_bar.show()
+        self.progress_bar.setValue(10)
+        self.update_progress(10)
+
+        try:
+            gui_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            pipeline_dir = os.path.join(gui_dir, 'DuckdbToAccess')
+            if pipeline_dir not in sys.path:
+                sys.path.insert(0, pipeline_dir)
+                
+            from pipeline.runner import run_pipeline
+            from pathlib import Path
+
+            sql_dir = Path(gui_dir) / "DuckdbToAccess" / "SQL"
+            access_out = Path(file_path)
+            
+            self.update_progress(30)
+            
+            conn = self.budget_app._anchor_conn
+            run_pipeline(
+                conn=conn,
+                sql_dir=sql_dir,
+                access_out=access_out,
+                access_overwrite=True
+            )
+                
+            self.update_progress(100)
+            QMessageBox.information(self, "Export Successful", f"Successfully exported Semantic views to Access:\n{file_path}")
+
+        except Exception as e:
+            self.progress_bar.hide()
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(
+                self, "Export Error", f"An unexpected error occurred during Access export: {str(e)}")
         finally:
             self.progress_bar.hide()
             self.progress_bar.setValue(0)

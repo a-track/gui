@@ -14,6 +14,37 @@ from custom_widgets import NoScrollComboBox
 from expenses_dashboard_tab import ExpensesDashboardTab
 from investment_profit_tab import InvestmentProfitTab
 
+class LazyTabWrapper(QWidget):
+    def __init__(self, tab_id, factory_func):
+        super().__init__()
+        self.tab_id = tab_id
+        self.factory_func = factory_func
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.is_loaded = False
+        
+        self.loading_label = QLabel("Loading...", self)
+        self.loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.layout.addWidget(self.loading_label)
+        
+        self.content_widget = None
+
+    def load(self):
+        if not self.is_loaded:
+            self.content_widget = self.factory_func()
+            self.layout.removeWidget(self.loading_label)
+            self.loading_label.deleteLater()
+            self.layout.addWidget(self.content_widget)
+            self.is_loaded = True
+
+            # Forward properties like searchable_controller
+            if hasattr(self.content_widget, 'searchable_controller'):
+                self.searchable_controller = self.content_widget.searchable_controller
+            elif hasattr(self.content_widget, 'filter_content'):
+                self.searchable_controller = self.content_widget
+
+        return self.content_widget
+
 
 
 class BudgetTrackerWindow(QMainWindow):
@@ -25,7 +56,7 @@ class BudgetTrackerWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        title = 'Budget Tracker 4.5'
+        title = 'Budget Tracker 5.0'
         if self.db_path:
             title += f' - [{self.db_path}]'
         self.setWindowTitle(title)
@@ -164,6 +195,11 @@ class BudgetTrackerWindow(QMainWindow):
         if not current_widget:
             return
             
+        if isinstance(current_widget, LazyTabWrapper):
+            if not current_widget.is_loaded:
+                return
+            current_widget = current_widget.content_widget
+
         controller = getattr(current_widget, 'searchable_controller', current_widget)
         
         if hasattr(controller, 'filter_content'):
@@ -189,16 +225,16 @@ class BudgetTrackerWindow(QMainWindow):
         self.search_input.clear()
         
         searchable_tabs = [
-            self.tab_defs['overview'][0],
-            self.tab_defs['performance'][0],
-            self.tab_defs['transactions'][0],
-            self.tab_defs['account_entries'][0],
-            self.tab_defs['manage_accounts'][0],
-            self.tab_defs['manage_categories'][0]
+            self.tab_defs.get('overview', [None])[0],
+            self.tab_defs.get('performance', [None])[0],
+            self.tab_defs.get('transactions', [None])[0],
+            self.tab_defs.get('account_entries', [None])[0],
+            self.tab_defs.get('manage_accounts', [None])[0],
+            self.tab_defs.get('manage_categories', [None])[0]
         ]
         
-        current_widget = self.tab_widget.widget(index)
-        is_searchable = current_widget in searchable_tabs
+        current_wrapper = self.tab_widget.widget(index)
+        is_searchable = current_wrapper in searchable_tabs
         
         self.search_input.setEnabled(is_searchable)
         self.search_input.setPlaceholderText(
@@ -206,8 +242,13 @@ class BudgetTrackerWindow(QMainWindow):
         if is_searchable:
             self.search_input.setFocus()
 
+        if isinstance(current_wrapper, LazyTabWrapper):
+            current_wrapper.load()
+            current_widget = current_wrapper.content_widget
+        else:
+            current_widget = current_wrapper
+
         try:
-            current_widget = self.tab_widget.widget(index)
             
             if hasattr(self, 'balance_tab_widget') and current_widget == self.balance_tab_widget:
                 self.balance_tab_widget.refresh_data()
@@ -555,6 +596,8 @@ class BudgetTrackerWindow(QMainWindow):
 
         for i in range(self.tab_widget.count()):
             widget = self.tab_widget.widget(i)
+            if isinstance(widget, LazyTabWrapper) and widget.is_loaded:
+                widget = widget.content_widget
             if hasattr(widget, 'cleanup'):
                 try:
                     widget.cleanup()
@@ -868,205 +911,242 @@ class BudgetTrackerWindow(QMainWindow):
 
     def create_balance_tab(self):
         """Create the Balance tab - lazy loaded"""
-        from balance_tab import BalanceTab
-        self.balance_tab_widget = BalanceTab(self.budget_app, self)
-        return self.balance_tab_widget, "💰 Overview", "Overview of account balances, investment values, and net worth."
+        def factory():
+            from balance_tab import BalanceTab
+            self.balance_tab_widget = BalanceTab(self.budget_app, self)
+            return self.balance_tab_widget
+        return LazyTabWrapper('overview', factory), "💰 Overview", "Overview of account balances, investment values, and net worth."
 
     def create_transactions_tab(self):
         """Create the Transactions tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from transactions_dialog import TransactionsDialog
-        self.transactions_dialog_ref = TransactionsDialog(
-            self.budget_app, self)
-        
-        tab.searchable_controller = self.transactions_dialog_ref
+            from transactions_dialog import TransactionsDialog
+            self.transactions_dialog_ref = TransactionsDialog(
+                self.budget_app, self)
+            
+            tab.searchable_controller = self.transactions_dialog_ref
 
-        dialog_layout = self.transactions_dialog_ref.layout()
-        if dialog_layout:
-            while dialog_layout.count():
-                item = dialog_layout.takeAt(0)
-                if item.widget():
-                    layout.addWidget(item.widget())
-                elif item.layout():
-                    layout.addLayout(item.layout())
+            dialog_layout = self.transactions_dialog_ref.layout()
+            if dialog_layout:
+                while dialog_layout.count():
+                    item = dialog_layout.takeAt(0)
+                    if item.widget():
+                        layout.addWidget(item.widget())
+                    elif item.layout():
+                        layout.addLayout(item.layout())
 
-        self.transactions_tab_widget = tab
-        return tab, "📋 Transactions", "View, edit, filter, and delete past transactions."
+            self.transactions_tab_widget = tab
+            return tab
+            
+        return LazyTabWrapper('transactions', factory), "📋 Transactions", "View, edit, filter, and delete past transactions."
 
     def create_account_perspective_tab(self):
         """Create the Account Perspective tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from account_perspective import AccountPerspectiveDialog
-        self.account_perspective_dialog_ref = AccountPerspectiveDialog(
-            self.budget_app, self)
-        
-        tab.searchable_controller = self.account_perspective_dialog_ref
+            from account_perspective import AccountPerspectiveDialog
+            self.account_perspective_dialog_ref = AccountPerspectiveDialog(
+                self.budget_app, self)
+            
+            tab.searchable_controller = self.account_perspective_dialog_ref
 
-        dialog_layout = self.account_perspective_dialog_ref.layout()
-        if dialog_layout:
-            while dialog_layout.count():
-                item = dialog_layout.takeAt(0)
-                if item.widget():
-                    layout.addWidget(item.widget())
-                elif item.layout():
-                    layout.addLayout(item.layout())
+            dialog_layout = self.account_perspective_dialog_ref.layout()
+            if dialog_layout:
+                while dialog_layout.count():
+                    item = dialog_layout.takeAt(0)
+                    if item.widget():
+                        layout.addWidget(item.widget())
+                    elif item.layout():
+                        layout.addLayout(item.layout())
 
-        self.account_perspective_tab_widget = tab
-        return tab, "📑 Account Entries", "Detailed analysis of transactions for a specific account."
+            self.account_perspective_tab_widget = tab
+            return tab
+            
+        return LazyTabWrapper('account_entries', factory), "📑 Account Entries", "Detailed analysis of transactions for a specific account."
 
     def create_budget_tab(self):
         """Create the Budget tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from budget_dialog import BudgetDialog
-        self.budget_dialog_ref = BudgetDialog(self.budget_app, self)
+            from budget_dialog import BudgetDialog
+            self.budget_dialog_ref = BudgetDialog(self.budget_app, self)
 
-        dialog_layout = self.budget_dialog_ref.layout()
-        if dialog_layout:
-            while dialog_layout.count():
-                item = dialog_layout.takeAt(0)
-                if item.widget():
-                    layout.addWidget(item.widget())
-                elif item.layout():
-                    layout.addLayout(item.layout())
+            dialog_layout = self.budget_dialog_ref.layout()
+            if dialog_layout:
+                while dialog_layout.count():
+                    item = dialog_layout.takeAt(0)
+                    if item.widget():
+                        layout.addWidget(item.widget())
+                    elif item.layout():
+                        layout.addLayout(item.layout())
 
-        self.budget_tab_widget = tab
-        return tab, "💵 Budget", "Track spending against monthly budgets per category."
+            self.budget_tab_widget = tab
+            return tab
+            
+        return LazyTabWrapper('budget', factory), "💵 Budget", "Track spending against monthly budgets per category."
 
     def create_accounts_tab(self):
         """Create the Accounts tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from accounts_dialog import AccountsDialog
-        self.accounts_dialog_ref = AccountsDialog(self.budget_app, self)
-        
-        tab.searchable_controller = self.accounts_dialog_ref
+            from accounts_dialog import AccountsDialog
+            self.accounts_dialog_ref = AccountsDialog(self.budget_app, self)
+            
+            tab.searchable_controller = self.accounts_dialog_ref
 
-        dialog_layout = self.accounts_dialog_ref.layout()
-        if dialog_layout:
-            while dialog_layout.count():
-                item = dialog_layout.takeAt(0)
-                if item.widget():
-                    layout.addWidget(item.widget())
-                elif item.layout():
-                    layout.addLayout(item.layout())
+            dialog_layout = self.accounts_dialog_ref.layout()
+            if dialog_layout:
+                while dialog_layout.count():
+                    item = dialog_layout.takeAt(0)
+                    if item.widget():
+                        layout.addWidget(item.widget())
+                    elif item.layout():
+                        layout.addLayout(item.layout())
 
-        self.accounts_tab_widget = tab
-        return tab, "🏦 Accounts", "Manage your bank and investment accounts."
+            self.accounts_tab_widget = tab
+            return tab
+            
+        return LazyTabWrapper('manage_accounts', factory), "🏦 Accounts", "Manage your bank and investment accounts."
 
     def create_expenses_dashboard_tab(self):
-        tab = ExpensesDashboardTab(self.budget_app, self)
-        return tab, "📊 Expenses", "Dashboard of Expenses and Spending Habits"
+        def factory():
+            tab = ExpensesDashboardTab(self.budget_app, self)
+            return tab
+        return LazyTabWrapper('expenses_dashboard', factory), "📊 Expenses", "Dashboard of Expenses and Spending Habits"
 
     def create_categories_tab(self):
         """Create the Categories tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from categories_dialog import CategoriesDialog
-        self.categories_dialog_ref = CategoriesDialog(self.budget_app, self)
+            from categories_dialog import CategoriesDialog
+            self.categories_dialog_ref = CategoriesDialog(self.budget_app, self)
 
-        tab.searchable_controller = self.categories_dialog_ref
+            tab.searchable_controller = self.categories_dialog_ref
 
-        dialog_layout = self.categories_dialog_ref.layout()
-        if dialog_layout:
-            while dialog_layout.count():
-                item = dialog_layout.takeAt(0)
-                if item.widget():
-                    layout.addWidget(item.widget())
-                elif item.layout():
-                    layout.addLayout(item.layout())
+            dialog_layout = self.categories_dialog_ref.layout()
+            if dialog_layout:
+                while dialog_layout.count():
+                    item = dialog_layout.takeAt(0)
+                    if item.widget():
+                        layout.addWidget(item.widget())
+                    elif item.layout():
+                        layout.addLayout(item.layout())
 
-        self.categories_tab_widget = tab
-        return tab, "📁 Categories", "Manage income and expense categories and sub-categories."
+            self.categories_tab_widget = tab
+            return tab
+            
+        return LazyTabWrapper('manage_categories', factory), "📁 Categories", "Manage income and expense categories and sub-categories."
 
     def create_exchange_rates_tab(self):
         """Create the Exchange Rates tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from exchange_rates_tab import ExchangeRatesTab
-        self.exchange_rates_tab_ref = ExchangeRatesTab(self.budget_app, self)
-        layout.addWidget(self.exchange_rates_tab_ref)
-        self.exchange_rates_tab_widget = tab
-        return tab, "💱 Currencies", "Manage historical exchange rates for multi-currency tracking."
+            from exchange_rates_tab import ExchangeRatesTab
+            self.exchange_rates_tab_ref = ExchangeRatesTab(self.budget_app, self)
+            layout.addWidget(self.exchange_rates_tab_ref)
+            self.exchange_rates_tab_widget = tab
+            return tab
+            
+        return LazyTabWrapper('currencies', factory), "💱 Currencies", "Manage historical exchange rates for multi-currency tracking."
 
     def create_data_management_tab(self):
         """Create the Data Management tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from data_management_tab import DataManagementTab
-        self.data_management_tab_ref = DataManagementTab(self.budget_app, self)
-        layout.addWidget(self.data_management_tab_ref)
-        self.data_tab_widget = tab
-        return tab, "💾 Data", "Import/Export data and backup your database."
+            from data_management_tab import DataManagementTab
+            self.data_management_tab_ref = DataManagementTab(self.budget_app, self)
+            layout.addWidget(self.data_management_tab_ref)
+            self.data_tab_widget = tab
+            return tab
+            
+        return LazyTabWrapper('data_management', factory), "💾 Data", "Import/Export data and backup your database."
 
     def create_investment_tab(self):
         """Create the Investment tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from investment_tab import InvestmentTab
-        self.investment_tab_ref = InvestmentTab(self.budget_app, self)
-        layout.addWidget(self.investment_tab_ref)
-        self.investment_tab_widget = tab
-        return tab, "📈 Investments", "Track historical prices and valuations for investment accounts."
+            from investment_tab import InvestmentTab
+            self.investment_tab_ref = InvestmentTab(self.budget_app, self)
+            layout.addWidget(self.investment_tab_ref)
+            self.investment_tab_widget = tab
+            return tab
+            
+        return LazyTabWrapper('investments', factory), "📈 Investments", "Track historical prices and valuations for investment accounts."
 
     def create_investment_performance_tab(self):
         """Create the Investment Performance tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from investment_performance_tab import InvestmentPerformanceTab
-        self.investment_performance_tab_ref = InvestmentPerformanceTab(
-            self.budget_app, self)
-        
-        tab.searchable_controller = self.investment_performance_tab_ref
-        
-        layout.addWidget(self.investment_performance_tab_ref)
-        self.investment_performance_tab_widget = tab
-        return tab, "🚀 Performance", "Detailed investment performance metrics including dividends."
+            from investment_performance_tab import InvestmentPerformanceTab
+            self.investment_performance_tab_ref = InvestmentPerformanceTab(
+                self.budget_app, self)
+            
+            tab.searchable_controller = self.investment_performance_tab_ref
+            
+            layout.addWidget(self.investment_performance_tab_ref)
+            self.investment_performance_tab_widget = tab
+            return tab
+            
+        return LazyTabWrapper('performance', factory), "🚀 Performance", "Detailed investment performance metrics including dividends."
 
     def create_report_tab(self):
         """Create the Report tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from report_tab import ReportTab
-        self.report_tab_ref = ReportTab(self.budget_app, self)
-        layout.addWidget(self.report_tab_ref)
-        self.report_tab_widget = tab
-        return tab, "📊 Balance", "Visualize balance evolution over time."
+            from report_tab import ReportTab
+            self.report_tab_ref = ReportTab(self.budget_app, self)
+            layout.addWidget(self.report_tab_ref)
+            self.report_tab_widget = tab
+            return tab
+            
+        return LazyTabWrapper('balance_report', factory), "📊 Balance", "Visualize balance evolution over time."
 
     def create_savings_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+        def factory():
+            tab = QWidget()
+            layout = QVBoxLayout()
+            tab.setLayout(layout)
 
-        from savings_tab import SavingsTab
-        self.savings_tab_ref = SavingsTab(self.budget_app, self)
-        layout.addWidget(self.savings_tab_ref)
-        self.savings_tab_widget = tab
+            from savings_tab import SavingsTab
+            self.savings_tab_ref = SavingsTab(self.budget_app, self)
+            layout.addWidget(self.savings_tab_ref)
+            self.savings_tab_widget = tab
 
-        self.savings_tab_ref.refresh_data()
-        return tab, "💸 Cash Flow", "Visualize monthly savings rate."
+            self.savings_tab_ref.refresh_data()
+            return tab
+            
+        return LazyTabWrapper('cash_flow', factory), "💸 Cash Flow", "Visualize monthly savings rate."
 
 
 
@@ -1333,8 +1413,10 @@ class BudgetTrackerWindow(QMainWindow):
             self.sub_category_combo.setCurrentIndex(0)
 
     def create_investment_profit_tab(self):
-        tab = InvestmentProfitTab(self.budget_app, self)
-        return tab, "💹 Invest P&L", "Monthly Investment Gains and Losses."
+        def factory():
+            tab = InvestmentProfitTab(self.budget_app, self)
+            return tab
+        return LazyTabWrapper('investment_profit', factory), "💹 Invest P&L", "Monthly Investment Gains and Losses."
 
     def update_parent_categories(self, trans_type):
 
