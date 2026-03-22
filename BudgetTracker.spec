@@ -4,10 +4,10 @@ block_cipher = None
 
 a = Analysis(
     ['src\\main.py'],
-    pathex=[],
+    pathex=['DuckdbToAccess'],
     binaries=[],
-    datas=[('src\\hamster.ico', '.')],
-    hiddenimports=[],
+    datas=[('src\\hamster.ico', '.'), ('DuckdbToAccess\\SQL\\*', 'DuckdbToAccess\\SQL')],
+    hiddenimports=['pipeline', 'pipeline.runner', 'pipeline.sql_layers', 'pipeline.semantic', 'pipeline.access_export', 'pandas', 'win32com', 'pyodbc'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
