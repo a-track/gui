@@ -295,7 +295,10 @@ class DataManagementTab(QWidget):
         self.update_progress(10)
 
         try:
-            gui_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if getattr(sys, 'frozen', False):
+                gui_dir = sys._MEIPASS
+            else:
+                gui_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             pipeline_dir = os.path.join(gui_dir, 'DuckdbToAccess')
             if pipeline_dir not in sys.path:
                 sys.path.insert(0, pipeline_dir)
