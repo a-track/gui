@@ -8,6 +8,7 @@ select
     t.category_id,
     t.invest_account_id,
     t.amount,
+    t.amount_chf,
     t.qty,
     t.payee,
     t.notes,
