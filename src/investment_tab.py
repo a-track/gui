@@ -130,7 +130,6 @@ class InvestmentTab(QWidget):
         tracked = [
             acc for acc in all_accounts
             if getattr(acc, 'is_investment', False)
-            and getattr(acc, 'valuation_strategy', 'No Valuation') not in ['No Valuation', None, '']
         ]
         tracked.sort(key=lambda x: x.account.lower())
         return tracked

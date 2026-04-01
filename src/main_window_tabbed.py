@@ -280,6 +280,15 @@ class BudgetTrackerWindow(QMainWindow):
             elif hasattr(self, 'investment_performance_tab_widget') and current_widget == self.investment_performance_tab_widget:
                 if hasattr(self, 'investment_performance_tab_ref'):
                     self.investment_performance_tab_ref.refresh_data()
+            elif hasattr(self, 'investment_tab_widget') and current_widget == self.investment_tab_widget:
+                if hasattr(self, 'investment_tab_ref'):
+                    self.investment_tab_ref.refresh_data()
+            elif hasattr(self, 'investment_profit') and current_widget == self.tab_defs.get('investment_profit', [None])[0]:
+                if hasattr(current_widget, 'refresh_data'):
+                    current_widget.refresh_data()
+            elif hasattr(self, 'expenses_dashboard') and current_widget == self.tab_defs.get('expenses_dashboard', [None])[0]:
+                if hasattr(current_widget, 'refresh_data'):
+                    current_widget.refresh_data()
 
         except Exception as e:
             print(f"Error in on_tab_changed: {e}")
@@ -1611,18 +1620,16 @@ class BudgetTrackerWindow(QMainWindow):
         self.update_to_account_combo()
         self.update_invest_account_combo()
         
-        if hasattr(self, 'balance_tab_widget'):
-            self.balance_tab_widget.refresh_data()
-            
-        if hasattr(self, 'savings_tab_ref'):
-            self.savings_tab_ref.refresh_data()
-            
-        if hasattr(self, 'exchange_rates_tab_ref'):
-            self.exchange_rates_tab_ref.refresh_data()
-
         if hasattr(self, 'income_radio'):
             trans_type = 'income' if self.income_radio.isChecked() else 'expense'
             self.update_parent_categories(trans_type)
+            
+        current_wrapper = self.tab_widget.currentWidget()
+        if isinstance(current_wrapper, LazyTabWrapper) and current_wrapper.is_loaded:
+            if hasattr(current_wrapper.content_widget, 'refresh_data'):
+                current_wrapper.content_widget.refresh_data()
+        elif hasattr(current_wrapper, 'refresh_data'):
+            current_wrapper.refresh_data()
 
     def show_status(self, message, error=False):
         self.status_label.setText(message)
