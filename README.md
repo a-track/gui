@@ -1,4 +1,4 @@
-# Budget Tracker v5.0
+# Budget Tracker v5.1
 
 A powerful and user-friendly desktop application for personal finance management, built with Python, PyQt6, and DuckDB.
 
@@ -68,11 +68,12 @@ python src/main.py
 
 ## Version History
 
-### v5.0 Updates
+### v5.1 Updates
 - Performance Optimization: Tabs are now lazy-loaded, enabling instant application startup.
 - Microsoft Access Export: The Data tab now offers a one-click export to compile an `.accdb` file containing analytical semantic views across your entire database.
-- Updated application version to 5.0
+- Updated application version to 5.1
 - Cleaned up obsolete Microsoft Access Code & Unused Python UI Files
+- Bugfixes
 
 ### v4.4 Updates (Account Perspective Enhancements)
 - **Account Perspective**:
